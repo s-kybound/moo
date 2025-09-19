@@ -1,2 +1,11 @@
+; Generate the parser and lexer
+(menhir
+ (modules parser))
+
+(ocamllex
+ (modules lexer))
+
+; Build a library that exposes a small parsing API
 (library
- (name pluto_charon))
+ (name pluto_charon)                ; top-level module = Plutocharon
+ (modules ast parser lexer)) ; parse.ml = wrapper helpers

@@ -12,13 +12,13 @@
     Printf.kprintf (fun msg -> raise (Lexing_error (curr_loc lexbuf, msg))) fmt
 
   let keywords : (string, Parser.token) Hashtbl.t =
-    let keywords : (string, Parser.token) list = [
+    let keywords : (string * Parser.token) list = [
       ("letcc", LETC);
       ("let",   LETP)
     ] in
-    let h = Hashtbl.create (List.length keywords) in
-    List.iter (fun (kw, token) -> Hashtbl.replace h kw token) keywords;
-    h
+    keywords
+    |> List.to_seq
+    |> Hashtbl.of_seq
 
   let verify_ident _lexbuf id =
     match Hashtbl.find_opt keywords id with
