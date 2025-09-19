@@ -1,0 +1,4 @@
+(executable
+ (public_name pluto-charon)
+ (name main)
+ (libraries pluto_charon))
