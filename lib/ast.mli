@@ -5,12 +5,22 @@ module Surface : sig
   type t = cut
 
   module Show : sig
-      val show : t -> string
+    val show : t -> string
   end
-  
+
   val variable : string -> producer
   val covariable : string -> consumer
   val mu : string -> cut -> producer
   val mutilde : string -> cut -> consumer
   val cut : producer -> consumer -> cut
+end
+
+module Core : sig
+  type t
+
+  module Show : sig
+    val show : t -> string
+  end
+
+  val convert : Surface.t -> t
 end
