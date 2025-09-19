@@ -3,7 +3,7 @@ open Lexing
 let with_filename buffer name =
   buffer.lex_curr_p <- { buffer.lex_curr_p with pos_fname = name }; buffer
 
-let run program_buffer = Parser.prog Lexer.token program_buffer
+let run program_buffer = Parser.entrypoint Lexer.token program_buffer
 
 let of_channel ~filename ic =
   let lb = with_filename (Lexing.from_channel ic) filename in
