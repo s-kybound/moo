@@ -1,6 +1,6 @@
 (library
  (name pluto_charon)
- (modules ast reader parser lexer)
+ (modules ast reader parser lexer runner)
  (private_modules parser lexer))
 
 (menhir
