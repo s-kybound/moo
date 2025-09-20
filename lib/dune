@@ -1,5 +1,5 @@
 (library
- (name pluto_charon)
+ (name moo)
  (modules ast reader parser lexer runner)
  (private_modules parser lexer))
 

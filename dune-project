@@ -1,18 +1,18 @@
 (lang dune 3.20)
 
-(name pluto-charon)
+(name moo)
 
 (generate_opam_files true)
 
 (using menhir 3.0)
 
 (source
- (github s-kybound/pluto-charon))
+ (github s-kybound/moo))
 
 (authors "Kyriel Abad <abadkyriel@gmail.com>")
 
 (package
- (name pluto-charon)
+ (name moo)
  (synopsis "A language for a minimal mu mu-tilde dual calculus")
  (description "A language to investigate the minimal language needed to support ergonomic sequent-calculus based programming")
  (depends ocaml)

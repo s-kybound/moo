@@ -1,4 +1,4 @@
-(* This is the user facing AST of pluto-charon. 
+(* This is the user facing AST of moo. 
  * The variables should be converted into using de Brujin indices
  * by a first pass before further execution. *)
 module Surface = struct
