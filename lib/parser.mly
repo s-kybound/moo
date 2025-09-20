@@ -26,10 +26,11 @@ entrypoint: p=program                   { p }
 
 parens(X):
   | LPAREN x=X RPAREN                   { x }
+(*
   | LPAREN X error                      { here $startpos($1) $endpos($2) "expected closing ')'" }
   | LPAREN error                        { here $startpos($1) $endpos($1) "expected expression after '('" }
   | RPAREN                              { here $startpos($1) $endpos($1) "unmatched ')'" }
-
+*)
 bracks(X):
   | LBRACK x=X RBRACK                   { x }
   | LBRACK X error                      { here $startpos($1) $endpos($2) "expected closing ']'" }
@@ -62,10 +63,10 @@ letc:
 product_body:
   | PAIR a=either b=either              { Ast.Surface.Producer.pair a b }
   | PAIR either error                   { here $startpos($1) $endpos($2) "pair: expected second element in (pair <a> ..." } 
-  | PAIR error                          { here $startpos($1) $endpos($2) "pair: expected anelement in (pair ..." } 
+  | PAIR error                          { here $startpos($1) $endpos($2) "pair: expected an element in (pair ..." } 
 
 product:
-  | parens(product_body)                   { $1 }
+  | parens(product_body)                { $1 }
 
 cosplit_body:
   | COSPLIT a=either_identifier 
@@ -93,9 +94,27 @@ letp_body:
 letp:
   | parens(letp_body)                   { $1 }
 
+split_body:
+  | SPLIT a=either_identifier 
+          b=either_identifier 
+          c=cut                         { Ast.Surface.Consumer.split a b c }
+
+split:
+  | parens(split_body)                  { $1 }
+
+coproduct_body:
+  | COPAIR a=either b=either            { Ast.Surface.Consumer.copair a b }
+  | COPAIR either error                 { here $startpos($1) $endpos($2) "copair: expected second element in (copair <a> ..." } 
+  | COPAIR error                        { here $startpos($1) $endpos($2) "copair: expected an element in (copair ..." } 
+
+coproduct:
+  | parens(coproduct_body)              { $1 }
+
 consumer: 
   | c=cval                              { Ast.Surface.Consumer.covariable c }
   | letp                                { $1 }
+  | split                               { $1 }
+  | coproduct                           { $1 }
 
 either:
   | p=producer                          { Ast.Surface.Positive p }
