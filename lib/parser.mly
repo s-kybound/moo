@@ -24,29 +24,25 @@ and conjuction alone for now
 
 entrypoint: p=program                   { p }
 
-parens(X):
-  | LPAREN x=X RPAREN                   { x }
-(*
-  | LPAREN X error                      { here $startpos($1) $endpos($2) "expected closing ')'" }
-  | LPAREN error                        { here $startpos($1) $endpos($1) "expected expression after '('" }
-  | RPAREN                              { here $startpos($1) $endpos($1) "unmatched ')'" }
-*)
-bracks(X):
-  | LBRACK x=X RBRACK                   { x }
-  | LBRACK X error                      { here $startpos($1) $endpos($2) "expected closing ']'" }
-  | LBRACK error                        { here $startpos($1) $endpos($1) "expected expression after '['" }
-  | RBRACK                              { here $startpos($1) $endpos($1) "unmatched ']'" }
-
 program: 
   | c=cut EOF                           { c }
-  | EOF                                 { here $startpos($1) $endpos($1) "File is empty." }
+  | EOF                                 { 
+                                          Ast.Surface.cut 
+                                            (Ast.Surface.Producer.variable (Ast.Surface.Identifier.name "empty-file")) 
+                                            (Ast.Surface.Consumer.covariable (Ast.Surface.Identifier.coname "halt")) 
+                                        }
+  | LPAREN error                        { here $startpos($1) $endpos($1) "unexpected '(' - mismatched or misplaced parenthesis" }
+  | RPAREN error                        { here $startpos($1) $endpos($1) "unexpected ')' - mismatched or misplaced parenthesis" }
 
 cut_body:
   | p=producer c=consumer               { Ast.Surface.cut p c }
   | consumer error                      { here $startpos($1) $endpos($1) "cut: expected producer in '[ <producer> <consumer> ...'" }
 
 cut: 
-  | bracks(cut_body)                    { $1 }
+  | LBRACK c=cut_body RBRACK            { c }
+  | LBRACK cut_body error               { here $startpos($1) $endpos($2) "cut: expected closing ']'"}
+  | LBRACK error                        { here $startpos($1) $endpos($1) "expected cut after '['" }
+  | RBRACK                              { here $startpos($1) $endpos($1) "expected cut, got unmatched ']'" }
 
 pval:
   | v = IDENT                           { Ast.Surface.Identifier.name v }
@@ -58,7 +54,8 @@ letc_body:
   | LETC error                          { here $startpos($1) $endpos($1) "letcc: expected covariable in '(letcc ...'" }
 
 letc:
-  | parens(letc_body)                   { $1 }
+  | LPAREN l=letc_body RPAREN           { l }
+  | LPAREN letc_body error              { here $startpos($1) $endpos($2) "letcc: expected closing ')'"}
 
 product_body:
   | PAIR a=either b=either              { Ast.Surface.Producer.pair a b }
@@ -66,7 +63,8 @@ product_body:
   | PAIR error                          { here $startpos($1) $endpos($2) "pair: expected an element in (pair ..." } 
 
 product:
-  | parens(product_body)                { $1 }
+  | LPAREN p=product_body RPAREN        { p }
+  | LPAREN product_body error           { here $startpos($1) $endpos($2) "pair: expected closing ')'"}
 
 cosplit_body:
   | COSPLIT a=either_identifier 
@@ -74,7 +72,8 @@ cosplit_body:
             c=cut                       { Ast.Surface.Producer.cosplit a b c }
 
 cosplit:
-  | parens(cosplit_body)                { $1 }
+  | LPAREN c=cosplit_body RPAREN        { c }
+  | LPAREN cosplit_body error           { here $startpos($1) $endpos($2) "cosplit: expected closing ')'" }
 
 producer:
   | p=pval                              { Ast.Surface.Producer.variable p }
@@ -92,7 +91,8 @@ letp_body:
   | LETP error                          { here $startpos($1) $endpos($1) "let: expected variable in '(let ...'" }
 
 letp:
-  | parens(letp_body)                   { $1 }
+  | LPAREN l=letp_body RPAREN           { l }
+  | LPAREN letp_body error              { here $startpos($1) $endpos($2) "let: expected closing ')'"}
 
 split_body:
   | SPLIT a=either_identifier 
@@ -100,7 +100,8 @@ split_body:
           c=cut                         { Ast.Surface.Consumer.split a b c }
 
 split:
-  | parens(split_body)                  { $1 }
+  | LPAREN s=split_body RPAREN          { s }
+  | LPAREN split_body error             { here $startpos($1) $endpos($2) "split: expected closing ')'" }
 
 coproduct_body:
   | COPAIR a=either b=either            { Ast.Surface.Consumer.copair a b }
@@ -108,7 +109,8 @@ coproduct_body:
   | COPAIR error                        { here $startpos($1) $endpos($2) "copair: expected an element in (copair ..." } 
 
 coproduct:
-  | parens(coproduct_body)              { $1 }
+  | LPAREN c=coproduct_body RPAREN      { c }
+  | LPAREN coproduct_body error         { here $startpos($1) $endpos($2) "copair: expected closing ')'"}
 
 consumer: 
   | c=cval                              { Ast.Surface.Consumer.covariable c }
