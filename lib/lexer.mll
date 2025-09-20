@@ -13,8 +13,12 @@
 
   let keywords : (string, Parser.token) Hashtbl.t =
     let keywords : (string * Parser.token) list = [
-      ("letcc", LETC);
-      ("let",   LETP)
+      ("letcc",   LETC);
+      ("let",     LETP);
+      ("pair",    PAIR);
+      ("split",   SPLIT);
+      ("copair",  COPAIR);
+      ("cosplit", COSPLIT)
     ] in
     keywords
     |> List.to_seq

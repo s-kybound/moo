@@ -6,7 +6,13 @@
 %}
 
 %token LBRACK RBRACK LPAREN RPAREN
-%token LETC LETP
+%token LETC LETP (* mu, mu-tilde abstactions *)
+%token PAIR SPLIT (* pair producer and its split consumer *)
+%token COSPLIT COPAIR (* cosplit producer and its copair consumer *)
+(*
+%token LEFTP RIGHTP CASE (* sum producers, case consumers *)
+%token COCASE LEFTC RIGHTC (* cocase producer, sum consumers *)
+*)
 %token <string> IDENT
 %token <string> COIDENT
 %token EOF
