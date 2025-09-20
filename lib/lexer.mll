@@ -42,7 +42,7 @@ let digit              = ['0'-'9']
 let letter             = ['A'-'Z' 'a'-'z']
 let special_initial    = ['!' '$' '%' '&' '*' '/' ':' '<' '=' '>' '?' '^' '_' '~']
 let initial            = letter | special_initial
-let special_subsequent = ['+' '-' '.' '@']
+let special_subsequent = ['+' '-' '@']
 let subsequent         = initial | digit | special_subsequent
 
 let ident = initial subsequent*

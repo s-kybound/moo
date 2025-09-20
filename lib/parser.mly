@@ -10,6 +10,9 @@
 %token PAIR SPLIT (* pair producer and its split consumer *)
 %token COSPLIT COPAIR (* cosplit producer and its copair consumer *)
 (*
+nice to have, but we are trying to prove minimality with negation
+and conjuction alone for now
+
 %token LEFTP RIGHTP CASE (* sum producers, case consumers *)
 %token COCASE LEFTC RIGHTC (* cocase producer, sum consumers *)
 *)
@@ -45,26 +48,44 @@ cut:
   | bracks(cut_body)                    { $1 }
 
 pval:
-  | v = IDENT                           { Ast.Surface.variable v }
+  | v = IDENT                           { Ast.Surface.Identifier.name v }
 
 letc_body:
-  | LETC cv=COIDENT c=cut               { Ast.Surface.mu cv c }
-  | LETC COIDENT error                  { here $startpos($1) $endpos($2) "letcc: expected cut in '(letcc <covariable> ...'"}
-  | LETC IDENT error                    { here $startpos($1) $endpos($2) "letcc: letcc expects a covariable, not a variable"}
-  | LETC error                          { here $startpos($1) $endpos($1) "letcc: expected covariable in '(letcc ...'"}
+  | LETC cv=cval c=cut                  { Ast.Surface.Producer.mu cv c }
+  | LETC COIDENT error                  { here $startpos($1) $endpos($2) "letcc: expected cut in '(letcc <covariable> ...'" }
+  | LETC IDENT error                    { here $startpos($1) $endpos($2) "letcc: letcc expects a covariable, not a variable" }
+  | LETC error                          { here $startpos($1) $endpos($1) "letcc: expected covariable in '(letcc ...'" }
 
 letc:
   | parens(letc_body)                   { $1 }
 
+product_body:
+  | PAIR a=either b=either              { Ast.Surface.Producer.pair a b }
+  | PAIR either error                   { here $startpos($1) $endpos($2) "pair: expected second element in (pair <a> ..." } 
+  | PAIR error                          { here $startpos($1) $endpos($2) "pair: expected anelement in (pair ..." } 
+
+product:
+  | parens(product_body)                   { $1 }
+
+cosplit_body:
+  | COSPLIT a=either_identifier 
+            b=either_identifier 
+            c=cut                       { Ast.Surface.Producer.cosplit a b c }
+
+cosplit:
+  | parens(cosplit_body)                { $1 }
+
 producer:
-  | pval                                { $1 }
+  | p=pval                              { Ast.Surface.Producer.variable p }
   | letc                                { $1 }
+  | product                             { $1 }
+  | cosplit                             { $1 }
 
 cval:
-  | cv = COIDENT                        { Ast.Surface.covariable cv }
+  | cv = COIDENT                        { Ast.Surface.Identifier.coname cv }
 
 letp_body:
-  | LETP v=IDENT c=cut                  { Ast.Surface.mutilde v c }
+  | LETP v=pval c=cut                   { Ast.Surface.Consumer.mutilde v c }
   | LETP IDENT error                    { here $startpos($1) $endpos($2) "let: expected cut in '(let <variable> ...'" }
   | LETP COIDENT error                  { here $startpos($1) $endpos($2) "let: let expects a variable, not a covariable" }
   | LETP error                          { here $startpos($1) $endpos($1) "let: expected variable in '(let ...'" }
@@ -73,5 +94,13 @@ letp:
   | parens(letp_body)                   { $1 }
 
 consumer: 
-  | cval                                { $1 }
+  | c=cval                              { Ast.Surface.Consumer.covariable c }
   | letp                                { $1 }
+
+either:
+  | p=producer                          { Ast.Surface.Positive p }
+  | c=consumer                          { Ast.Surface.Negative c }
+
+either_identifier:
+  | pval                                { Ast.Surface.Positive_name $1 }
+  | cval                                { Ast.Surface.Negative_name $1 }
