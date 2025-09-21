@@ -40,10 +40,10 @@ module Surface = struct
       match p with
       | V name -> show_name name
       | Mu (coname, cut) -> Printf.sprintf "(μ %s.%s)" (show_coname coname) (show_cut cut)
-      | Pair (a, b) -> Printf.sprintf "(pair %s %s)" (show_neutral a) (show_neutral b)
+      | Pair (a, b) -> Printf.sprintf "(%s * %s)" (show_neutral a) (show_neutral b)
       | Cosplit (a, b, cut) ->
         Printf.sprintf
-          "(cosplit %s %s.%s)"
+          "((%s & %s).%s)"
           (show_neutral_name a)
           (show_neutral_name b)
           (show_cut cut)
@@ -54,11 +54,11 @@ module Surface = struct
       | MuTilde (name, cut) -> Printf.sprintf "(μ̃ %s.%s)" (show_name name) (show_cut cut)
       | Split (a, b, cut) ->
         Printf.sprintf
-          "(split %s %s.%s)"
+          "((%s * %s).%s)"
           (show_neutral_name a)
           (show_neutral_name b)
           (show_cut cut)
-      | Copair (a, b) -> Printf.sprintf "(copair %s %s)" (show_neutral a) (show_neutral b)
+      | Copair (a, b) -> Printf.sprintf "(%s & %s)" (show_neutral a) (show_neutral b)
 
     and show_cut (cut : cut) =
       Printf.sprintf "<%s|%s>" (show_producer cut.p) (show_consumer cut.c)
@@ -148,15 +148,15 @@ module Core = struct
       match p with
       | V name -> show_identifer name
       | Mu cut -> Printf.sprintf "(μ.%s)" (show_cut cut)
-      | Pair (a, b) -> Printf.sprintf "(pair %s %s)" (show_neutral a) (show_neutral b)
-      | Cosplit cut -> Printf.sprintf "(cosplit.%s)" (show_cut cut)
+      | Pair (a, b) -> Printf.sprintf "(%s * %s)" (show_neutral a) (show_neutral b)
+      | Cosplit cut -> Printf.sprintf "((0 & 1).%s)" (show_cut cut)
 
     and show_consumer c =
       match c with
       | C coname -> show_identifer coname
       | MuTilde cut -> Printf.sprintf "(μ̃.%s)" (show_cut cut)
-      | Split cut -> Printf.sprintf "(split.%s)" (show_cut cut)
-      | Copair (a, b) -> Printf.sprintf "(copair %s %s)" (show_neutral a) (show_neutral b)
+      | Split cut -> Printf.sprintf "((0 * 1).%s)" (show_cut cut)
+      | Copair (a, b) -> Printf.sprintf "(%s & %s)" (show_neutral a) (show_neutral b)
 
     and show_cut (cut : cut) =
       Printf.sprintf "<%s|%s>" (show_producer cut.p) (show_consumer cut.c)
