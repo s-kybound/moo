@@ -9,33 +9,33 @@ let eval_strategy =
 ;;
 
 let filename_arg =
-  let doc = "Input file to evaluate" in
-  Arg.(required & pos 0 (some file) None & info [] ~docv:"FILE" ~doc)
+  let doc = "Input program to evaluate" in
+  Arg.(required & pos 0 (some file) None & info [] ~docv:"PROGRAM" ~doc)
 ;;
 
 let runner_body =
   let runner_main strategy filename =
     match strategy with
-    | `CBN -> Printf.printf "Running %s with call-by-name strategy\n" filename
-    | `CBV -> Printf.printf "Running %s with call-by-value strategy\n" filename
+    | `CBN ->
+      Printf.printf "Running %s with call-by-name strategy\n" filename;
+      Runner.run_cbn filename
+    | `CBV ->
+      Printf.printf "Running %s with call-by-value strategy\n" filename;
+      Runner.run_cbv filename
   in
   Term.(const runner_main $ eval_strategy $ filename_arg)
 ;;
 
 let runner_cmd =
-  let doc = "CBN and CBV runners for the moo language" in
-  let info = Cmd.info "runner" ~doc in
+  let doc = "CBN and CBV evaluators for the moo language" in
+  let info = Cmd.info "run" ~doc in
   Cmd.v info runner_body
 ;;
 
 let repl_cmd =
   let doc = "REPL for the moo language" in
   let info = Cmd.info "repl" ~doc in
-  let repl_main strategy =
-    match strategy with
-    | `CBN -> Printf.printf "Starting REPL with call-by-name strategy\n"
-    | `CBV -> Printf.printf "Starting REPL with call-by-value strategy\n"
-  in
+  let repl_main strategy = Repl.start_repl strategy in
   Cmd.v info Term.(const repl_main $ eval_strategy)
 ;;
 
