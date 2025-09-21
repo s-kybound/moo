@@ -1,7 +1,15 @@
 open Ast.Core
 
-(* Utilities for beta-reducing terms. *)
-module Beta_reducer = struct
+(* Utilities for beta-reducing terms. 
+ * ! this beta reducer assumes that all
+ * bound variables are recursively dealt 
+ * with accordingly - so you can't do something funny
+ * like attempting to substitute a bound variable
+ * into a bound variable. *)
+module Beta_reducer : sig
+  val beta_reduce_with_producer : int -> producer -> t -> (t, exn) result
+  val beta_reduce_with_consumer : int -> consumer -> t -> (t, exn) result
+end = struct
   module Utils = struct
     let binding_arity_producer p =
       match p with
@@ -105,16 +113,48 @@ module Beta_reducer = struct
     | Positive p -> Positive (subst_consumer_in_producer index term p)
     | Negative c -> Negative (subst_consumer_in_consumer index term c)
   ;;
+
+  (* safe entrypoints *)
+  let beta_reduce_with_producer (index : int) (term : producer) (target : t)
+    : (t, exn) result
+    =
+    match term with
+    | V (Bound _) -> Error (Failure "attempted to substitute a bound variable")
+    | term -> Ok (subst_producer_in_cut index term target)
+  ;;
+
+  let beta_reduce_with_consumer (index : int) (term : consumer) (target : t)
+    : (t, exn) result
+    =
+    match term with
+    | C (Bound _) -> Error (Failure "attempted to substitute a bound variable")
+    | term -> Ok (subst_consumer_in_cut index term target)
+  ;;
 end
 
 module type RUNNER = sig
-  val eval : cut -> cut
+  type step =
+    | Incomplete of t
+    | Complete of t
+
+  val step_once : t -> step
+  val eval : t -> t
 end
 
 module Call_by_value : RUNNER = struct
-  let eval cut = raise (Failure "Not_implemented")
+  type step =
+    | Incomplete of t
+    | Complete of t
+
+  let rec step_once t = Complete t
+  let eval t = raise (Failure "Not_implemented")
 end
 
 module Call_by_name : RUNNER = struct
-  let eval cut = raise (Failure "Not_implemented")
+  type step =
+    | Incomplete of t
+    | Complete of t
+
+  let rec step_once t = Complete t
+  let eval t = raise (Failure "Not_implemented")
 end
