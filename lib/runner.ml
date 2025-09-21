@@ -273,7 +273,7 @@ module Call_by_name : RUNNER = struct
     | Complete of t
     | Error of exn
 
-  let rec step_once t = raise (Failure "Not_implemented")
+  let rec step_once t = Complete t
 
   let eval t =
     let rec step_through t =
