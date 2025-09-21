@@ -66,6 +66,30 @@ let parse_and_eval (module Strategy : RUNNER) input =
   | exn -> print_error (Printexc.to_string exn)
 ;;
 
+let parse_and_step (module Strategy : RUNNER) input =
+  print_endline "evaluating the module step by step...";
+  print_endline "(any entry = step, :stop = exit)";
+  let rec step_eval cut =
+    Printf.printf "current result: %s\n%!" (Core.Show.show cut);
+    match LNoise.linenoise "step> " with
+    | None 
+    | Some ":exit" -> print_endline "exiting"
+    | Some _ ->
+      Printf.printf "Stepping...\n%!";
+      (match Strategy.step_once cut with
+       | Strategy.Complete result ->
+         Printf.printf "Complete!\n%!";
+         print_result result
+       | Strategy.Incomplete next_cut -> step_eval next_cut
+       | Strategy.Error exn -> raise exn)
+  in
+  try
+    let core_ast = get_ast input in
+    step_eval core_ast
+  with
+  | exn -> print_error (Printexc.to_string exn)
+;;
+
 let init_repl () =
   LNoise.set_multiline true;
   let max_length = 1000 in
@@ -102,6 +126,17 @@ let rec repl_loop strategy =
   | Some ":q" | Some ":quit" ->
     print_endline "Goodbye!";
     exit 0
+  | Some ":help" ->
+    print_endline "Commands:";
+    print_endline "  :q, :quit    Exit REPL";
+    print_endline "  :step <expr> Step-by-step evaluation";
+    print_endline "  :help        Show this help";
+    repl_loop strategy
+  | Some line when String.starts_with ~prefix:":step " line ->
+    add_to_history line;
+    let expr = String.sub line 6 (String.length line - 6) |> String.trim in
+    parse_and_step strategy expr;
+    repl_loop strategy
   | Some line ->
     add_to_history line;
     parse_and_eval strategy line;
