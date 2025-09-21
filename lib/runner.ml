@@ -247,7 +247,7 @@ module Call_by_value : RUNNER = struct
     | Pair (_, Negative _), _ -> assert false (* value, handled already *)
     (* cosplit semantics 
      * for this implementation, we consider 
-     * the copair as a lazy value *) 
+     * the copair as a lazy value *)
     | Cosplit cut, Copair (a, b) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 a cut)
@@ -276,7 +276,7 @@ module Call_by_name : RUNNER = struct
     | Complete of t
     | Error of exn
 
-  let rec step_once t = Complete t
+  let step_once t = Complete t
 
   let eval t =
     let rec step_through t =
