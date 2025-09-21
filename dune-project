@@ -1,6 +1,7 @@
 (lang dune 3.20)
 
 (name moo)
+(version 0.0.1)
 
 (generate_opam_files true)
 
