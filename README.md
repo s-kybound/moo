@@ -72,5 +72,7 @@ We also have the negative function abstraction:
 <(pair x 'k) | (split a 'b M)> -> M[x/a, 'k/'b]
 ```
 
+In this case, the consumer tells us what to do!
+
 A personal hypothesis behind why cosplit is not as well known as cocase is because cocase and case are usually used as general pattern 
 matchers against algebraic datatypes, which encode for both products and sums.
