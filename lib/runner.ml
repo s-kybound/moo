@@ -236,15 +236,19 @@ module Call_by_value : RUNNER = struct
     (* the rest of the pairs below are NOT values. 
      * these rules equate to the
      * pair dynamic focusing rules *)
+    | Pair (Positive a, Positive b), cut when is_val a ->
+      let new_producer = b in
+      let new_consumer = MuTilde { p = Pair (Positive a, Positive (V (Bound 0))); c = cut } in
+      Incomplete { p = new_producer; c = new_consumer }
+    | Pair (Negative a, Positive b), cut ->
+      let new_producer = b in
+      let new_consumer = MuTilde { p = Pair (Negative a, Positive (V (Bound 0))); c = cut } in
+      Incomplete { p = new_producer; c = new_consumer }
     | Pair (Positive a, b), cut ->
       let new_producer = a in
       let new_consumer = MuTilde { p = Pair (Positive (V (Bound 0)), b); c = cut } in
       Incomplete { p = new_producer; c = new_consumer }
-    | Pair (a, Positive b), cut ->
-      let new_producer = b in
-      let new_consumer = MuTilde { p = Pair (a, Positive (V (Bound 0))); c = cut } in
-      Incomplete { p = new_producer; c = new_consumer }
-    | Pair (_, Negative _), _ -> assert false (* value, handled already *)
+    | Pair (Negative _, Negative _), _ -> assert false (* value, handled already *)
     (* cosplit semantics 
      * for this implementation, we consider 
      * the copair as a lazy value *)
