@@ -72,8 +72,7 @@ let parse_and_step (module Strategy : RUNNER) input =
   let rec step_eval cut =
     Printf.printf "current result: %s\n%!" (Core.Show.show cut);
     match LNoise.linenoise "step> " with
-    | None 
-    | Some ":exit" -> print_endline "exiting"
+    | None | Some ":exit" -> print_endline "exiting"
     | Some _ ->
       Printf.printf "Stepping...\n%!";
       (match Strategy.step_once cut with

@@ -238,11 +238,15 @@ module Call_by_value : RUNNER = struct
      * pair dynamic focusing rules *)
     | Pair (Positive a, Positive b), cut when is_val a ->
       let new_producer = b in
-      let new_consumer = MuTilde { p = Pair (Positive a, Positive (V (Bound 0))); c = cut } in
+      let new_consumer =
+        MuTilde { p = Pair (Positive a, Positive (V (Bound 0))); c = cut }
+      in
       Incomplete { p = new_producer; c = new_consumer }
     | Pair (Negative a, Positive b), cut ->
       let new_producer = b in
-      let new_consumer = MuTilde { p = Pair (Negative a, Positive (V (Bound 0))); c = cut } in
+      let new_consumer =
+        MuTilde { p = Pair (Negative a, Positive (V (Bound 0))); c = cut }
+      in
       Incomplete { p = new_producer; c = new_consumer }
     | Pair (Positive a, b), cut ->
       let new_producer = a in
