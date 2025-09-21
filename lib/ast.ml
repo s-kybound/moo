@@ -236,4 +236,37 @@ module Core = struct
   end
 
   let convert : Surface.t -> t = Converter.convert_cut Converter.empty_env
+
+  let rec aequiv_producer (a : producer) (b : producer) =
+    match a, b with
+    | V (Bound n), V (Bound n') -> n = n'
+    | V (FreeP n), V (FreeP n') -> String.equal n n'
+    | V (FreeC _), _ -> assert false
+    | _, V (FreeC _) -> assert false
+    | Mu cut, Mu cut' -> aequiv_cut cut cut'
+    | Pair (a, b), Pair (c, d) -> aequiv_neutral a c && aequiv_neutral b d
+    | Cosplit cut, Cosplit cut' -> aequiv_cut cut cut'
+    | _, _ -> false
+
+  and aequiv_consumer (a : consumer) (b : consumer) =
+    match a, b with
+    | C (Bound n), C (Bound n') -> n = n'
+    | C (FreeC n), C (FreeC n') -> String.equal n n'
+    | C (FreeP _), _ -> assert false
+    | _, C (FreeP _) -> assert false
+    | MuTilde cut, MuTilde cut' -> aequiv_cut cut cut'
+    | Split cut, Split cut' -> aequiv_cut cut cut'
+    | Copair (a, b), Copair (c, d) -> aequiv_neutral a c && aequiv_neutral b d
+    | _, _ -> false
+
+  and aequiv_cut (a : cut) (b : cut) = aequiv_producer a.p b.p && aequiv_consumer a.c b.c
+
+  and aequiv_neutral (a : neutral) (b : neutral) =
+    match a, b with
+    | Positive a, Positive b -> aequiv_producer a b
+    | Negative a, Negative b -> aequiv_consumer a b
+    | _, _ -> false
+  ;;
+
+  let aequiv = aequiv_cut
 end
