@@ -60,7 +60,7 @@ module Surface = struct
           (show_cut cut)
       | Copair (a, b) -> Printf.sprintf "(copair %s %s)" (show_neutral a) (show_neutral b)
 
-    and show_cut cut =
+    and show_cut (cut : cut) =
       Printf.sprintf "<%s|%s>" (show_producer cut.p) (show_consumer cut.c)
 
     and show_neutral n =
@@ -158,7 +158,7 @@ module Core = struct
       | Split cut -> Printf.sprintf "(split.%s)" (show_cut cut)
       | Copair (a, b) -> Printf.sprintf "(copair %s %s)" (show_neutral a) (show_neutral b)
 
-    and show_cut cut =
+    and show_cut (cut : cut) =
       Printf.sprintf "<%s|%s>" (show_producer cut.p) (show_consumer cut.c)
 
     and show_neutral n =
