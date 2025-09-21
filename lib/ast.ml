@@ -210,7 +210,7 @@ module Core = struct
         if neutral_name_match x y
         then raise (Failure "Cosplit: name conflict in parameters")
         else (
-          let env' = x :: y :: env in
+          let env' = y :: x :: env in
           Cosplit (convert_cut env' cut))
 
     and convert_consumer env c : consumer =
@@ -221,7 +221,7 @@ module Core = struct
         if neutral_name_match x y
         then raise (Failure "Split: name conflict in parameters")
         else (
-          let env' = x :: y :: env in
+          let env' = y :: x :: env in
           Split (convert_cut env' cut))
       | S.Copair (a, b) -> Copair (convert_neutral env a, convert_neutral env b)
 
