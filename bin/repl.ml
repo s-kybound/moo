@@ -29,11 +29,14 @@ module History = struct
   ;;
 
   let add elem t =
-    let new_r_pointer = (t.r_pointer + 1) mod t.size in
-    if new_r_pointer = t.l_pointer then remove_one t;
-    t.ring.(t.r_pointer) <- elem;
-    Hashtbl.replace t.membership elem t.r_pointer;
-    t.r_pointer <- new_r_pointer
+    if Hashtbl.mem t.membership elem
+    then ()
+    else (
+      let new_r_pointer = (t.r_pointer + 1) mod t.size in
+      if new_r_pointer = t.l_pointer then remove_one t;
+      t.ring.(t.r_pointer) <- elem;
+      Hashtbl.replace t.membership elem t.r_pointer;
+      t.r_pointer <- new_r_pointer)
   ;;
 
   let get_stack t =
@@ -184,13 +187,13 @@ let rec repl_loop () =
 
 let start_repl strategy_type =
   init_repl ();
-  let strategy =
+  let (module Strategy) =
     match strategy_type with
     | `CBN -> (module Call_by_name : RUNNER)
     | `CBV -> (module Call_by_value : RUNNER)
   in
-  State.set_evaluator strategy;
-  print_endline "moo REPL - enter :q to quit";
+  State.set_evaluator (module Strategy);
+  Printf.printf "moo REPL (%s) - enter :q to quit\n%!" Strategy.name;
   try repl_loop () with
   | Sys.Break ->
     print_endline "Goodbye!";
