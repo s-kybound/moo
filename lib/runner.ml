@@ -197,13 +197,14 @@ module Call_by_value : RUNNER = struct
     (* encode type errors *)
     | Pair _, Copair _ -> Error (Failure "type error: A*B producer, C&D consumer")
     | Cosplit _, Split _ -> Error (Failure "type error: A&B producer, C*D consumer")
-    (* encode "unable to progress" cases due to us allowing free names *)
-    | V _, Split _ -> Error (Failure "unable to progress: A producer, B*C consumer")
-    | V _, Copair _ -> Error (Failure "unable to progress: A producer, B&C consumer")
+    (* consider "unable to progress" cases as complete - if these names were substituted 
+     * can continue in the future *)
+    | V _, Split _ -> Complete t
+    | V _, Copair _ -> Complete t
     (* end cases *)
-    | V (FreeP _), C (FreeC _) -> Complete t
-    | Cosplit _, C (FreeC _) -> Complete t
-    | (Pair _ as p), C (FreeC _) when is_val p -> Complete t
+    | V _, C _ -> Complete t
+    | Cosplit _, C _ -> Complete t
+    | (Pair _ as p), C _ when is_val p -> Complete t
     (* call-by-value semantics *)
     (* any letcc is immediately evaluated *)
     | Mu cut, c ->
@@ -327,13 +328,14 @@ module Call_by_name : RUNNER = struct
     (* encode type errors *)
     | Pair _, Copair _ -> Error (Failure "type error: A*B producer, C&D consumer")
     | Cosplit _, Split _ -> Error (Failure "type error: A&B producer, C*D consumer")
-    (* encode "unable to progress" cases due to us allowing free names *)
-    | Cosplit _, C _ -> Error (Failure "unable to progress: A&B producer, C consumer")
-    | Pair _, C _ -> Error (Failure "unable to progress: A*B producer, C consumer")
+    (* consider "unable to progress" cases as complete - if these names were substituted 
+     * can continue in the future *)
+    | Cosplit _, C _ -> Complete t
+    | Pair _, C _ -> Complete t
     (* TODO: end cases *)
-    | V (FreeP _), C (FreeC _) -> Complete t
-    | V (FreeP _), Split _ -> Complete t
-    | V (FreeP _), (Copair _ as c) when is_coval c -> Complete t
+    | V _, C _ -> Complete t
+    | V _, Split _ -> Complete t
+    | V _, (Copair _ as c) when is_coval c -> Complete t
     (* call-by-name semantics *)
     (* any let is immediately evaluated *)
     | p, MuTilde cut ->
