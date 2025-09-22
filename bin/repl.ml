@@ -130,6 +130,7 @@ let init_repl () =
         ; ":exit"
         ; ":help"
         ; ":step"
+        ; ":show"
         ; ":cbn"
         ; ":call-by-name"
         ; ":cbv"
@@ -171,6 +172,7 @@ let rec repl_loop () =
     print_endline "  :q, :quit, :exit   Exit REPL";
     print_endline "  :cbn, :call-by-name   Switch to call-by-name evaluation";
     print_endline "  :cbv, :call-by-value  Switch to call-by-value evaluation";
+    print_endline "  :show <expr>       Visualize the expression";
     print_endline "  :step <expr>       Step-by-step evaluation";
     print_endline "  :help              Show this help";
     repl_loop ()
@@ -178,6 +180,12 @@ let rec repl_loop () =
     add_to_history line;
     let expr = String.sub line 6 (String.length line - 6) |> String.trim in
     parse_and_step expr;
+    repl_loop ()
+  | Some line when String.starts_with ~prefix:":show " line ->
+    add_to_history line;
+    let expr = String.sub line 6 (String.length line - 6) |> String.trim in
+    let ast = get_ast expr in
+    print_result ast;
     repl_loop ()
   | Some line ->
     add_to_history line;
