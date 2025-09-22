@@ -6,6 +6,9 @@
 %token LETC LETP (* mu, mu-tilde abstactions *)
 %token PAIR SPLIT (* pair producer and its split consumer *)
 %token COSPLIT COPAIR (* cosplit producer and its copair consumer *)
+%token IN
+%token LTRARROW RTLARROW
+
 (*
 nice to have, but we are trying to prove minimality with negation
 and conjuction alone for now
@@ -22,7 +25,7 @@ and conjuction alone for now
 entrypoint: p=program                   { p }
 
 program: 
-  | c=cut EOF                           { c }
+  | s=statement EOF                     { s }
   | EOF                                 { 
                                           Ast.Surface.cut 
                                             (Ast.Surface.Producer.variable (Ast.Surface.Identifier.name "empty-file")) 
@@ -30,6 +33,32 @@ program:
                                         }
   | LPAREN error                        { raisef $startpos($1) $endpos($1) "unexpected '(' - missing closing ')' or malformed expression" }
   | RPAREN error                        { raisef $startpos($1) $endpos($1) "unexpected ')' - no matching '(' found" }
+
+(* Nested statements *)
+statement:
+  | LETP v=pval 
+    RTLARROW p=producer IN m=statement  { Ast.Surface.cut
+                                            p
+                                            (Ast.Surface.Consumer.mutilde v m)
+                                        }
+  | LETC cv=cval 
+    RTLARROW c=consumer IN m=statement  { Ast.Surface.cut
+                                            (Ast.Surface.Producer.mu cv m)
+                                            c
+                                        }
+  | SPLIT    a=either_identifier 
+             b=either_identifier        
+    RTLARROW p=producer IN m=statement  { Ast.Surface.cut
+                                            p
+                                            (Ast.Surface.Consumer.split a b m)
+                                        }
+  | COSPLIT  a=either_identifier 
+             b=either_identifier        
+    RTLARROW c=consumer IN m=statement  { Ast.Surface.cut
+                                            (Ast.Surface.Producer.cosplit a b m)
+                                            c
+                                        }
+  | cut                                 { $1 }
 
 cut_body:
   | p=producer c=consumer               { Ast.Surface.cut p c }
@@ -48,7 +77,7 @@ pval:
   | v = IDENT                           { Ast.Surface.Identifier.name v }
 
 letc_body:
-  | LETC cv=cval c=cut                  { Ast.Surface.Producer.mu cv c }
+  | LETC cv=cval LTRARROW s=statement   { Ast.Surface.Producer.mu cv s }
   | LETC COIDENT error                  { raisef $startpos($1) $endpos($2) "incomplete letcc: expected cut after covariable '%s'" $2 }
   | LETC IDENT error                    { raisef $startpos($1) $endpos($2) "type error: letcc expects a covariable (like 'k), got variable '%s'" $2 }
   | LETC error                          { raisef $startpos($1) $endpos($1) "incomplete letcc: expected covariable after 'letcc'" }
@@ -67,9 +96,9 @@ product:
   | LPAREN product_body error           { raisef $startpos($1) $endpos($2) "unclosed pair: expected ')' to close pair started here" }
 
 cosplit_body:
-  | COSPLIT a=either_identifier 
-            b=either_identifier 
-            c=cut                       { Ast.Surface.Producer.cosplit a b c }
+  | COSPLIT  a=either_identifier 
+             b=either_identifier 
+    LTRARROW s=statement                { Ast.Surface.Producer.cosplit a b s }
   | COSPLIT either_identifier 
             either_identifier error     { raisef $startpos($1) $endpos($3) "incomplete cosplit: expected cut after variables" }
   | COSPLIT either_identifier error     { raisef $startpos($1) $endpos($2) "incomplete cosplit: expected second variable and cut" }
@@ -89,7 +118,7 @@ cval:
   | cv = COIDENT                        { Ast.Surface.Identifier.coname cv }
 
 letp_body:
-  | LETP v=pval c=cut                   { Ast.Surface.Consumer.mutilde v c }
+  | LETP v=pval LTRARROW s=statement    { Ast.Surface.Consumer.mutilde v s }
   | LETP IDENT error                    { raisef $startpos($1) $endpos($2) "incomplete let: expected cut after variable '%s'" $2 }
   | LETP COIDENT error                  { raisef $startpos($1) $endpos($2) "type error: let expects a variable (like x), got covariable '%s'" $2 }
   | LETP error                          { raisef $startpos($1) $endpos($1) "incomplete let: expected variable after 'let'" }
@@ -99,9 +128,9 @@ letp:
   | LPAREN letp_body error              { raisef $startpos($1) $endpos($2) "unclosed let: expected ')' to close expression started here" }
 
 split_body:
-  | SPLIT a=either_identifier 
-          b=either_identifier 
-          c=cut                         { Ast.Surface.Consumer.split a b c }
+  | SPLIT    a=either_identifier 
+             b=either_identifier 
+    LTRARROW s=statement                { Ast.Surface.Consumer.split a b s }
   | SPLIT either_identifier 
           either_identifier error       { raisef $startpos($1) $endpos($3) "incomplete split: expected cut after variables" }
   | SPLIT either_identifier error       { raisef $startpos($1) $endpos($2) "incomplete split: expected second variable and cut" }

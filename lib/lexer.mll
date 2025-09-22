@@ -9,7 +9,8 @@
       ("pair",    PAIR);
       ("split",   SPLIT);
       ("copair",  COPAIR);
-      ("cosplit", COSPLIT)
+      ("cosplit", COSPLIT);
+      ("in",      IN)
     ] in
     keywords
     |> List.to_seq
@@ -31,10 +32,9 @@ let hspace             = [' ' '\t' '\r']+
 let newline            = '\n'
 let digit              = ['0'-'9']
 let letter             = ['A'-'Z' 'a'-'z']
-let special_initial    = ['!' '$' '%' '&' '*' '/' ':' '<' '=' '>' '?' '^' '_' '~']
+let special_initial    = ['_']
 let initial            = letter | special_initial
-let special_subsequent = ['+' '-' '@']
-let subsequent         = initial | digit | special_subsequent
+let subsequent         = initial | digit
 
 let ident = initial subsequent*
 let coident = '\'' ident
@@ -44,7 +44,8 @@ rule token = parse
   | newline        { Lexing.new_line lexbuf; token lexbuf }
   | "(*"           { skip_comment 1 lexbuf; token lexbuf }
   | "*)"           { raisef lexbuf "Unmatched *). Was a comment erased incorrectly?" }
-  | "#*"           { skip_datum lexbuf; token lexbuf }
+  | "->"           { LTRARROW }
+  | "<-"           { RTLARROW }
   | '['            { LBRACK }
   | ']'            { RBRACK }
   | '('            { LPAREN }
@@ -53,47 +54,6 @@ rule token = parse
   | ident as id    { verify_ident lexbuf id }
   | eof            { EOF }
   | _ as ch        { raisef lexbuf "Unexpected char while parsing: %C" ch }
-
-and skip_datum = parse
-  | hspace         { skip_datum lexbuf }
-  | newline        { Lexing.new_line lexbuf; skip_datum lexbuf }
-  | "(*"           { skip_comment 1 lexbuf; skip_datum lexbuf }
-  | "*)"           { raisef lexbuf "Unmatched *). Was a comment erased incorrectly?" }
-  | "#*"           { skip_datum lexbuf; skip_datum lexbuf }
-  | '('            { skip_parens 1 lexbuf }
-  | '['            { skip_bracks 1 lexbuf }
-  | coident        { () }
-  | ident          { () }
-  | eof            { raisef lexbuf "Unterminated datum comment - datum comment must be before any datum" }
-  | _ as ch        { raisef lexbuf "Unexpected char while evaluating datum comment: %C" ch }
-
-and skip_parens depth = parse
-  | hspace         { skip_parens depth lexbuf }
-  | newline        { Lexing.new_line lexbuf; skip_parens depth lexbuf }
-  | "(*"           { skip_comment 1 lexbuf; skip_parens depth lexbuf }
-  | "*)"           { raisef lexbuf "Unmatched *). Was a comment erased incorrectly?" }
-  | "#*"           { skip_datum lexbuf; skip_parens depth lexbuf }
-  | '('            { skip_parens (depth + 1) lexbuf }
-  | ')'            { if depth = 1 then () else skip_parens (depth - 1) lexbuf }
-  | '['            { skip_bracks 1 lexbuf; skip_parens depth lexbuf }
-  | coident        { skip_parens depth lexbuf }
-  | ident          { skip_parens depth lexbuf }
-  | eof            { raisef lexbuf "Unterminated (...) in datum comment" }
-  | _ as ch        { raisef lexbuf "Unexpected char while evaluating datum comment: %C" ch }
-
-and skip_bracks depth = parse
-  | hspace         { skip_bracks depth lexbuf }
-  | newline        { Lexing.new_line lexbuf; skip_bracks depth lexbuf }
-  | "(*"           { skip_comment 1 lexbuf; skip_bracks depth lexbuf }
-  | "*)"           { raisef lexbuf "Unmatched *). Was a comment erased incorrectly?" }
-  | "#*"           { skip_datum lexbuf; skip_bracks depth lexbuf }
-  | '['            { skip_bracks (depth + 1) lexbuf }
-  | ']'            { if depth = 1 then () else skip_bracks (depth - 1) lexbuf }
-  | '('            { skip_parens 1 lexbuf; skip_bracks depth lexbuf }
-  | coident        { skip_bracks depth lexbuf }
-  | ident          { skip_bracks depth lexbuf }
-  | eof            { raisef lexbuf "Unterminated [...] in datum comment" }
-  | _ as ch        { raisef lexbuf "Unexpected char while evaluating datum comment: %C" ch }
 
 and skip_comment depth = parse
   | hspace         { skip_comment depth lexbuf }
