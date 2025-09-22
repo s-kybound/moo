@@ -147,6 +147,7 @@ module type RUNNER = sig
     | Complete of t
     | Error of exn
 
+  val name : string
   val step_once : t -> step
   val eval : t -> t
 end
@@ -156,6 +157,8 @@ module Call_by_value : RUNNER = struct
     | Incomplete of t
     | Complete of t
     | Error of exn
+
+  let name = "call-by-value"
 
   (* the value judgement, on producers. 
    * only used to analyze producers already at a
@@ -283,6 +286,8 @@ module Call_by_name : RUNNER = struct
     | Incomplete of t
     | Complete of t
     | Error of exn
+
+  let name = "call-by-name"
 
   let step_once t =
     ignore t;

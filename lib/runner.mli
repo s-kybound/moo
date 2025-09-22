@@ -4,6 +4,7 @@ module type RUNNER = sig
     | Complete of Ast.Core.t
     | Error of exn
 
+  val name : string
   val step_once : Ast.Core.t -> step
   val eval : Ast.Core.t -> Ast.Core.t
 end

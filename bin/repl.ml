@@ -52,12 +52,31 @@ module History = struct
   let filter f t = t |> get_stack |> List.filter f
 end
 
-let history = ref (History.init 1 "")
+module State = struct
+  let current_history : string History.t option ref = ref None
+  let current_evaluator : (module RUNNER) option ref = ref None
+  let set_evaluator t = current_evaluator := Some t
+  let set_history t = current_history := Some t
+
+  let get_evaluator () =
+    match !current_evaluator with
+    | None -> raise (Failure "Tried to get uninitialized evaluator")
+    | Some e -> e
+  ;;
+
+  let get_history () =
+    match !current_history with
+    | None -> raise (Failure "Tried to get uninitialized history")
+    | Some e -> e
+  ;;
+end
+
 let print_result result = Printf.printf "=> %s\n%!" (Core.Show.show result)
 let print_error msg = Printf.eprintf "Error: %s\n%!" msg
 let get_ast str = str |> Reader.of_string ~filename:"REPL" |> Core.convert
 
-let parse_and_eval (module Strategy : RUNNER) input =
+let parse_and_eval input =
+  let (module Strategy : RUNNER) = State.get_evaluator () in
   try
     let core_ast = get_ast input in
     let result = Strategy.eval core_ast in
@@ -66,9 +85,10 @@ let parse_and_eval (module Strategy : RUNNER) input =
   | exn -> print_error (Printexc.to_string exn)
 ;;
 
-let parse_and_step (module Strategy : RUNNER) input =
+let parse_and_step input =
   print_endline "evaluating the module step by step...";
   print_endline "(any entry = step, :stop = exit)";
+  let (module Strategy : RUNNER) = State.get_evaluator () in
   let rec step_eval cut =
     Printf.printf "current result: %s\n%!" (Core.Show.show cut);
     match LNoise.linenoise "step> " with
@@ -92,7 +112,7 @@ let parse_and_step (module Strategy : RUNNER) input =
 let init_repl () =
   LNoise.set_multiline true;
   let max_length = 1000 in
-  history := History.init 1000 "";
+  State.set_history (History.init 1000 "");
   match LNoise.history_set ~max_length with
   | Error s -> raise (Failure s)
   | Ok () ->
@@ -101,9 +121,20 @@ let init_repl () =
       if line_so_far = ""
       then ()
       else if line_so_far.[0] = ':'
-      then [ ":q"; ":quit"; ":help" ] |> List.iter (LNoise.add_completion ln_completions)
+      then
+        [ ":q"
+        ; ":quit"
+        ; ":exit"
+        ; ":help"
+        ; ":step"
+        ; ":cbn"
+        ; ":call-by-name"
+        ; ":cbv"
+        ; ":call-by-value"
+        ]
+        |> List.iter (LNoise.add_completion ln_completions)
       else
-        !history
+        State.get_history ()
         |> History.filter (fun cmd ->
           String.length cmd >= String.length line_so_far
           && String.starts_with ~prefix:line_so_far cmd)
@@ -112,50 +143,55 @@ let init_repl () =
 
 let add_to_history line =
   ignore (LNoise.history_add line);
-  History.add line !history
+  History.add line (State.get_history ())
 ;;
 
-let rec repl_loop strategy =
-  let prompt = "moo> " in
+let rec repl_loop () =
+  let (module Strategy : RUNNER) = State.get_evaluator () in
+  let prompt = Printf.sprintf "moo[%s]> " Strategy.name in
   match LNoise.linenoise prompt with
   | None ->
     print_endline "\nGoodbye!";
     exit 0
-  | Some "" -> repl_loop strategy
-  | Some ":q" | Some ":quit" ->
+  | Some "" -> repl_loop ()
+  | Some ":q" | Some ":quit" | Some ":exit" ->
     print_endline "Goodbye!";
     exit 0
+  | Some ":cbn" | Some ":call-by-name" ->
+    State.set_evaluator (module Call_by_name);
+    repl_loop ()
+  | Some ":cbv" | Some ":call-by-value" ->
+    State.set_evaluator (module Call_by_value);
+    repl_loop ()
   | Some ":help" ->
     print_endline "Commands:";
-    print_endline "  :q, :quit    Exit REPL";
-    print_endline "  :step <expr> Step-by-step evaluation";
-    print_endline "  :help        Show this help";
-    repl_loop strategy
+    print_endline "  :q, :quit, :exit   Exit REPL";
+    print_endline "  :cbn, :call-by-name   Switch to call-by-name evaluation";
+    print_endline "  :cbv, :call-by-value  Switch to call-by-value evaluation";
+    print_endline "  :step <expr>       Step-by-step evaluation";
+    print_endline "  :help              Show this help";
+    repl_loop ()
   | Some line when String.starts_with ~prefix:":step " line ->
     add_to_history line;
     let expr = String.sub line 6 (String.length line - 6) |> String.trim in
-    parse_and_step strategy expr;
-    repl_loop strategy
+    parse_and_step expr;
+    repl_loop ()
   | Some line ->
     add_to_history line;
-    parse_and_eval strategy line;
-    repl_loop strategy
+    parse_and_eval line;
+    repl_loop ()
 ;;
 
 let start_repl strategy_type =
-  let strategy_name =
-    match strategy_type with
-    | `CBN -> "call-by-name"
-    | `CBV -> "call-by-value"
-  in
-  Printf.printf "moo REPL (%s)\nType :q to quit\n%!" strategy_name;
   init_repl ();
   let strategy =
     match strategy_type with
     | `CBN -> (module Call_by_name : RUNNER)
     | `CBV -> (module Call_by_value : RUNNER)
   in
-  try repl_loop strategy with
+  State.set_evaluator strategy;
+  print_endline "moo REPL - enter :q to quit";
+  try repl_loop () with
   | Sys.Break ->
     print_endline "Goodbye!";
     exit 0
