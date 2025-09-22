@@ -1,15 +1,6 @@
 {
   open Parser
-  open Lexing
-
-  type loc = { start: position; stop: position }
-  exception Lexing_error of loc * string
-
-  let curr_loc lexbuf =
-    { start = lexeme_start_p lexbuf; stop = lexeme_end_p lexbuf }
-
-  let raisef lexbuf fmt =
-    Printf.kprintf (fun msg -> raise (Lexing_error (curr_loc lexbuf, msg))) fmt
+  open Parser_error.Lexer
 
   let keywords : (string, Parser.token) Hashtbl.t =
     let keywords : (string * Parser.token) list = [

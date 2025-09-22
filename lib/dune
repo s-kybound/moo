@@ -1,7 +1,7 @@
 (library
  (name moo)
- (modules ast reader parser lexer runner)
- (private_modules parser lexer))
+ (modules ast reader parser parser_error lexer runner)
+ (private_modules parser parser_error lexer))
 
 (menhir
  (modules parser))
