@@ -32,6 +32,9 @@ module Surface = struct
 
   type t = cut
 
+  (* Surface's show should look exactly like the code.
+   * but Core will look closer to product-mu-mu calculus.
+  *)
   module Show = struct
     let rec show_name (Name n) = n
     and show_coname (Coname c) = Printf.sprintf "'%s" c
@@ -39,11 +42,12 @@ module Surface = struct
     and show_producer p =
       match p with
       | V name -> show_name name
-      | Mu (coname, cut) -> Printf.sprintf "(μ %s.%s)" (show_coname coname) (show_cut cut)
-      | Pair (a, b) -> Printf.sprintf "(%s * %s)" (show_neutral a) (show_neutral b)
+      | Mu (coname, cut) ->
+        Printf.sprintf "(letcc %s %s)" (show_coname coname) (show_cut cut)
+      | Pair (a, b) -> Printf.sprintf "(pair %s %s)" (show_neutral a) (show_neutral b)
       | Cosplit (a, b, cut) ->
         Printf.sprintf
-          "((%s & %s).%s)"
+          "(cosplit %s %s %s)"
           (show_neutral_name a)
           (show_neutral_name b)
           (show_cut cut)
@@ -51,17 +55,18 @@ module Surface = struct
     and show_consumer c =
       match c with
       | C coname -> show_coname coname
-      | MuTilde (name, cut) -> Printf.sprintf "(μ̃ %s.%s)" (show_name name) (show_cut cut)
+      | MuTilde (name, cut) ->
+        Printf.sprintf "(let %s %s)" (show_name name) (show_cut cut)
       | Split (a, b, cut) ->
         Printf.sprintf
-          "((%s * %s).%s)"
+          "(split %s %s %s)"
           (show_neutral_name a)
           (show_neutral_name b)
           (show_cut cut)
-      | Copair (a, b) -> Printf.sprintf "(%s & %s)" (show_neutral a) (show_neutral b)
+      | Copair (a, b) -> Printf.sprintf "(copair %s %s)" (show_neutral a) (show_neutral b)
 
     and show_cut (cut : cut) =
-      Printf.sprintf "<%s|%s>" (show_producer cut.p) (show_consumer cut.c)
+      Printf.sprintf "[%s %s]" (show_producer cut.p) (show_consumer cut.c)
 
     and show_neutral n =
       match n with
