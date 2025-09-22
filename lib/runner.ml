@@ -195,10 +195,11 @@ module Call_by_value : RUNNER = struct
         (Failure
            "encountered bound variable in consumer - should have been beta-eliminated")
     (* encode type errors *)
-    | V _, Copair _ -> Error (Failure "type error: A producer, B&C consumer")
     | Pair _, Copair _ -> Error (Failure "type error: A*B producer, C&D consumer")
-    | V _, Split _ -> Error (Failure "type error: A producer, B*C consumer")
     | Cosplit _, Split _ -> Error (Failure "type error: A&B producer, C*D consumer")
+    (* encode "unable to progress" cases due to us allowing free names *)
+    | V _, Split _ -> Error (Failure "unable to progress: A producer, B*C consumer")
+    | V _, Copair _ -> Error (Failure "unable to progress: A producer, B&C consumer")
     (* end cases *)
     | V (FreeP _), C (FreeC _) -> Complete t
     | Cosplit _, C (FreeC _) -> Complete t
@@ -239,21 +240,21 @@ module Call_by_value : RUNNER = struct
     (* the rest of the pairs below are NOT values. 
      * these rules equate to the
      * pair dynamic focusing rules *)
-    | Pair (Positive a, Positive b), cut when is_val a ->
+    | Pair (Positive a, Positive b), cons when is_val a ->
       let new_producer = b in
       let new_consumer =
-        MuTilde { p = Pair (Positive a, Positive (V (Bound 0))); c = cut }
+        MuTilde { p = Pair (Positive a, Positive (V (Bound 0))); c = cons }
       in
       Incomplete { p = new_producer; c = new_consumer }
-    | Pair (Negative a, Positive b), cut ->
+    | Pair (Negative a, Positive b), cons ->
       let new_producer = b in
       let new_consumer =
-        MuTilde { p = Pair (Negative a, Positive (V (Bound 0))); c = cut }
+        MuTilde { p = Pair (Negative a, Positive (V (Bound 0))); c = cons }
       in
       Incomplete { p = new_producer; c = new_consumer }
-    | Pair (Positive a, b), cut ->
+    | Pair (Positive a, b), cons ->
       let new_producer = a in
-      let new_consumer = MuTilde { p = Pair (Positive (V (Bound 0)), b); c = cut } in
+      let new_consumer = MuTilde { p = Pair (Positive (V (Bound 0)), b); c = cons } in
       Incomplete { p = new_producer; c = new_consumer }
     | Pair (Negative _, Negative _), _ -> assert false (* value, handled already *)
     (* cosplit semantics 
@@ -289,9 +290,115 @@ module Call_by_name : RUNNER = struct
 
   let name = "call-by-name"
 
+  (* the covalue judgement, on consumers. 
+   * only used to analyze consumers already at a
+   * top-level cut-the cut that is already being
+   * evaluated. so no bound variables.
+  *)
+  let rec is_coval (c : consumer) : bool =
+    let is_coval_neutral n =
+      match n with
+      | Positive _ -> true (* any producer is a covalue. *)
+      | Negative c -> is_coval c
+    in
+    match c with
+    | C (FreeC _) -> true
+    | C (FreeP _) -> assert false
+    | C (Bound _) -> assert false
+    | MuTilde _ -> false
+    | Copair (a, b) -> is_coval_neutral a && is_coval_neutral b
+    | Split _ -> true
+  ;;
+
   let step_once t =
-    ignore t;
-    raise (Failure "Not_implemented")
+    match t.p, t.c with
+    (* encode impossible cases - ill formatted names *)
+    | V (FreeC _), _ -> Error (Failure "encountered consumer name in producer position")
+    | _, C (FreeP _) -> Error (Failure "encountered producer name in consumer position")
+    (* encode namespacing errors - V and C must only have free variables *)
+    | V (Bound _), _ ->
+      Error
+        (Failure
+           "encountered bound variable in producer - should have been beta-eliminated")
+    | _, C (Bound _) ->
+      Error
+        (Failure
+           "encountered bound variable in consumer - should have been beta-eliminated")
+    (* encode type errors *)
+    | Pair _, Copair _ -> Error (Failure "type error: A*B producer, C&D consumer")
+    | Cosplit _, Split _ -> Error (Failure "type error: A&B producer, C*D consumer")
+    (* encode "unable to progress" cases due to us allowing free names *)
+    | Cosplit _, C _ -> Error (Failure "unable to progress: A&B producer, C consumer")
+    | Pair _, C _ -> Error (Failure "unable to progress: A*B producer, C consumer")
+    (* TODO: end cases *)
+    | V (FreeP _), C (FreeC _) -> Complete t
+    | V (FreeP _), Split _ -> Complete t
+    | V (FreeP _), (Copair _ as c) when is_coval c -> Complete t
+    (* call-by-name semantics *)
+    (* any let is immediately evaluated *)
+    | p, MuTilde cut ->
+      Result.fold
+        (Beta_reducer.beta_reduce_with_producer 0 p cut)
+        ~ok:(fun cut -> Incomplete cut)
+        ~error:(fun exn -> Error exn)
+    (* letcc is only evaluated when the consumer is a covalue *)
+    | Mu cut, (C _ as c) ->
+      Result.fold
+        (Beta_reducer.beta_reduce_with_consumer 0 c cut)
+        ~ok:(fun cut -> Incomplete cut)
+        ~error:(fun exn -> Error exn)
+    | Mu cut, (Split _ as c) ->
+      Result.fold
+        (Beta_reducer.beta_reduce_with_consumer 0 c cut)
+        ~ok:(fun cut -> Incomplete cut)
+        ~error:(fun exn -> Error exn)
+    | Mu cut, (Copair _ as c) when is_coval c ->
+      Result.fold
+        (Beta_reducer.beta_reduce_with_consumer 0 c cut)
+        ~ok:(fun cut -> Incomplete cut)
+        ~error:(fun exn -> Error exn)
+    (* copair semantics *)
+    | Cosplit cut, Copair (a, b) when is_coval (Copair (a, b)) ->
+      Result.fold
+        (Beta_reducer.beta_reduce_with_neutral 0 a cut)
+        ~ok:(fun cut ->
+          Result.fold
+            (Beta_reducer.beta_reduce_with_neutral 1 b cut)
+            ~ok:(fun cut -> Incomplete cut)
+            ~error:(fun exn -> Error exn))
+        ~error:(fun exn -> Error exn)
+    (* the rest of the copairs below are NOT covalues. 
+     * these rules equate to the
+     * copair dynamic focusing rules *)
+    | prod, Copair (Negative a, Negative b) when is_coval a ->
+      let new_consumer = b in
+      let new_producer =
+        Mu { c = Copair (Negative a, Negative (C (Bound 0))); p = prod }
+      in
+      Incomplete { p = new_producer; c = new_consumer }
+    | prod, Copair (Positive a, Negative b) ->
+      let new_consumer = b in
+      let new_producer =
+        Mu { c = Copair (Positive a, Negative (C (Bound 0))); p = prod }
+      in
+      Incomplete { p = new_producer; c = new_consumer }
+    | prod, Copair (Negative a, b) ->
+      let new_consumer = a in
+      let new_producer = Mu { c = Copair (Negative (C (Bound 0)), b); p = prod } in
+      Incomplete { p = new_producer; c = new_consumer }
+    | _, Copair (Positive _, Positive _) -> assert false (* covalue, handled already *)
+    (* split semantics 
+     * for this implementation, we consider 
+     * the pair as a lazy value *)
+    | Pair (a, b), Split cut ->
+      Result.fold
+        (Beta_reducer.beta_reduce_with_neutral 0 a cut)
+        ~ok:(fun cut ->
+          Result.fold
+            (Beta_reducer.beta_reduce_with_neutral 1 b cut)
+            ~ok:(fun cut -> Incomplete cut)
+            ~error:(fun exn -> Error exn))
+        ~error:(fun exn -> Error exn)
   ;;
 
   let eval t =
