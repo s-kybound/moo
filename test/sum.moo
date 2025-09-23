@@ -10,8 +10,8 @@
 *)
 
 defp inl 'ap =
-  cosplit v 'k <- 'ap in
-  cosplit 'a_next 'b_next <- 'k in
+  cosplit v 'case <- 'ap in
+  cosplit 'a_next 'b_next <- 'case in
   [v 'a_next]
 ;;
 
@@ -19,11 +19,11 @@ defp inl 'ap =
  * the above definition used to be this:    
  * [(cosplit v 'k -> [ (cosplit 'a_next 'b_next -> [v 'a_next]) 'k ]) 'next]
  * astounding!
-*)
+ *)
 
 defp inr 'ap =
-  cosplit v 'k <- 'ap in
-  cosplit 'a_next 'b_next <- 'k in
+  cosplit v 'case <- 'ap in
+  cosplit 'a_next 'b_next <- 'case in
   [v 'b_next]
 ;;
 
