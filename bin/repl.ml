@@ -100,7 +100,7 @@ let parse_and_step input =
     | None | Some ":exit" -> print_endline "exiting"
     | Some _ ->
       Printf.printf "Stepping...\n%!";
-      (match Strategy.step_once !State.current_environment cut with
+      (match Strategy.step_once cut with
        | Strategy.Complete result ->
          Printf.printf "Complete!\n%!";
          print_result result
@@ -110,7 +110,8 @@ let parse_and_step input =
   try
     let core_ast = get_ast input in
     Env.load_definitions core_ast !State.current_environment;
-    step_eval core_ast.main
+    let new_main = Env.substitute_definitions core_ast.main !State.current_environment in
+    step_eval new_main
   with
   | exn -> print_error (Printexc.to_string exn)
 ;;

@@ -213,6 +213,8 @@ module Env = struct
            Hashtbl.replace t cn (Consumer c))
       program.definitions
   ;;
+
+  let substitute_definitions cut t = Substituter.substitute_cut t cut
 end
 
 module type RUNNER = sig
@@ -222,7 +224,7 @@ module type RUNNER = sig
     | Error of exn
 
   val name : string
-  val step_once : Env.t -> cut -> step
+  val step_once : cut -> step
   val eval : Env.t -> t -> cut
 end
 
@@ -254,7 +256,7 @@ module Call_by_value : RUNNER = struct
     | Cosplit _ -> true
   ;;
 
-  let step_once env t =
+  let step_once t =
     match t.p, t.c with
     (* encode impossible cases - ill formatted names *)
     | V (FreeC _), _ -> Error (Failure "encountered consumer name in producer position")
@@ -271,10 +273,6 @@ module Call_by_value : RUNNER = struct
     (* encode type errors *)
     | Pair _, Copair _ -> Error (Failure "type error: A*B producer, C&D consumer")
     | Cosplit _, Split _ -> Error (Failure "type error: A&B producer, C*D consumer")
-    (* environment lookup *)
-    | V n, c when Env.is_defined n env -> Incomplete { p = Env.get_producer n env; c }
-    | p, C cn when Env.is_defined cn env && is_val p ->
-      Incomplete { p; c = Env.get_consumer cn env }
     (* consider "unable to progress" cases as complete - if these names were substituted 
      * can continue in the future *)
     | V _, Split _ -> Complete t
@@ -363,12 +361,13 @@ module Call_by_value : RUNNER = struct
   let eval env t =
     Env.load_definitions t env;
     let rec step_through cut =
-      match step_once env cut with
+      match step_once cut with
       | Complete cut -> cut
       | Incomplete cut -> step_through cut
       | Error exn -> raise exn
     in
-    step_through t.main
+    let prepared_program = Env.substitute_definitions t.main env in
+    step_through prepared_program
   ;;
 end
 
@@ -400,7 +399,7 @@ module Call_by_name : RUNNER = struct
     | Split _ -> true
   ;;
 
-  let step_once env t =
+  let step_once t =
     match t.p, t.c with
     (* encode impossible cases - ill formatted names *)
     | V (FreeC _), _ -> Error (Failure "encountered consumer name in producer position")
@@ -417,10 +416,6 @@ module Call_by_name : RUNNER = struct
     (* encode type errors *)
     | Pair _, Copair _ -> Error (Failure "type error: A*B producer, C&D consumer")
     | Cosplit _, Split _ -> Error (Failure "type error: A&B producer, C*D consumer")
-    (* environment lookup *)
-    | p, C cn when Env.is_defined cn env -> Incomplete { p; c = Env.get_consumer cn env }
-    | V n, c when Env.is_defined n env && is_coval c ->
-      Incomplete { p = Env.get_producer n env; c }
     (* consider "unable to progress" cases as complete - if these names were substituted 
      * can continue in the future *)
     | Cosplit _, C _ -> Complete t
@@ -509,11 +504,12 @@ module Call_by_name : RUNNER = struct
   let eval env t =
     Env.load_definitions t env;
     let rec step_through t =
-      match step_once env t with
+      match step_once t with
       | Complete t -> t
       | Incomplete t -> step_through t
       | Error exn -> raise exn
     in
-    step_through t.main
+    let prepared_program = Env.substitute_definitions t.main env in
+    step_through prepared_program
   ;;
 end

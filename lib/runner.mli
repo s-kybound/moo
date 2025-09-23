@@ -3,6 +3,7 @@ module Env : sig
 
   val empty_env : t
   val load_definitions : Ast.Core.t -> t -> unit
+  val substitute_definitions : Ast.Core.cut -> t -> Ast.Core.cut
 end
 
 module type RUNNER = sig
@@ -12,7 +13,7 @@ module type RUNNER = sig
     | Error of exn
 
   val name : string
-  val step_once : Env.t -> Ast.Core.cut -> step
+  val step_once : Ast.Core.cut -> step
   val eval : Env.t -> Ast.Core.t -> Ast.Core.cut
 end
 
