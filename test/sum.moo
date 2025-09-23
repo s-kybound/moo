@@ -9,11 +9,11 @@
     a cosplit of 2 continuations for A and B.
 *}
 
-defp inl 'ap =
-  cosplit v 'case <- 'ap in
-  cosplit 'a_next 'b_next <- 'case in
+defp [ inl : (A+ & (A- & B-)-)+ ] ['ap : (A+ & (A- & B-)-)- ] =
+  cosplit [ v : A+ ] [ 'case : (A- & B-)- ] <- 'ap in
+  cosplit [ 'a_next : A- ] [ 'b_next : B- ] <- 'case in
   [v 'a_next]
-;;
+
 
 {*
  * the above definition used to be this:    
@@ -21,18 +21,23 @@ defp inl 'ap =
  * astounding!
  *}
 
-defp inr 'ap =
-  cosplit v 'case <- 'ap in
-  cosplit 'a_next 'b_next <- 'case in
+{* astounding but verbose. i want to abstract away the types. *}
+type (sum a b) = (a- & b-)
+{* WIP: how can we introduce polar types into the judgements themselves? *}
+{* i also would like to abstract the function type away *}
+type (fun a b) = (a+ & b-)
+
+defp [ inr: (fun B (sum A B))+ ] ['ap : (fun B (sum A B))- ] =
+  cosplit [ v : B+ ] [ 'case : (sum A B)- ] <- ap in
+  cosplit [ 'a_next : A- ] [ 'b_next : B- ] <- 'case in
   [v 'b_next]
-;;
 
 {* both of the definitions above can be cased on by a copair of continuations *}
 
-let left <- (letcc 'a -> [inl (copair L 'a)]) in
-let right <- (letcc 'a -> [inr (copair R 'a)]) in
+let [ left : (A- & B-)+ ] <- (letcc ['a : (A- & B-)-] -> [inl (copair L 'a)]) in
+let [ right : (A- & B-)+ ] <- (letcc ['a : (A- & B-)-] -> [inr (copair R 'a)]) in
 
-letcc 'case {* (A- & B-)- *} <-
+letcc [ 'case : (A- & B-)- ]  <-
   (copair 'a_fired 'b_fired)
 in
 [right 'case]

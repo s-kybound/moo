@@ -11,6 +11,9 @@
 %token DEFC DEFP (* top-level definitions *)
 %token EQUALS DELIMITER (* top-level definitions *)
 %token COLON (* type binder annotation *)
+%token AMPERSAND STAR PLUS MINUS (* type operations: negative/positive products,
+                                  * positive/negative polarity *)
+%token TYPE (* type definition *)
 %token EOF
 %start <Ast.Surface.t> entrypoint
 %%
@@ -30,34 +33,45 @@ program:
   | LPAREN error                        { raisef $startpos($1) $endpos($1) "unexpected '(' - missing closing ')' or malformed expression" }
   | RPAREN error                        { raisef $startpos($1) $endpos($1) "unexpected ')' - no matching '(' found" }
 
+producer_definition:
+  | DEFP   name=var_intro 
+           input=var_intro 
+    EQUALS body=statement DELIMITER?    { Ast.Surface.defp name input body }
+
+consumer_definition:
+  | DEFC   coname=var_intro 
+           input=var_intro 
+    EQUALS body=statement DELIMITER?    { Ast.Surface.defc coname input body }
+
+type_definition:
+  | TYPE name=IDENT
+    EQUALS expr=base_type DELIMITER?    { }
+
 top_level_definition:
-  | DEFP   name=val_intro 
-           input=val_intro 
-    EQUALS body=statement DELIMITER     { Ast.Surface.defp name input body }
-  | DEFC   coname=val_intro 
-           input=val_intro 
-    EQUALS body=statement DELIMITER     { Ast.Surface.defc coname input body }
+  | producer_definition                 { $1 }
+  | consumer_definition                 { $1 }
+  // | type_definition                     { }
 
 (* Nested statements *)
 statement:
-  | LETP v=val_intro 
+  | LETP v=var_intro 
     RTLARROW p=either IN m=statement    { Ast.Surface.cut
                                             p
                                             (Ast.Surface.Negative (Ast.Surface.Consumer.mutilde v m))
                                         }
-  | LETC cv=val_intro 
+  | LETC cv=var_intro 
     RTLARROW c=either IN m=statement    { Ast.Surface.cut
                                             (Ast.Surface.Positive (Ast.Surface.Producer.mu cv m))
                                             c
                                         }
-  | SPLIT    a=val_intro 
-             b=val_intro        
+  | SPLIT    a=var_intro 
+             b=var_intro        
     RTLARROW p=either IN m=statement    { Ast.Surface.cut
                                             p
                                             (Ast.Surface.Negative (Ast.Surface.Consumer.split a b m))
                                         }
-  | COSPLIT  a=val_intro 
-             b=val_intro       
+  | COSPLIT  a=var_intro 
+             b=var_intro       
     RTLARROW c=either IN m=statement    { Ast.Surface.cut
                                             (Ast.Surface.Positive (Ast.Surface.Producer.cosplit a b m))
                                             c
@@ -74,9 +88,36 @@ cut:
   | LBRACK error                        { raisef $startpos($1) $endpos($1) "empty cut: expected [producer consumer] after '['" }
   | RBRACK                              { raisef $startpos($1) $endpos($1) "unmatched ']': no corresponding '[' found" }
 
-(* a definition of a name, will target this to be typed later *)
-val_intro:
-  | v = IDENT                           { v }
+var_intro:
+  | typed_var                           { $1 }
+  | untyped_var                         { $1 }
+
+positive_product_body:
+  | polar_type STAR polar_type          { }
+
+negative_product_body:
+  | polar_type AMPERSAND polar_type     { }
+
+base_type:
+  | IDENT                               { }
+  | LPAREN positive_product_body RPAREN { }
+  | LPAREN negative_product_body RPAREN { }
+
+polar_type:
+  | base_type PLUS                      { }
+  | base_type MINUS                     { }
+
+type_expr:
+  | polar_type                          { }
+
+typed_var_body:
+  | v=IDENT COLON type_expr             { v }
+
+typed_var:
+  | LBRACK t=typed_var_body RBRACK      { t }
+
+untyped_var:
+  | IDENT                               { raisef $startpos($1) $endpos($1) "welcome to the simply typed product mu mu-tilde calculus! please type this with [%s : <type>]." $1 }
 
 (* either a usage of a value, or a name usage *)
 either:
@@ -85,9 +126,9 @@ either:
   | c=consumer                          { Ast.Surface.Negative c }
 
 letc_body:
-  | LETC cv=val_intro 
+  | LETC cv=var_intro 
     LTRARROW s=statement                { Ast.Surface.Producer.mu cv s }
-  | LETC val_intro error                { raisef $startpos($1) $endpos($2) "incomplete letcc: expected cut after covariable '%s'" $2 }
+  | LETC var_intro error                { raisef $startpos($1) $endpos($2) "incomplete letcc: expected cut after covariable '%s'" $2 }
   | LETC error                          { raisef $startpos($1) $endpos($1) "incomplete letcc: expected covariable after 'letcc'" }
 
 letc:
@@ -104,12 +145,12 @@ product:
   | LPAREN product_body error           { raisef $startpos($1) $endpos($2) "unclosed pair: expected ')' to close pair started here" }
 
 cosplit_body:
-  | COSPLIT  a=val_intro 
-             b=val_intro 
+  | COSPLIT  a=var_intro 
+             b=var_intro 
     LTRARROW s=statement                { Ast.Surface.Producer.cosplit a b s }
-  | COSPLIT val_intro 
-            val_intro error             { raisef $startpos($1) $endpos($3) "incomplete cosplit: expected cut after variables" }
-  | COSPLIT val_intro error             { raisef $startpos($1) $endpos($2) "incomplete cosplit: expected second variable and cut" }
+  | COSPLIT var_intro 
+            var_intro error             { raisef $startpos($1) $endpos($3) "incomplete cosplit: expected cut after variables" }
+  | COSPLIT var_intro error             { raisef $startpos($1) $endpos($2) "incomplete cosplit: expected second variable and cut" }
   | COSPLIT error                       { raisef $startpos($1) $endpos($1) "incomplete cosplit: expected (cosplit var1 var2 cut)" }
 
 cosplit:
@@ -122,9 +163,9 @@ producer:
   | cosplit                             { $1 }
 
 letp_body:
-  | LETP v=val_intro 
+  | LETP v=var_intro 
     LTRARROW s=statement                { Ast.Surface.Consumer.mutilde v s }
-  | LETP val_intro error                { raisef $startpos($1) $endpos($2) "incomplete let: expected cut after variable '%s'" $2 }
+  | LETP var_intro error                { raisef $startpos($1) $endpos($2) "incomplete let: expected cut after variable '%s'" $2 }
   | LETP error                          { raisef $startpos($1) $endpos($1) "incomplete let: expected variable after 'let'" }
 
 letp:
@@ -132,12 +173,12 @@ letp:
   | LPAREN letp_body error              { raisef $startpos($1) $endpos($2) "unclosed let: expected ')' to close expression started here" }
 
 split_body:
-  | SPLIT    a=val_intro 
-             b=val_intro 
+  | SPLIT    a=var_intro 
+             b=var_intro 
     LTRARROW s=statement                { Ast.Surface.Consumer.split a b s }
-  | SPLIT val_intro 
-          val_intro error               { raisef $startpos($1) $endpos($3) "incomplete split: expected cut after variables" }
-  | SPLIT val_intro error               { raisef $startpos($1) $endpos($2) "incomplete split: expected second variable and cut" }
+  | SPLIT var_intro 
+          var_intro error               { raisef $startpos($1) $endpos($3) "incomplete split: expected cut after variables" }
+  | SPLIT var_intro error               { raisef $startpos($1) $endpos($2) "incomplete split: expected second variable and cut" }
   | SPLIT error                         { raisef $startpos($1) $endpos($1) "incomplete split: expected (split var1 var2 cut)" }
 
 split:

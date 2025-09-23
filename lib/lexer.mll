@@ -11,8 +11,9 @@
       ("copair",  COPAIR);
       ("cosplit", COSPLIT);
       ("in",      IN);
-      ("defp",  DEFP);
-      ("defc",  DEFC);
+      ("defp",    DEFP);
+      ("defc",    DEFC);
+      ("type",    TYPE)
     ] in
     keywords
     |> List.to_seq
@@ -48,6 +49,10 @@ rule token = parse
   | ']'            { RBRACK }
   | '('            { LPAREN }
   | ')'            { RPAREN }
+  | '*'            { STAR }
+  | '&'            { AMPERSAND }
+  | '+'            { PLUS }
+  | '-'            { MINUS }
   | '\\'           { token lexbuf } (* skip a line just like C *)
   | ident as id    { verify_ident lexbuf id }
   | eof            { EOF }
