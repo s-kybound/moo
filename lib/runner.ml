@@ -7,9 +7,9 @@ open Ast.Core
  * like attempting to substitute a bound variable
  * into a bound variable. *)
 module Beta_reducer : sig
-  val beta_reduce_with_producer : int -> producer -> t -> (t, exn) result
-  val beta_reduce_with_consumer : int -> consumer -> t -> (t, exn) result
-  val beta_reduce_with_neutral : int -> neutral -> t -> (t, exn) result
+  val beta_reduce_with_producer : int -> producer -> cut -> (cut, exn) result
+  val beta_reduce_with_consumer : int -> consumer -> cut -> (cut, exn) result
+  val beta_reduce_with_neutral : int -> neutral -> cut -> (cut, exn) result
 end = struct
   module Utils = struct
     let binding_arity_producer p =
@@ -116,24 +116,24 @@ end = struct
   ;;
 
   (* safe entrypoints *)
-  let beta_reduce_with_producer (index : int) (term : producer) (target : t)
-    : (t, exn) result
+  let beta_reduce_with_producer (index : int) (term : producer) (target : cut)
+    : (cut, exn) result
     =
     match term with
     | V (Bound _) -> Error (Failure "attempted to substitute a bound variable")
     | term -> Ok (subst_producer_in_cut index term target)
   ;;
 
-  let beta_reduce_with_consumer (index : int) (term : consumer) (target : t)
-    : (t, exn) result
+  let beta_reduce_with_consumer (index : int) (term : consumer) (target : cut)
+    : (cut, exn) result
     =
     match term with
     | C (Bound _) -> Error (Failure "attempted to substitute a bound variable")
     | term -> Ok (subst_consumer_in_cut index term target)
   ;;
 
-  let beta_reduce_with_neutral (index : int) (term : neutral) (target : t)
-    : (t, exn) result
+  let beta_reduce_with_neutral (index : int) (term : neutral) (target : cut)
+    : (cut, exn) result
     =
     match term with
     | Positive p -> beta_reduce_with_producer index p target
@@ -141,21 +141,95 @@ end = struct
   ;;
 end
 
+module Env = struct
+  type element =
+    | Producer of producer
+    | Consumer of consumer
+
+  type t = (identifier, element) Hashtbl.t
+
+  let empty_env : t = Hashtbl.create 10
+  let is_defined i (t : t) = Hashtbl.mem t i
+
+  let get_consumer i (t : t) =
+    match Hashtbl.find_opt t i with
+    | None -> failwith "not_found"
+    | Some e ->
+      (match e with
+       | Consumer c -> c
+       | Producer _ -> failwith "attempted to get consumer, this is a producer")
+  ;;
+
+  let get_producer i (t : t) =
+    match Hashtbl.find_opt t i with
+    | None -> failwith "not_found"
+    | Some e ->
+      (match e with
+       | Producer p -> p
+       | Consumer _ -> failwith "attempted to get producer, this is a consumer")
+  ;;
+
+  module Substituter = struct
+    let rec substitute_producer env p =
+      match p with
+      | V name when is_defined name env -> get_producer name env
+      | V id -> V id
+      | Mu cut -> Mu (substitute_cut env cut)
+      | Pair (a, b) -> Pair (substitute_neutral env a, substitute_neutral env b)
+      | Cosplit cut -> Cosplit (substitute_cut env cut)
+
+    and substitute_consumer env c =
+      match c with
+      | C name when is_defined name env -> get_consumer name env
+      | C id -> C id
+      | MuTilde cut -> MuTilde (substitute_cut env cut)
+      | Split cut -> Split (substitute_cut env cut)
+      | Copair (a, b) -> Copair (substitute_neutral env a, substitute_neutral env b)
+
+    and substitute_cut env cut =
+      { p = substitute_producer env cut.p; c = substitute_consumer env cut.c }
+
+    and substitute_neutral env n =
+      match n with
+      | Positive p -> Positive (substitute_producer env p)
+      | Negative c -> Negative (substitute_consumer env c)
+    ;;
+  end
+
+  let load_definitions program t =
+    List.iter
+      (fun (d : definition) ->
+         match d with
+         (*
+            no recursive names yet
+         | Producer_rec (n, p) ->
+         | Consumer_rec (cn, c) ->
+         *)
+         | Producer (n, p) ->
+           let p = Substituter.substitute_producer t p in
+           Hashtbl.replace t n (Producer p)
+         | Consumer (cn, c) ->
+           let c = Substituter.substitute_consumer t c in
+           Hashtbl.replace t cn (Consumer c))
+      program.definitions
+  ;;
+end
+
 module type RUNNER = sig
   type step =
-    | Incomplete of t
-    | Complete of t
+    | Incomplete of cut
+    | Complete of cut
     | Error of exn
 
   val name : string
-  val step_once : t -> step
-  val eval : t -> t
+  val step_once : Env.t -> cut -> step
+  val eval : Env.t -> t -> cut
 end
 
 module Call_by_value : RUNNER = struct
   type step =
-    | Incomplete of t
-    | Complete of t
+    | Incomplete of cut
+    | Complete of cut
     | Error of exn
 
   let name = "call-by-value"
@@ -180,7 +254,7 @@ module Call_by_value : RUNNER = struct
     | Cosplit _ -> true
   ;;
 
-  let step_once t =
+  let step_once env t =
     match t.p, t.c with
     (* encode impossible cases - ill formatted names *)
     | V (FreeC _), _ -> Error (Failure "encountered consumer name in producer position")
@@ -197,6 +271,10 @@ module Call_by_value : RUNNER = struct
     (* encode type errors *)
     | Pair _, Copair _ -> Error (Failure "type error: A*B producer, C&D consumer")
     | Cosplit _, Split _ -> Error (Failure "type error: A&B producer, C*D consumer")
+    (* environment lookup *)
+    | V n, c when Env.is_defined n env -> Incomplete { p = Env.get_producer n env; c }
+    | p, C cn when Env.is_defined cn env && is_val p ->
+      Incomplete { p; c = Env.get_consumer cn env }
     (* consider "unable to progress" cases as complete - if these names were substituted 
      * can continue in the future *)
     | V _, Split _ -> Complete t
@@ -282,21 +360,22 @@ module Call_by_value : RUNNER = struct
         ~error:(fun exn -> Error exn)
   ;;
 
-  let eval t =
-    let rec step_through t =
-      match step_once t with
-      | Complete t -> t
-      | Incomplete t -> step_through t
+  let eval env t =
+    Env.load_definitions t env;
+    let rec step_through cut =
+      match step_once env cut with
+      | Complete cut -> cut
+      | Incomplete cut -> step_through cut
       | Error exn -> raise exn
     in
-    step_through t
+    step_through t.main
   ;;
 end
 
 module Call_by_name : RUNNER = struct
   type step =
-    | Incomplete of t
-    | Complete of t
+    | Incomplete of cut
+    | Complete of cut
     | Error of exn
 
   let name = "call-by-name"
@@ -321,7 +400,7 @@ module Call_by_name : RUNNER = struct
     | Split _ -> true
   ;;
 
-  let step_once t =
+  let step_once env t =
     match t.p, t.c with
     (* encode impossible cases - ill formatted names *)
     | V (FreeC _), _ -> Error (Failure "encountered consumer name in producer position")
@@ -338,6 +417,10 @@ module Call_by_name : RUNNER = struct
     (* encode type errors *)
     | Pair _, Copair _ -> Error (Failure "type error: A*B producer, C&D consumer")
     | Cosplit _, Split _ -> Error (Failure "type error: A&B producer, C*D consumer")
+    (* environment lookup *)
+    | p, C cn when Env.is_defined cn env -> Incomplete { p; c = Env.get_consumer cn env }
+    | V n, c when Env.is_defined n env && is_coval c ->
+      Incomplete { p = Env.get_producer n env; c }
     (* consider "unable to progress" cases as complete - if these names were substituted 
      * can continue in the future *)
     | Cosplit _, C _ -> Complete t
@@ -423,13 +506,14 @@ module Call_by_name : RUNNER = struct
         ~error:(fun exn -> Error exn)
   ;;
 
-  let eval t =
+  let eval env t =
+    Env.load_definitions t env;
     let rec step_through t =
-      match step_once t with
+      match step_once env t with
       | Complete t -> t
       | Incomplete t -> step_through t
       | Error exn -> raise exn
     in
-    step_through t
+    step_through t.main
   ;;
 end

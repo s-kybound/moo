@@ -10,7 +10,9 @@
       ("split",   SPLIT);
       ("copair",  COPAIR);
       ("cosplit", COSPLIT);
-      ("in",      IN)
+      ("in",      IN);
+      ("defp",  DEFP);
+      ("defc",  DEFC);
     ] in
     keywords
     |> List.to_seq
@@ -46,6 +48,8 @@ rule token = parse
   | "*)"           { raisef lexbuf "Unmatched *). Was a comment erased incorrectly?" }
   | "->"           { LTRARROW }
   | "<-"           { RTLARROW }
+  | '='            { EQUALS }
+  | ";;"           { DELIMITER }
   | '['            { LBRACK }
   | ']'            { RBRACK }
   | '('            { LPAREN }

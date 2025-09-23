@@ -2,22 +2,15 @@
   open Parser_error.Parser
 %}
 
+%token <string> IDENT
+%token <string> COIDENT
 %token LBRACK RBRACK LPAREN RPAREN
 %token LETC LETP (* mu, mu-tilde abstactions *)
 %token PAIR SPLIT (* pair producer and its split consumer *)
 %token COSPLIT COPAIR (* cosplit producer and its copair consumer *)
-%token IN
-%token LTRARROW RTLARROW
-
-(*
-nice to have, but we are trying to prove minimality with negation
-and conjuction alone for now
-
-%token LEFTP RIGHTP CASE (* sum producers, case consumers *)
-%token COCASE LEFTC RIGHTC (* cocase producer, sum consumers *)
-*)
-%token <string> IDENT
-%token <string> COIDENT
+%token LTRARROW RTLARROW IN (* statement syntax *)
+%token DEFC DEFP (* top-level definitions *)
+%token EQUALS DELIMITER
 %token EOF
 %start <Ast.Surface.t> entrypoint
 %%
@@ -25,14 +18,25 @@ and conjuction alone for now
 entrypoint: p=program                   { p }
 
 program: 
-  | s=statement EOF                     { s }
-  | EOF                                 { 
-                                          Ast.Surface.cut 
-                                            (Ast.Surface.Producer.variable (Ast.Surface.Identifier.name "empty-file")) 
-                                            (Ast.Surface.Consumer.covariable (Ast.Surface.Identifier.coname "halt")) 
+  | definitions=top_level_definition* 
+    main=statement EOF                  { Ast.Surface.program definitions main }
+  | definitions=top_level_definition* 
+    EOF                                 { Ast.Surface.program
+                                          definitions
+                                          (Ast.Surface.cut 
+                                            (Ast.Surface.Producer.variable (Ast.Surface.Identifier.name "no_main")) 
+                                            (Ast.Surface.Consumer.covariable (Ast.Surface.Identifier.coname "halt")))
                                         }
   | LPAREN error                        { raisef $startpos($1) $endpos($1) "unexpected '(' - missing closing ')' or malformed expression" }
   | RPAREN error                        { raisef $startpos($1) $endpos($1) "unexpected ')' - no matching '(' found" }
+
+top_level_definition:
+  | DEFP   name=pval 
+           input=cval 
+    EQUALS body=statement DELIMITER     { Ast.Surface.defp name input body }
+  | DEFC   coname=cval 
+           input=pval 
+    EQUALS body=statement DELIMITER     { Ast.Surface.defc coname input body }
 
 (* Nested statements *)
 statement:

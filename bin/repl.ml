@@ -58,8 +58,10 @@ end
 module State = struct
   let current_history : string History.t option ref = ref None
   let current_evaluator : (module RUNNER) option ref = ref None
+  let current_environment : Env.t ref = ref Env.empty_env
   let set_evaluator t = current_evaluator := Some t
   let set_history t = current_history := Some t
+  let clear_environment () = current_environment := Env.empty_env
 
   let get_evaluator () =
     match !current_evaluator with
@@ -74,7 +76,7 @@ module State = struct
   ;;
 end
 
-let print_result result = Printf.printf "=> %s\n%!" (Core.Show.show result)
+let print_result result = Printf.printf "=> %s\n%!" (Core.Show.show_cut result)
 let print_error msg = Printf.eprintf "Error: %s\n%!" msg
 let get_ast str = str |> Reader.of_string ~filename:"REPL" |> Core.convert
 
@@ -82,7 +84,7 @@ let parse_and_eval input =
   let (module Strategy : RUNNER) = State.get_evaluator () in
   try
     let core_ast = get_ast input in
-    let result = Strategy.eval core_ast in
+    let result = Strategy.eval !State.current_environment core_ast in
     print_result result
   with
   | exn -> print_error (Printexc.to_string exn)
@@ -93,12 +95,12 @@ let parse_and_step input =
   print_endline "(any entry = step, :stop = exit)";
   let (module Strategy : RUNNER) = State.get_evaluator () in
   let rec step_eval cut =
-    Printf.printf "current result: %s\n%!" (Core.Show.show cut);
+    Printf.printf "current result: %s\n%!" (Core.Show.show_cut cut);
     match LNoise.linenoise "step> " with
     | None | Some ":exit" -> print_endline "exiting"
     | Some _ ->
       Printf.printf "Stepping...\n%!";
-      (match Strategy.step_once cut with
+      (match Strategy.step_once !State.current_environment cut with
        | Strategy.Complete result ->
          Printf.printf "Complete!\n%!";
          print_result result
@@ -107,7 +109,8 @@ let parse_and_step input =
   in
   try
     let core_ast = get_ast input in
-    step_eval core_ast
+    Env.load_definitions core_ast !State.current_environment;
+    step_eval core_ast.main
   with
   | exn -> print_error (Printexc.to_string exn)
 ;;
@@ -135,6 +138,7 @@ let init_repl () =
         ; ":call-by-name"
         ; ":cbv"
         ; ":call-by-value"
+        ; ":clear"
         ]
         |> List.iter (LNoise.add_completion ln_completions)
       else
@@ -167,11 +171,15 @@ let rec repl_loop () =
   | Some ":cbv" | Some ":call-by-value" ->
     State.set_evaluator (module Call_by_value);
     repl_loop ()
+  | Some ":clear" ->
+    State.clear_environment ();
+    repl_loop ()
   | Some ":help" ->
     print_endline "Commands:";
     print_endline "  :q, :quit, :exit   Exit REPL";
     print_endline "  :cbn, :call-by-name   Switch to call-by-name evaluation";
     print_endline "  :cbv, :call-by-value  Switch to call-by-value evaluation";
+    print_endline "  :clear             Clear the REPL environment";
     print_endline "  :show <expr>       Visualize the expression";
     print_endline "  :step <expr>       Step-by-step evaluation";
     print_endline "  :help              Show this help";
@@ -185,7 +193,7 @@ let rec repl_loop () =
     add_to_history line;
     let expr = String.sub line 6 (String.length line - 6) |> String.trim in
     let ast = get_ast expr in
-    print_result ast;
+    print_result ast.main;
     repl_loop ()
   | Some line ->
     add_to_history line;

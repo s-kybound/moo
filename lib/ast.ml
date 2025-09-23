@@ -30,7 +30,14 @@ module Surface = struct
     | Positive_name of name
     | Negative_name of coname
 
-  type t = cut
+  type definition =
+    | Producer of name * producer
+    | Consumer of coname * consumer
+
+  type t =
+    { definitions : definition list
+    ; main : cut
+    }
 
   (* Surface's show should look exactly like the code.
    * but Core will look closer to product-mu-mu calculus.
@@ -79,7 +86,7 @@ module Surface = struct
       | Negative_name c -> show_coname c
     ;;
 
-    let show = show_cut
+    let show t = show_cut t.main
   end
 
   module Identifier = struct
@@ -101,7 +108,14 @@ module Surface = struct
     let copair a b = Copair (a, b)
   end
 
+  let defp (name : name) (input : coname) (body : cut) = Producer (name, Mu (input, body))
+
+  let defc (name : coname) (input : name) (body : cut) =
+    Consumer (name, MuTilde (input, body))
+  ;;
+
   let cut p c = { p; c }
+  let program definitions main = { definitions; main }
 end
 
 (* Core AST uses de Bruijn indices for bound variables/covariables.
@@ -139,7 +153,14 @@ module Core = struct
     | Positive of producer
     | Negative of consumer
 
-  type t = cut
+  type definition =
+    | Producer of identifier * producer
+    | Consumer of identifier * consumer
+
+  type t =
+    { definitions : definition list
+    ; main : cut
+    }
 
   module Show = struct
     let show_identifer name =
@@ -172,7 +193,7 @@ module Core = struct
       | Negative c -> show_consumer c
     ;;
 
-    let show = show_cut
+    let show t = show_cut t.main
   end
 
   module Converter = struct
@@ -241,9 +262,20 @@ module Core = struct
       | S.Positive p -> Positive (convert_producer env p)
       | S.Negative c -> Negative (convert_consumer env c)
     ;;
+
+    (* definitions are evaluated without environment *)
+    let convert_definition definition : definition =
+      match definition with
+      | S.Producer (S.Name n, p) -> Producer (FreeP n, convert_producer empty_env p)
+      | S.Consumer (S.Coname cn, c) -> Consumer (FreeC cn, convert_consumer empty_env c)
+    ;;
   end
 
-  let convert : Surface.t -> t = Converter.convert_cut Converter.empty_env
+  let convert (t : Surface.t) : t =
+    { definitions = List.map Converter.convert_definition t.definitions
+    ; main = Converter.convert_cut Converter.empty_env t.main
+    }
+  ;;
 
   let rec aequiv_producer (a : producer) (b : producer) =
     match a, b with
@@ -275,6 +307,4 @@ module Core = struct
     | Negative a, Negative b -> aequiv_consumer a b
     | _, _ -> false
   ;;
-
-  let aequiv = aequiv_cut
 end
