@@ -126,8 +126,6 @@ let init_repl () =
     (* simple completion for REPL commands *)
     LNoise.set_completion_callback (fun line_so_far ln_completions ->
       if line_so_far = ""
-      then ()
-      else if line_so_far.[0] = ':'
       then
         [ ":q"
         ; ":quit"
@@ -140,6 +138,7 @@ let init_repl () =
         ; ":cbv"
         ; ":call-by-value"
         ; ":clear"
+        ; ":load"
         ]
         |> List.iter (LNoise.add_completion ln_completions)
       else
@@ -153,6 +152,17 @@ let init_repl () =
 let add_to_history line =
   ignore (LNoise.history_add line);
   History.add line (State.get_history ())
+;;
+
+let load_file filename =
+  try
+    let ast = Reader.of_file filename in
+    let converted = Core.convert ast in
+    Env.load_definitions converted !State.current_environment;
+    Printf.printf "Loaded definitions from %s\n%!" filename
+  with
+  | Sys_error msg -> print_error ("File error: " ^ msg)
+  | exn -> print_error ("Parse error in " ^ filename ^ ": " ^ Printexc.to_string exn)
 ;;
 
 let multiline_prompt base_prompt =
@@ -169,7 +179,7 @@ let multiline_prompt base_prompt =
     | Some line when String.ends_with ~suffix:"\\" (String.trim line) -> aux (line :: acc)
     | Some line -> line :: acc |> List.rev |> String.concat "" |> Option.some
   in
-  aux []
+  aux [] |> Option.map String.trim
 ;;
 
 let rec repl_loop () =
@@ -200,6 +210,7 @@ let rec repl_loop () =
     print_endline "  :clear             Clear the REPL environment";
     print_endline "  :show <expr>       Visualize the expression";
     print_endline "  :step <expr>       Step-by-step evaluation";
+    print_endline "  :load <filename>   Load all definitions from a file into the REPL";
     print_endline "  :help              Show this help";
     repl_loop ()
   | Some line when String.starts_with ~prefix:":step " line ->
@@ -212,6 +223,11 @@ let rec repl_loop () =
     let expr = String.sub line 6 (String.length line - 6) |> String.trim in
     let ast = get_ast expr in
     print_result ast.main;
+    repl_loop ()
+  | Some line when String.starts_with ~prefix:":load " line ->
+    add_to_history line;
+    let filename = String.sub line 6 (String.length line - 6) |> String.trim in
+    if filename = "" then print_error "Usage: :load <filename>" else load_file filename;
     repl_loop ()
   | Some line ->
     add_to_history line;

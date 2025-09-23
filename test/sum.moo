@@ -9,13 +9,25 @@
     a cosplit of 2 continuations for A and B.
 *)
 
-let inl (* A+ -> (A- & B-)+ *) <-
-  (cosplit v 'k -> [ (cosplit 'a_next 'b_next -> [v 'a_next]) 'k ])
-in
+defp inl 'ap =
+  cosplit v 'k <- 'ap in
+  cosplit 'a_next 'b_next <- 'k in
+  [v 'a_next]
+;;
 
-let inr (* (A- & B-)+ *) <-
-  (cosplit v 'k -> [ (cosplit 'a_next 'b_next -> [v 'b_next]) 'k ])
-in
+(*
+ * the above definition used to be this:    
+ * [(cosplit v 'k -> [ (cosplit 'a_next 'b_next -> [v 'a_next]) 'k ]) 'next]
+ * astounding!
+*)
+
+defp inr 'ap =
+  cosplit v 'k <- 'ap in
+  cosplit 'a_next 'b_next <- 'k in
+  [v 'b_next]
+;;
+
+(* both of the definitions above can be cased on by a copair of continuations *)
 
 let left <- (letcc 'a -> [inl (copair L 'a)]) in
 let right <- (letcc 'a -> [inr (copair R 'a)]) in
