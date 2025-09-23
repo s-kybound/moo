@@ -3,14 +3,14 @@
 %}
 
 %token <string> IDENT
-%token <string> COIDENT
 %token LBRACK RBRACK LPAREN RPAREN
 %token LETC LETP (* mu, mu-tilde abstactions *)
 %token PAIR SPLIT (* pair producer and its split consumer *)
 %token COSPLIT COPAIR (* cosplit producer and its copair consumer *)
 %token LTRARROW RTLARROW IN (* statement syntax *)
 %token DEFC DEFP (* top-level definitions *)
-%token EQUALS DELIMITER
+%token EQUALS DELIMITER (* top-level definitions *)
+%token COLON (* type binder annotation *)
 %token EOF
 %start <Ast.Surface.t> entrypoint
 %%
@@ -82,8 +82,7 @@ pval:
 
 letc_body:
   | LETC cv=cval LTRARROW s=statement   { Ast.Surface.Producer.mu cv s }
-  | LETC COIDENT error                  { raisef $startpos($1) $endpos($2) "incomplete letcc: expected cut after covariable '%s'" $2 }
-  | LETC IDENT error                    { raisef $startpos($1) $endpos($2) "type error: letcc expects a covariable (like 'k), got variable '%s'" $2 }
+  | LETC IDENT error                    { raisef $startpos($1) $endpos($2) "incomplete letcc: expected cut after covariable '%s'" $2 }
   | LETC error                          { raisef $startpos($1) $endpos($1) "incomplete letcc: expected covariable after 'letcc'" }
 
 letc:
@@ -119,12 +118,11 @@ producer:
   | cosplit                             { $1 }
 
 cval:
-  | cv = COIDENT                        { Ast.Surface.Identifier.coname cv }
+  | cv = IDENT                        { Ast.Surface.Identifier.coname cv }
 
 letp_body:
   | LETP v=pval LTRARROW s=statement    { Ast.Surface.Consumer.mutilde v s }
   | LETP IDENT error                    { raisef $startpos($1) $endpos($2) "incomplete let: expected cut after variable '%s'" $2 }
-  | LETP COIDENT error                  { raisef $startpos($1) $endpos($2) "type error: let expects a variable (like x), got covariable '%s'" $2 }
   | LETP error                          { raisef $startpos($1) $endpos($1) "incomplete let: expected variable after 'let'" }
 
 letp:

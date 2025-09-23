@@ -22,24 +22,17 @@
     match Hashtbl.find_opt keywords id with
     | Some t -> t
     | None   -> IDENT id
-
-  let verify_coident lexbuf cid =
-    let name = String.sub cid 1 (String.length cid - 1) in
-    match Hashtbl.find_opt keywords name with
-    | Some _ -> raisef lexbuf "%s is a reserved syntactic keyword and cannot be used as a covariable" name
-    | None      -> COIDENT name
 }
 
 let hspace             = [' ' '\t' '\r']+
 let newline            = '\n'
 let digit              = ['0'-'9']
 let letter             = ['A'-'Z' 'a'-'z']
-let special_initial    = ['_']
+let special_initial    = ['_' '\'']
 let initial            = letter | special_initial
 let subsequent         = initial | digit
 
 let ident = initial subsequent*
-let coident = '\'' ident
 
 rule token = parse
   | hspace         { token lexbuf }
@@ -49,13 +42,13 @@ rule token = parse
   | "->"           { LTRARROW }
   | "<-"           { RTLARROW }
   | '='            { EQUALS }
+  | ':'            { COLON }
   | ";;"           { DELIMITER }
   | '['            { LBRACK }
   | ']'            { RBRACK }
   | '('            { LPAREN }
   | ')'            { RPAREN }
   | '\\'           { token lexbuf } (* skip a line just like C *)
-  | coident as cid { verify_coident lexbuf cid }
   | ident as id    { verify_ident lexbuf id }
   | eof            { EOF }
   | _ as ch        { raisef lexbuf "Unexpected char while parsing: %C" ch }

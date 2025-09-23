@@ -44,7 +44,7 @@ module Surface = struct
   *)
   module Show = struct
     let rec show_name (Name n) = n
-    and show_coname (Coname c) = Printf.sprintf "'%s" c
+    and show_coname (Coname c) = c
 
     and show_producer p =
       match p with
@@ -166,7 +166,7 @@ module Core = struct
     let show_identifer name =
       match name with
       | FreeP name -> name
-      | FreeC name -> Printf.sprintf "'%s" name
+      | FreeC name -> name
       | Bound n -> string_of_int n
     ;;
 
