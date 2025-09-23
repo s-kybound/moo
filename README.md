@@ -76,3 +76,51 @@ In this case, the consumer tells us what to do!
 
 A personal hypothesis behind why cosplit is not as well known as cocase is because cocase and case are usually used as general pattern 
 matchers against algebraic datatypes, which encode for both products and sums.
+
+## let-style cuts
+
+Cuts are nice, but managing raw cuts is difficult to look at, especially when composing several of them in tandem.
+So I also sought a way to make them more pleasing to the eye.
+
+Take this example from `sum.moo` which encodes the left injection of a sum, using cuts and products:
+```
+  (cosplit v 'k -> [ (cosplit 'a_next 'b_next -> [v 'a_next]) 'k ])
+```
+This expresses a producer of a negative product: given a continuation 'k expecting a choice ('a_next/'b_next), we immediately choose the left branch and send along v. It works, but the nested, back-to-back cuts make the control flow hard to scan.
+
+We see that many computations are of the shape `[ (destruct value -> do something else ) v ]`.
+Compare this to languages like SML, which are of the shape
+```
+destruct value <- v in
+do something else
+```
+And there is an immediate translation! so for cuts of shape `[(destructure.M) v]` we can reshape this as `destructure <- v in M`.
+
+Encoding it using this idea, we get this:
+```
+  (cosplit v 'k ->
+   letcc 'k <- 'k in (* entirely unnecessary, but one can now see why these are called let-style *)
+   cosplit 'a_next 'b_next <- 'k in
+   [v 'a_next])
+```
+Tada! by representing the immediate cut as `cosplit ... <- 'k in`, we get a much cleaner syntax. and by introducing a way to define producers with names (and the single consumuer that they expect), we get
+```
+(* defp wraps the inner statements in a Mu encoding *)
+defp inl 'ap =
+  cosplit v 'case <- 'ap in
+  cosplit 'a_next 'b_next <- 'case in
+  [v 'a_next]
+(*
+  this desugars to 
+  (letcc 'ap -> [(cosplit v 'case -> [(cosplit 'a_next 'b_next -> [v 'a_next]) 'case])'ap])
+*)
+;;
+```
+Which is much cleaner. This is also an argument for the humble `cosplit`/`split` as compared to `comatch`/`match` and `cocase`/`case`, if using simple products is sufficient for your program, as the equivalent syntax for `comatch` and the like would be like
+
+```
+comatch <- 'ap in
+| Ap a b -> <some statement>
+| _ -> <other statement>
+```
+which is still readable, but more verbose especially when all you need is a simple branch choice.
