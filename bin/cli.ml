@@ -17,10 +17,10 @@ let runner_body =
   let runner_main strategy filename =
     match strategy with
     | `CBN ->
-      Printf.printf "Running %s with call-by-name strategy\n" filename;
+      Printf.printf "Running %s with call-by-name strategy\n%!" filename;
       Runner.run_cbn filename
     | `CBV ->
-      Printf.printf "Running %s with call-by-value strategy\n" filename;
+      Printf.printf "Running %s with call-by-value strategy\n%!" filename;
       Runner.run_cbv filename
   in
   Term.(const runner_main $ eval_strategy $ filename_arg)
