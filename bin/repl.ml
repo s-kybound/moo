@@ -155,10 +155,27 @@ let add_to_history line =
   History.add line (State.get_history ())
 ;;
 
+let multiline_prompt base_prompt =
+  let base_prompt_length = String.length base_prompt in
+  let multiline_prompt length = String.make (length - 5) ' ' ^ "...> " in
+  let rec aux acc =
+    let prompt =
+      match acc with
+      | [] -> base_prompt
+      | _ -> multiline_prompt base_prompt_length
+    in
+    match LNoise.linenoise prompt with
+    | None -> None
+    | Some line when String.ends_with ~suffix:"\\" (String.trim line) -> aux (line :: acc)
+    | Some line -> line :: acc |> List.rev |> String.concat "" |> Option.some
+  in
+  aux []
+;;
+
 let rec repl_loop () =
   let (module Strategy : RUNNER) = State.get_evaluator () in
   let prompt = Printf.sprintf "moo[%s]> " Strategy.name in
-  match LNoise.linenoise prompt with
+  match multiline_prompt prompt with
   | None ->
     print_endline "\nGoodbye!";
     exit 0

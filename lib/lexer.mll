@@ -54,6 +54,7 @@ rule token = parse
   | ']'            { RBRACK }
   | '('            { LPAREN }
   | ')'            { RPAREN }
+  | '\\'           { token lexbuf } (* skip a line just like C *)
   | coident as cid { verify_coident lexbuf cid }
   | ident as id    { verify_ident lexbuf id }
   | eof            { EOF }
