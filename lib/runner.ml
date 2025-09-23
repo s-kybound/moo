@@ -148,7 +148,7 @@ module Env = struct
 
   type t = (identifier, element) Hashtbl.t
 
-  let empty_env : t = Hashtbl.create 10
+  let empty_env () : t = Hashtbl.create 10
   let is_defined i (t : t) = Hashtbl.mem t i
 
   let get_consumer i (t : t) =

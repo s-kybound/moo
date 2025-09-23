@@ -58,10 +58,10 @@ end
 module State = struct
   let current_history : string History.t option ref = ref None
   let current_evaluator : (module RUNNER) option ref = ref None
-  let current_environment : Env.t ref = ref Env.empty_env
+  let current_environment : Env.t ref = ref (Env.empty_env ())
   let set_evaluator t = current_evaluator := Some t
   let set_history t = current_history := Some t
-  let clear_environment () = current_environment := Env.empty_env
+  let clear_environment () = current_environment := Env.empty_env ()
 
   let get_evaluator () =
     match !current_evaluator with
