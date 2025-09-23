@@ -24,52 +24,49 @@ program:
     EOF                                 { Ast.Surface.program
                                           definitions
                                           (Ast.Surface.cut 
-                                            (Ast.Surface.Producer.variable (Ast.Surface.Identifier.name "no_main")) 
-                                            (Ast.Surface.Consumer.covariable (Ast.Surface.Identifier.coname "halt")))
+                                            (Ast.Surface.Name "no_main")
+                                            (Ast.Surface.Name "'halt"))
                                         }
   | LPAREN error                        { raisef $startpos($1) $endpos($1) "unexpected '(' - missing closing ')' or malformed expression" }
   | RPAREN error                        { raisef $startpos($1) $endpos($1) "unexpected ')' - no matching '(' found" }
 
 top_level_definition:
-  | DEFP   name=pval 
-           input=cval 
+  | DEFP   name=val_intro 
+           input=val_intro 
     EQUALS body=statement DELIMITER     { Ast.Surface.defp name input body }
-  | DEFC   coname=cval 
-           input=pval 
+  | DEFC   coname=val_intro 
+           input=val_intro 
     EQUALS body=statement DELIMITER     { Ast.Surface.defc coname input body }
 
 (* Nested statements *)
 statement:
-  | LETP v=pval 
-    RTLARROW p=producer IN m=statement  { Ast.Surface.cut
+  | LETP v=val_intro 
+    RTLARROW p=either IN m=statement    { Ast.Surface.cut
                                             p
-                                            (Ast.Surface.Consumer.mutilde v m)
+                                            (Ast.Surface.Negative (Ast.Surface.Consumer.mutilde v m))
                                         }
-  | LETC cv=cval 
-    RTLARROW c=consumer IN m=statement  { Ast.Surface.cut
-                                            (Ast.Surface.Producer.mu cv m)
+  | LETC cv=val_intro 
+    RTLARROW c=either IN m=statement    { Ast.Surface.cut
+                                            (Ast.Surface.Positive (Ast.Surface.Producer.mu cv m))
                                             c
                                         }
-  | SPLIT    a=either_identifier 
-             b=either_identifier        
-    RTLARROW p=producer IN m=statement  { Ast.Surface.cut
+  | SPLIT    a=val_intro 
+             b=val_intro        
+    RTLARROW p=either IN m=statement    { Ast.Surface.cut
                                             p
-                                            (Ast.Surface.Consumer.split a b m)
+                                            (Ast.Surface.Negative (Ast.Surface.Consumer.split a b m))
                                         }
-  | COSPLIT  a=either_identifier 
-             b=either_identifier        
-    RTLARROW c=consumer IN m=statement  { Ast.Surface.cut
-                                            (Ast.Surface.Producer.cosplit a b m)
+  | COSPLIT  a=val_intro 
+             b=val_intro       
+    RTLARROW c=either IN m=statement    { Ast.Surface.cut
+                                            (Ast.Surface.Positive (Ast.Surface.Producer.cosplit a b m))
                                             c
                                         }
   | cut                                 { $1 }
 
 cut_body:
-  | p=producer c=consumer               { Ast.Surface.cut p c }
-  | producer producer error             { raisef $startpos($1) $endpos($2) "cut syntax error: found two producers, expected [producer consumer]" }
-  | consumer consumer error             { raisef $startpos($1) $endpos($2) "cut syntax error: found two consumers, expected [producer consumer]" }
-  | producer error                      { raisef $startpos($1) $endpos($1) "incomplete cut: expected consumer after producer in [%s ...]" (Ast.Surface.Show.show_producer $1) }
-  | consumer error                      { raisef $startpos($1) $endpos($1) "incomplete cut: expected producer before consumer in [... %s]" (Ast.Surface.Show.show_consumer $1) }
+  | p=either c=either                   { Ast.Surface.cut p c }
+  | either error                        { raisef $startpos($1) $endpos($1) "incomplete cut: expected consumer after producer in [%s ...]" (Ast.Surface.Show.show_neutral $1) }
 
 cut: 
   | LBRACK c=cut_body RBRACK            { c }
@@ -77,12 +74,20 @@ cut:
   | LBRACK error                        { raisef $startpos($1) $endpos($1) "empty cut: expected [producer consumer] after '['" }
   | RBRACK                              { raisef $startpos($1) $endpos($1) "unmatched ']': no corresponding '[' found" }
 
-pval:
-  | v = IDENT                           { Ast.Surface.Identifier.name v }
+(* a definition of a name, will target this to be typed later *)
+val_intro:
+  | v = IDENT                           { v }
+
+(* either a usage of a value, or a name usage *)
+either:
+  | n=IDENT                             { Ast.Surface.Name n }
+  | p=producer                          { Ast.Surface.Positive p }
+  | c=consumer                          { Ast.Surface.Negative c }
 
 letc_body:
-  | LETC cv=cval LTRARROW s=statement   { Ast.Surface.Producer.mu cv s }
-  | LETC IDENT error                    { raisef $startpos($1) $endpos($2) "incomplete letcc: expected cut after covariable '%s'" $2 }
+  | LETC cv=val_intro 
+    LTRARROW s=statement                { Ast.Surface.Producer.mu cv s }
+  | LETC val_intro error                { raisef $startpos($1) $endpos($2) "incomplete letcc: expected cut after covariable '%s'" $2 }
   | LETC error                          { raisef $startpos($1) $endpos($1) "incomplete letcc: expected covariable after 'letcc'" }
 
 letc:
@@ -99,12 +104,12 @@ product:
   | LPAREN product_body error           { raisef $startpos($1) $endpos($2) "unclosed pair: expected ')' to close pair started here" }
 
 cosplit_body:
-  | COSPLIT  a=either_identifier 
-             b=either_identifier 
+  | COSPLIT  a=val_intro 
+             b=val_intro 
     LTRARROW s=statement                { Ast.Surface.Producer.cosplit a b s }
-  | COSPLIT either_identifier 
-            either_identifier error     { raisef $startpos($1) $endpos($3) "incomplete cosplit: expected cut after variables" }
-  | COSPLIT either_identifier error     { raisef $startpos($1) $endpos($2) "incomplete cosplit: expected second variable and cut" }
+  | COSPLIT val_intro 
+            val_intro error             { raisef $startpos($1) $endpos($3) "incomplete cosplit: expected cut after variables" }
+  | COSPLIT val_intro error             { raisef $startpos($1) $endpos($2) "incomplete cosplit: expected second variable and cut" }
   | COSPLIT error                       { raisef $startpos($1) $endpos($1) "incomplete cosplit: expected (cosplit var1 var2 cut)" }
 
 cosplit:
@@ -112,17 +117,14 @@ cosplit:
   | LPAREN cosplit_body error           { raisef $startpos($1) $endpos($2) "unclosed cosplit: expected ')' to close expression started here" }
 
 producer:
-  | p=pval                              { Ast.Surface.Producer.variable p }
   | letc                                { $1 }
   | product                             { $1 }
   | cosplit                             { $1 }
 
-cval:
-  | cv = IDENT                        { Ast.Surface.Identifier.coname cv }
-
 letp_body:
-  | LETP v=pval LTRARROW s=statement    { Ast.Surface.Consumer.mutilde v s }
-  | LETP IDENT error                    { raisef $startpos($1) $endpos($2) "incomplete let: expected cut after variable '%s'" $2 }
+  | LETP v=val_intro 
+    LTRARROW s=statement                { Ast.Surface.Consumer.mutilde v s }
+  | LETP val_intro error                { raisef $startpos($1) $endpos($2) "incomplete let: expected cut after variable '%s'" $2 }
   | LETP error                          { raisef $startpos($1) $endpos($1) "incomplete let: expected variable after 'let'" }
 
 letp:
@@ -130,12 +132,12 @@ letp:
   | LPAREN letp_body error              { raisef $startpos($1) $endpos($2) "unclosed let: expected ')' to close expression started here" }
 
 split_body:
-  | SPLIT    a=either_identifier 
-             b=either_identifier 
+  | SPLIT    a=val_intro 
+             b=val_intro 
     LTRARROW s=statement                { Ast.Surface.Consumer.split a b s }
-  | SPLIT either_identifier 
-          either_identifier error       { raisef $startpos($1) $endpos($3) "incomplete split: expected cut after variables" }
-  | SPLIT either_identifier error       { raisef $startpos($1) $endpos($2) "incomplete split: expected second variable and cut" }
+  | SPLIT val_intro 
+          val_intro error               { raisef $startpos($1) $endpos($3) "incomplete split: expected cut after variables" }
+  | SPLIT val_intro error               { raisef $startpos($1) $endpos($2) "incomplete split: expected second variable and cut" }
   | SPLIT error                         { raisef $startpos($1) $endpos($1) "incomplete split: expected (split var1 var2 cut)" }
 
 split:
@@ -152,16 +154,8 @@ coproduct:
   | LPAREN coproduct_body error         { raisef $startpos($1) $endpos($2) "unclosed copair: expected ')' to close expression started here" }
 
 consumer: 
-  | c=cval                              { Ast.Surface.Consumer.covariable c }
   | letp                                { $1 }
   | split                               { $1 }
   | coproduct                           { $1 }
-  | error                               { raisef $startpos $endpos "syntax error: expected consumer (covariable, let, split, or copair)" }
+  | error                               { raisef $startpos $endpos "syntax error: expected consumer (let, split, or copair)" }
 
-either:
-  | p=producer                          { Ast.Surface.Positive p }
-  | c=consumer                          { Ast.Surface.Negative c }
-
-either_identifier:
-  | pval                                { Ast.Surface.Positive_name $1 }
-  | cval                                { Ast.Surface.Negative_name $1 }
