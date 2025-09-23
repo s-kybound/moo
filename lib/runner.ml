@@ -200,7 +200,6 @@ module Call_by_value : RUNNER = struct
     (* consider "unable to progress" cases as complete - if these names were substituted 
      * can continue in the future *)
     | V _, Split _ -> Complete t
-    | V _, Copair _ -> Complete t
     (* end cases *)
     | V _, C _ -> Complete t
     | Cosplit _, C _ -> Complete t
@@ -258,9 +257,20 @@ module Call_by_value : RUNNER = struct
       let new_consumer = MuTilde { p = Pair (Positive (V (Bound 0)), b); c = cons } in
       Incomplete { p = new_producer; c = new_consumer }
     | Pair (Negative _, Negative _), _ -> assert false (* value, handled already *)
-    (* cosplit semantics 
-     * for this implementation, we consider 
-     * the copair as a lazy value *)
+    (* cosplit semantics - once the producer is a val,
+     * and we have already assured that it is, 
+     * simplify the elements in the copair if it can be done
+     * i was really hoping to not use not is_val, 
+     * may need a round of simplification in the future. *)
+    | p, Copair (Positive a, b) when not (is_val a) ->
+      let new_producer = a in
+      let new_consumer = MuTilde { p; c = Copair (Positive (V (Bound 0)), b) } in
+      Incomplete { p = new_producer; c = new_consumer }
+    | p, Copair (a, Positive b) when not (is_val b) ->
+      let new_producer = b in
+      let new_consumer = MuTilde { p; c = Copair (a, Positive (V (Bound 0))) } in
+      Incomplete { p = new_producer; c = new_consumer }
+    | V _, Copair _ -> Complete t
     | Cosplit cut, Copair (a, b) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 a cut)
@@ -331,7 +341,6 @@ module Call_by_name : RUNNER = struct
     (* consider "unable to progress" cases as complete - if these names were substituted 
      * can continue in the future *)
     | Cosplit _, C _ -> Complete t
-    | Pair _, C _ -> Complete t
     (* TODO: end cases *)
     | V _, C _ -> Complete t
     | V _, Split _ -> Complete t
@@ -389,9 +398,20 @@ module Call_by_name : RUNNER = struct
       let new_producer = Mu { c = Copair (Negative (C (Bound 0)), b); p = prod } in
       Incomplete { p = new_producer; c = new_consumer }
     | _, Copair (Positive _, Positive _) -> assert false (* covalue, handled already *)
-    (* split semantics 
-     * for this implementation, we consider 
-     * the pair as a lazy value *)
+    (* split semantics - once the consumer is a coval,
+     * and we have already assured that it is, 
+     * simplify the elements in the pair if it can be done
+     * i was really hoping to not use not is_val, 
+     * may need a round of simplification in the future. *)
+    | Pair (Negative a, b), c when not (is_coval a) ->
+      let new_producer = Mu { c; p = Pair (Negative (C (Bound 0)), b) } in
+      let new_consumer = a in
+      Incomplete { p = new_producer; c = new_consumer }
+    | Pair (a, Negative b), c when not (is_coval b) ->
+      let new_producer = Mu { c; p = Pair (a, Negative (C (Bound 0))) } in
+      let new_consumer = b in
+      Incomplete { p = new_producer; c = new_consumer }
+    | Pair _, C _ -> Complete t
     | Pair (a, b), Split cut ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 a cut)
