@@ -53,6 +53,7 @@ rule token = parse
   | '&'            { AMPERSAND }
   | '+'            { PLUS }
   | '-'            { MINUS }
+  | '~'            { NEG }
   | '\\'           { token lexbuf } (* skip a line just like C *)
   | ident as id    { verify_ident lexbuf id }
   | eof            { EOF }

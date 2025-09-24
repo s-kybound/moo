@@ -27,6 +27,7 @@ module Surface = struct
   type definition =
     | Producer of name * producer
     | Consumer of name * consumer
+    | Type (* stub for now *)
 
   type t =
     { definitions : definition list
@@ -222,11 +223,20 @@ module Core = struct
       match definition with
       | S.Producer (n, p) -> Producer (n, convert_producer empty_env p)
       | S.Consumer (cn, c) -> Consumer (cn, convert_consumer empty_env c)
+      | S.Type -> assert false
     ;;
   end
 
   let convert (t : Surface.t) : t =
-    { definitions = List.map Converter.convert_definition t.definitions
+    let removed_types =
+      List.filter
+        (fun x ->
+           match x with
+           | Surface.Type -> false
+           | _ -> true)
+        t.definitions
+    in
+    { definitions = List.map Converter.convert_definition removed_types
     ; main = Converter.convert_cut Converter.empty_env t.main
     }
   ;;

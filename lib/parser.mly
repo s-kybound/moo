@@ -1,5 +1,10 @@
 %{  
   open Parser_error.Parser
+  let require_adjacent prev_end curr_start error_msg =
+    if prev_end.Lexing.pos_cnum < curr_start.Lexing.pos_cnum then
+      raisef curr_start curr_start error_msg
+    else
+      ()
 %}
 
 %token <string> IDENT
@@ -11,8 +16,9 @@
 %token DEFC DEFP (* top-level definitions *)
 %token EQUALS DELIMITER (* top-level definitions *)
 %token COLON (* type binder annotation *)
-%token AMPERSAND STAR PLUS MINUS (* type operations: negative/positive products,
-                                  * positive/negative polarity *)
+%token AMPERSAND STAR PLUS MINUS NEG (* type operations: negative/positive products,
+                                      * positive/negative polarity,
+                                      * polarity negation *)
 %token TYPE (* type definition *)
 %token EOF
 %start <Ast.Surface.t> entrypoint
@@ -43,14 +49,10 @@ consumer_definition:
            input=var_intro 
     EQUALS body=statement DELIMITER?    { Ast.Surface.defc coname input body }
 
-type_definition:
-  | TYPE name=IDENT
-    EQUALS expr=base_type DELIMITER?    { }
-
 top_level_definition:
   | producer_definition                 { $1 }
   | consumer_definition                 { $1 }
-  // | type_definition                     { }
+  | type_definition                     { $1 }
 
 (* Nested statements *)
 statement:
@@ -92,26 +94,66 @@ var_intro:
   | typed_var                           { $1 }
   | untyped_var                         { $1 }
 
-positive_product_body:
-  | polar_type STAR polar_type          { }
+type_shape:
+  | tyvar                               { } (* basic type * *)
+  | LPAREN tyvar tyvar+ RPAREN          { } (* a kind * -> * *)
 
-negative_product_body:
-  | polar_type AMPERSAND polar_type     { }
-
-base_type:
+tyvar:
   | IDENT                               { }
-  | LPAREN positive_product_body RPAREN { }
-  | LPAREN negative_product_body RPAREN { }
 
-polar_type:
-  | base_type PLUS                      { }
-  | base_type MINUS                     { }
+abstract_type:
+  | tyvar                               { }
+  | NEG tyvar                           { require_adjacent $endpos($1) $startpos($2) "'~' must immediately precede the type (no spaces)" }
 
-type_expr:
-  | polar_type                          { }
+(* usage of a type, only allowed within 
+ * the body of another polar type *)
+type_use:
+  | polar_type(type_use)                { }
+  | abstract_type                       { }
+
+type_use_strict:
+  | polar_type(type_use_strict)         { }
+  | abstract_type error                 { raisef $startpos($1) $endpos($1) "abstract type is not allowed in a strict context (most likely this type is being used to type a term)" }
+
+type_invocation_body(use_rule):
+  | tyvar use_rule+                     { }
+  | tyvar error                         { raisef $startpos($1) $endpos($1) "we do not allow nullary kinds, that's what the base kinds is for!" }
+
+positive_product_body(use_rule):
+  | STAR use_rule use_rule              { }
+  | STAR use_rule use_rule error        { raisef $startpos($1) $endpos($1) "* expects ONLY two types!" }
+  | STAR use_rule error                 { raisef $startpos($1) $endpos($1) "* expects two types! please supply another type" }
+
+negative_product_body(use_rule):
+  | AMPERSAND use_rule use_rule         { }
+  | AMPERSAND use_rule use_rule error   { raisef $startpos($1) $endpos($1) "& expects ONLY two types!" }
+  | AMPERSAND use_rule error            { raisef $startpos($1) $endpos($1) "& expects two types! please supply another type" }
+
+(* base_types, only used in definitions. 
+ * should be unpolarized. *)
+base_type(use_rule):
+  | tyvar                               { }
+  | LPAREN 
+    type_invocation_body(use_rule)  
+    RPAREN                              { }
+  | LPAREN 
+    positive_product_body(use_rule) 
+    RPAREN                              { }
+  | LPAREN 
+    negative_product_body(use_rule) 
+    RPAREN                              { }
+
+polar_type(use_rule):
+  | base_type(use_rule) PLUS            { require_adjacent $endpos($1) $startpos($2) "'+' must immediately follow the type (no spaces)" }
+  | base_type(use_rule) MINUS           { require_adjacent $endpos($1) $startpos($2) "'-' must immediately follow the type (no spaces)" }
 
 typed_var_body:
-  | v=IDENT COLON type_expr             { v }
+  | v=IDENT COLON type_use_strict       { v }
+
+type_definition:
+  | TYPE _shape=type_shape
+    EQUALS _expr=base_type(type_use) 
+    DELIMITER?                          { Ast.Surface.Type }
 
 typed_var:
   | LBRACK t=typed_var_body RBRACK      { t }
