@@ -44,8 +44,8 @@ let coident = '\'' ident
 rule token = parse
   | hspace         { token lexbuf }
   | newline        { Lexing.new_line lexbuf; token lexbuf }
-  | "(*"           { skip_comment 1 lexbuf; token lexbuf }
-  | "*)"           { raisef lexbuf "Unmatched *). Was a comment erased incorrectly?" }
+  | "{*"           { skip_comment 1 lexbuf; token lexbuf }
+  | "*}"           { raisef lexbuf "Unmatched *}. Was a comment erased incorrectly?" }
   | "->"           { LTRARROW }
   | "<-"           { RTLARROW }
   | '='            { EQUALS }
@@ -63,7 +63,7 @@ rule token = parse
 and skip_comment depth = parse
   | hspace         { skip_comment depth lexbuf }
   | newline        { Lexing.new_line lexbuf; skip_comment depth lexbuf }
-  | "(*"           { skip_comment (depth + 1) lexbuf }
-  | "*)"           { if depth = 1 then () else skip_comment (depth - 1) lexbuf }
-  | eof            { raisef lexbuf "Unterminated (*...*) comment" }
+  | "{*"           { skip_comment (depth + 1) lexbuf }
+  | "*}"           { if depth = 1 then () else skip_comment (depth - 1) lexbuf }
+  | eof            { raisef lexbuf "Unterminated {*...*} comment" }
   | _              { skip_comment depth lexbuf }

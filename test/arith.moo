@@ -1,11 +1,11 @@
-(*
+{*
  in untyped moo, we can represent numbers with pairs:
  Z - 0
  (pair S Z) - 1
  (pair S (pair S Z)) - 2 etc...
 
  we shall experiment with this...
-*)
+*}
 
 let val <- Z in
 

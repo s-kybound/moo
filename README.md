@@ -62,13 +62,13 @@ In pseudocode:
 
 With cosplit, we actually are able to restore the function/implication data type as a form of codata! Like so:
 ```
-(* a is the input value, 'k is the exit continuation *)
+{* a is the input value, 'k is the exit continuation *}
 <(cosplit a 'b M) | (copair x 'k)> -> M[x/a, 'k/'b]
 ```
 
 We also have the negative function abstraction:
 ```
-(* a is the input value, 'k is the exit continuation *)
+{* a is the input value, 'k is the exit continuation *}
 <(pair x 'k) | (split a 'b M)> -> M[x/a, 'k/'b]
 ```
 
@@ -99,21 +99,21 @@ And there is an immediate translation! so for cuts of shape `[(destructure.M) v]
 Encoding it using this idea, we get this:
 ```
   (cosplit v 'k ->
-   letcc 'k <- 'k in (* entirely unnecessary, but one can now see why these are called let-style *)
+   letcc 'k <- 'k in {* entirely unnecessary, but one can now see why these are called let-style *}
    cosplit 'a_next 'b_next <- 'k in
    [v 'a_next])
 ```
 Tada! by representing the immediate cut as `cosplit ... <- 'k in`, we get a much cleaner syntax. and by introducing a way to define producers with names (and the single consumuer that they expect), we get
 ```
-(* defp wraps the inner statements in a Mu encoding *)
+{* defp wraps the inner statements in a Mu encoding *}
 defp inl 'ap =
   cosplit v 'case <- 'ap in
   cosplit 'a_next 'b_next <- 'case in
   [v 'a_next]
-(*
+{*
   this desugars to 
   (letcc 'ap -> [(cosplit v 'case -> [(cosplit 'a_next 'b_next -> [v 'a_next]) 'case])'ap])
-*)
+*}
 ;;
 ```
 Which is much cleaner. This is also an argument for the humble `cosplit`/`split` as compared to `comatch`/`match` and `cocase`/`case`, if using simple products is sufficient for your program, as the equivalent syntax for `comatch` and the like would be like
