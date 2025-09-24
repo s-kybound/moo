@@ -57,9 +57,27 @@ end
 
 module State = struct
   let current_history : string History.t option ref = ref None
-  let current_evaluator : (module RUNNER) option ref = ref None
+  let current_evaluator : (module EVALUATION_STRATEGY) option ref = ref None
+  let current_val_strat : [ `Lazy | `Eager ] ref = ref `Eager
+  let current_eval_strat : [ `CBN | `CBV ] ref = ref `CBV
   let current_environment : Env.t ref = ref (Env.empty_env ())
-  let set_evaluator t = current_evaluator := Some t
+
+  let set_evaluator eval_strat val_strat =
+    current_eval_strat := eval_strat;
+    current_val_strat := val_strat;
+    let (module J : JUDGEMENTS) =
+      match val_strat with
+      | `Lazy -> (module Lazy)
+      | `Eager -> (module Eager)
+    in
+    let t : (module EVALUATION_STRATEGY) =
+      match eval_strat with
+      | `CBN -> (module Make_CBN (J))
+      | `CBV -> (module Make_CBV (J))
+    in
+    current_evaluator := Some t
+  ;;
+
   let set_history t = current_history := Some t
   let clear_environment () = current_environment := Env.empty_env ()
 
@@ -81,7 +99,7 @@ let print_error msg = Printf.eprintf "Error: %s\n%!" msg
 let get_ast str = str |> Reader.of_string ~filename:"REPL" |> Core.convert
 
 let parse_and_eval input =
-  let (module Strategy : RUNNER) = State.get_evaluator () in
+  let (module Strategy : EVALUATION_STRATEGY) = State.get_evaluator () in
   try
     let core_ast = get_ast input in
     let result = Strategy.eval !State.current_environment core_ast in
@@ -93,7 +111,7 @@ let parse_and_eval input =
 let parse_and_step input =
   print_endline "evaluating the module step by step...";
   print_endline "(any entry = step, :stop = exit)";
-  let (module Strategy : RUNNER) = State.get_evaluator () in
+  let (module Strategy : EVALUATION_STRATEGY) = State.get_evaluator () in
   let rec step_eval cut =
     Printf.printf "current result: %s\n%!" (Core.Show.show_cut cut);
     match LNoise.linenoise "step> " with
@@ -137,6 +155,8 @@ let init_repl () =
         ; ":call-by-name"
         ; ":cbv"
         ; ":call-by-value"
+        ; ":eager"
+        ; ":lazy"
         ; ":clear"
         ; ":load"
         ]
@@ -183,7 +203,7 @@ let multiline_prompt base_prompt =
 ;;
 
 let rec repl_loop () =
-  let (module Strategy : RUNNER) = State.get_evaluator () in
+  let (module Strategy : EVALUATION_STRATEGY) = State.get_evaluator () in
   let prompt = Printf.sprintf "moo[%s]> " Strategy.name in
   match multiline_prompt prompt with
   | None ->
@@ -194,24 +214,32 @@ let rec repl_loop () =
     print_endline "Goodbye!";
     exit 0
   | Some ":cbn" | Some ":call-by-name" ->
-    State.set_evaluator (module Call_by_name);
+    State.set_evaluator `CBN !State.current_val_strat;
     repl_loop ()
   | Some ":cbv" | Some ":call-by-value" ->
-    State.set_evaluator (module Call_by_value);
+    State.set_evaluator `CBV !State.current_val_strat;
+    repl_loop ()
+  | Some ":lazy" ->
+    State.set_evaluator !State.current_eval_strat `Lazy;
+    repl_loop ()
+  | Some ":eager" ->
+    State.set_evaluator !State.current_eval_strat `Eager;
     repl_loop ()
   | Some ":clear" ->
     State.clear_environment ();
     repl_loop ()
   | Some ":help" ->
     print_endline "Commands:";
-    print_endline "  :q, :quit, :exit   Exit REPL";
+    print_endline "  :q, :quit, :exit      Exit REPL";
     print_endline "  :cbn, :call-by-name   Switch to call-by-name evaluation";
     print_endline "  :cbv, :call-by-value  Switch to call-by-value evaluation";
-    print_endline "  :clear             Clear the REPL environment";
-    print_endline "  :show <expr>       Visualize the expression";
-    print_endline "  :step <expr>       Step-by-step evaluation";
-    print_endline "  :load <filename>   Load all definitions from a file into the REPL";
-    print_endline "  :help              Show this help";
+    print_endline "  :lazy                 Switch to lazy evaluation";
+    print_endline "  :eager                Switch to eager evaluation";
+    print_endline "  :clear                Clear the REPL environment";
+    print_endline "  :show <expr>          Visualize the expression";
+    print_endline "  :step <expr>          Step-by-step evaluation";
+    print_endline "  :load <filename>      Load all definitions from a file into the REPL";
+    print_endline "  :help                 Show this help";
     repl_loop ()
   | Some line when String.starts_with ~prefix:":step " line ->
     add_to_history line;
@@ -235,14 +263,10 @@ let rec repl_loop () =
     repl_loop ()
 ;;
 
-let start_repl strategy_type =
+let start_repl eval_strat value_strat =
   init_repl ();
-  let (module Strategy) =
-    match strategy_type with
-    | `CBN -> (module Call_by_name : RUNNER)
-    | `CBV -> (module Call_by_value : RUNNER)
-  in
-  State.set_evaluator (module Strategy);
+  State.set_evaluator eval_strat value_strat;
+  let (module Strategy) = State.get_evaluator () in
   Printf.printf "moo REPL (%s) - enter :q to quit\n%!" Strategy.name;
   try repl_loop () with
   | Sys.Break ->

@@ -3,9 +3,17 @@ open Cmdliner
 let eval_strategy =
   let doc = "Use call-by-name evaluation strategy" in
   let cbn_flag = Arg.info [ "cbn"; "call-by-name" ] ~doc in
-  let doc = "Use call-by-value evaluation strategy" in
+  let doc = "Use call-by-value evaluation strategy (default)" in
   let cbv_flag = Arg.info [ "cbv"; "call-by-value" ] ~doc in
   Arg.(value & vflag `CBV [ `CBN, cbn_flag; `CBV, cbv_flag ])
+;;
+
+let value_strategy =
+  let doc = "Use lazy semantics" in
+  let lazy_flag = Arg.info [ "lazy" ] ~doc in
+  let doc = "Use eager semantics (default)" in
+  let eager_flag = Arg.info [ "eager" ] ~doc in
+  Arg.(value & vflag `Eager [ `Lazy, lazy_flag; `Eager, eager_flag ])
 ;;
 
 let filename_arg =
@@ -13,21 +21,10 @@ let filename_arg =
   Arg.(required & pos 0 (some file) None & info [] ~docv:"PROGRAM" ~doc)
 ;;
 
-let runner_body =
-  let runner_main strategy filename =
-    match strategy with
-    | `CBN ->
-      Printf.printf "Running %s with call-by-name strategy\n%!" filename;
-      Runner.run_cbn filename
-    | `CBV ->
-      Printf.printf "Running %s with call-by-value strategy\n%!" filename;
-      Runner.run_cbv filename
-  in
-  Term.(const runner_main $ eval_strategy $ filename_arg)
-;;
+let runner_body = Term.(const Runner.run $ eval_strategy $ value_strategy $ filename_arg)
 
 let runner_cmd =
-  let doc = "CBN and CBV evaluators for the moo language" in
+  let doc = "Run a moo program" in
   let info = Cmd.info "run" ~doc in
   Cmd.v info runner_body
 ;;
@@ -35,8 +32,7 @@ let runner_cmd =
 let repl_cmd =
   let doc = "REPL for the moo language" in
   let info = Cmd.info "repl" ~doc in
-  let repl_main strategy = Repl.start_repl strategy in
-  Cmd.v info Term.(const repl_main $ eval_strategy)
+  Cmd.v info Term.(const Repl.start_repl $ eval_strategy $ value_strategy)
 ;;
 
 let moo_cmd =

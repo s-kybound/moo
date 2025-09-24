@@ -149,7 +149,18 @@ module Env = struct
   let substitute_definitions cut t = Substituter.substitute_cut t cut
 end
 
-module type RUNNER = sig
+module type JUDGEMENTS = sig
+  val name : string
+
+  (** the value judgement on producers *)
+  val is_val : Ast.Core.producer -> bool
+
+  (** the covalue judgement on consumers *)
+  val is_coval : Ast.Core.consumer -> bool
+end
+
+module type EVALUATION_STRATEGY = sig
+  (** a single step, corresponding to a step of small-step semantics *)
   type step =
     | Incomplete of cut
     | Complete of cut
@@ -157,18 +168,32 @@ module type RUNNER = sig
 
   val name : string
   val step_once : cut -> step
+
+  (** steps a program through to completion within an environment *)
   val eval : Env.t -> t -> cut
 end
 
-module Call_by_value : RUNNER = struct
-  type step =
-    | Incomplete of cut
-    | Complete of cut
-    | Error of exn
+module Lazy : JUDGEMENTS = struct
+  let name = "lazy"
 
-  let name = "call-by-value"
+  let is_val (p : producer) : bool =
+    match p with
+    | Mu _ -> false
+    | Pair _ -> true
+    | Cosplit _ -> true
+  ;;
 
-  (* the value judgement *)
+  let is_coval (c : consumer) : bool =
+    match c with
+    | MuTilde _ -> false
+    | Copair _ -> true
+    | Split _ -> true
+  ;;
+end
+
+module Eager : JUDGEMENTS = struct
+  let name = "eager"
+
   let rec is_val (p : producer) : bool =
     let is_val_neutral n =
       match n with
@@ -183,6 +208,30 @@ module Call_by_value : RUNNER = struct
     | Cosplit _ -> true
   ;;
 
+  let rec is_coval (c : consumer) : bool =
+    let is_coval_neutral n =
+      match n with
+      | Name (Free _) -> true
+      | Name (Bound _) -> assert false
+      | Positive _ -> true (* any producer is a covalue. *)
+      | Negative c -> is_coval c
+    in
+    match c with
+    | MuTilde _ -> false
+    | Copair (a, b) -> is_coval_neutral a && is_coval_neutral b
+    | Split _ -> true
+  ;;
+end
+
+module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
+  type step =
+    | Incomplete of cut
+    | Complete of cut
+    | Error of exn
+
+  let name = Printf.sprintf "%s-call-by-value" J.name
+  let is_val = J.is_val
+
   let producer_consumer_step p c =
     match p, c with
     (* encode type errors *)
@@ -195,6 +244,17 @@ module Call_by_value : RUNNER = struct
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
     (* pair semantics *)
+    (* canonical pair destruction *)
+    | Pair (a, b), Split cut when is_val (Pair (a, b)) ->
+      Result.fold
+        (Beta_reducer.beta_reduce_with_neutral 0 a cut)
+        ~ok:(fun cut ->
+          Result.fold
+            (Beta_reducer.beta_reduce_with_neutral 1 b cut)
+            ~ok:(fun cut -> Incomplete cut)
+            ~error:(fun exn -> Error exn))
+        ~error:(fun exn -> Error exn)
+    (* pair focusing rules, left to right *)
     | Pair (Positive a, b), cons when not (is_val a) ->
       let new_producer = Positive a in
       let new_consumer =
@@ -213,7 +273,8 @@ module Call_by_value : RUNNER = struct
      * and since the only non_value was mu
      * and it has already been dealt with,
      * ANYTHING here is a value. *)
-    (* canonical pair destruction *)
+    (* catch-all pair destruction in case the
+     * is_val judgement is ill-formed *)
     | Pair (a, b), Split cut ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 a cut)
@@ -229,8 +290,19 @@ module Call_by_value : RUNNER = struct
         (Beta_reducer.beta_reduce_with_producer 0 p cut)
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
-    (* copair semantics - only when the producer is a value
-     * simplify the elements in the copair if it can be done *)
+    (* copair semantics - any potential simplification is only done
+     * when the left side is completely simplified. in order to treat
+     * the copair using is_val, we pretend it is a pair *)
+    | Cosplit cut, Copair (a, b) when is_val (Pair (a, b)) ->
+      Result.fold
+        (Beta_reducer.beta_reduce_with_neutral 0 a cut)
+        ~ok:(fun cut ->
+          Result.fold
+            (Beta_reducer.beta_reduce_with_neutral 1 b cut)
+            ~ok:(fun cut -> Incomplete cut)
+            ~error:(fun exn -> Error exn))
+        ~error:(fun exn -> Error exn)
+    (* copair focusing rules, left to right *)
     | prod, Copair (Positive a, b) when not (is_val a) ->
       let new_producer = Positive a in
       let new_consumer =
@@ -245,6 +317,8 @@ module Call_by_value : RUNNER = struct
         Negative (MuTilde { p = Positive prod; c = Negative copair })
       in
       Incomplete { p = new_producer; c = new_consumer }
+    (* catch-all copair destruction in case the
+     * is_val judgement is ill-formed *)
     | Cosplit cut, Copair (a, b) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 a cut)
@@ -340,28 +414,14 @@ module Call_by_value : RUNNER = struct
   ;;
 end
 
-module Call_by_name : RUNNER = struct
+module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
   type step =
     | Incomplete of cut
     | Complete of cut
     | Error of exn
 
-  let name = "call-by-name"
-
-  (* the covalue judgement *)
-  let rec is_coval (c : consumer) : bool =
-    let is_coval_neutral n =
-      match n with
-      | Name (Free _) -> true
-      | Name (Bound _) -> assert false
-      | Positive _ -> true (* any producer is a covalue. *)
-      | Negative c -> is_coval c
-    in
-    match c with
-    | MuTilde _ -> false
-    | Copair (a, b) -> is_coval_neutral a && is_coval_neutral b
-    | Split _ -> true
-  ;;
+  let name = Printf.sprintf "%s-call-by-name" J.name
+  let is_coval = J.is_coval
 
   let producer_consumer_step p c =
     match p, c with
@@ -375,6 +435,17 @@ module Call_by_name : RUNNER = struct
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
     (* copair semantics *)
+    (* canonical copair destruction *)
+    | Cosplit cut, Copair (a, b) when is_coval (Copair (a, b)) ->
+      Result.fold
+        (Beta_reducer.beta_reduce_with_neutral 0 a cut)
+        ~ok:(fun cut ->
+          Result.fold
+            (Beta_reducer.beta_reduce_with_neutral 1 b cut)
+            ~ok:(fun cut -> Incomplete cut)
+            ~error:(fun exn -> Error exn))
+        ~error:(fun exn -> Error exn)
+    (* copair focusing rules, left to right *)
     | prod, Copair (Negative a, b) when not (is_coval a) ->
       let new_consumer = Negative a in
       let new_producer =
@@ -393,7 +464,8 @@ module Call_by_name : RUNNER = struct
      * and since the only non_covalue was mutilde
      * and it has already been dealt with,
      * ANYTHING here is a covalue. *)
-    (* canonical copair destruction *)
+    (* catch-all copair destruction in case the
+     * is_coval judgement is ill-formed *)
     | Cosplit cut, Copair (a, b) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 a cut)
@@ -409,8 +481,19 @@ module Call_by_name : RUNNER = struct
         (Beta_reducer.beta_reduce_with_consumer 0 c cut)
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
-    (* pair semantics - only when the consumer is a covalue
-     * simplify the elements in the pair if it can be done *)
+    (* pair semantics - any potential simplification is only done
+     * when the right side is completely simplified. in order to treat
+     * the pair using is_coval, we pretend it is a copair *)
+    | Pair (a, b), Split cut when is_coval (Copair (a, b)) ->
+      Result.fold
+        (Beta_reducer.beta_reduce_with_neutral 0 a cut)
+        ~ok:(fun cut ->
+          Result.fold
+            (Beta_reducer.beta_reduce_with_neutral 1 b cut)
+            ~ok:(fun cut -> Incomplete cut)
+            ~error:(fun exn -> Error exn))
+        ~error:(fun exn -> Error exn)
+    (* pair focusing rules, left to right *)
     | Pair (Negative a, b), cons when not (is_coval a) ->
       let new_consumer = Negative a in
       let new_producer =
@@ -425,6 +508,8 @@ module Call_by_name : RUNNER = struct
         Positive (Mu { c = Negative cons; p = Positive pair })
       in
       Incomplete { p = new_producer; c = new_consumer }
+    (* catch-all pair destruction in case the
+     * is_val judgement is ill-formed *)
     | Pair (a, b), Split cut ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 a cut)
