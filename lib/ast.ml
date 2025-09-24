@@ -2,7 +2,41 @@
  * The variables should be converted into using de Brujin indices
  * by a first pass before further execution. *)
 module Surface = struct
-  type name = string
+  module Type = struct
+    (* a definition of a type in
+    * the typedef *)
+    type type_schema =
+      | Base of string
+      | Kind of string * string list
+
+    type abstract_type =
+      | Var of string
+      | Neg of abstract_type
+
+    type type_expr =
+      | Name of string
+        (* why not abstract type?
+                      * then i could define a type like (wrap A) = A,
+                      * and when (wrap A+) is subbed out we get A+ ...
+                      * but recall that we only allow base_types in
+                      * the type expr! *)
+      | PosProd of type_use * type_use
+      | NegProd of type_use * type_use
+      | KindInstantiation of string * type_use list
+
+    and type_use =
+      | Abstract of abstract_type
+      | Instantiated of polar_type
+
+    and polar_type =
+      | Pos of type_expr
+      | Neg of type_expr
+  end
+
+  type name =
+    { name : string
+    ; typ : Type.polar_type option
+    }
 
   type producer =
     | Mu of name * cut
@@ -20,14 +54,14 @@ module Surface = struct
     }
 
   and neutral =
-    | Name of name
+    | Name of string
     | Positive of producer
     | Negative of consumer
 
   type definition =
     | Producer of name * producer
     | Consumer of name * consumer
-    | Type (* stub for now *)
+    | TypeDef of Type.type_schema * Type.type_expr
 
   type t =
     { definitions : definition list
@@ -38,16 +72,23 @@ module Surface = struct
    * but Core will look closer to product-mu-mu calculus.
   *)
   module Show = struct
+    (* for now, don't show the types *)
+    let show_name n = n.name
+
     let rec show_producer p =
       match p with
-      | Mu (coname, cut) -> Printf.sprintf "(letcc %s %s)" coname (show_cut cut)
+      | Mu (coname, cut) ->
+        Printf.sprintf "(letcc %s %s)" (show_name coname) (show_cut cut)
       | Pair (a, b) -> Printf.sprintf "(pair %s %s)" (show_neutral a) (show_neutral b)
-      | Cosplit (a, b, cut) -> Printf.sprintf "(cosplit %s %s %s)" a b (show_cut cut)
+      | Cosplit (a, b, cut) ->
+        Printf.sprintf "(cosplit %s %s %s)" (show_name a) (show_name b) (show_cut cut)
 
     and show_consumer c =
       match c with
-      | MuTilde (name, cut) -> Printf.sprintf "(let %s %s)" name (show_cut cut)
-      | Split (a, b, cut) -> Printf.sprintf "(split %s %s %s)" a b (show_cut cut)
+      | MuTilde (name, cut) ->
+        Printf.sprintf "(let %s %s)" (show_name name) (show_cut cut)
+      | Split (a, b, cut) ->
+        Printf.sprintf "(split %s %s %s)" (show_name a) (show_name b) (show_cut cut)
       | Copair (a, b) -> Printf.sprintf "(copair %s %s)" (show_neutral a) (show_neutral b)
 
     and show_cut (cut : cut) =
@@ -79,6 +120,7 @@ module Surface = struct
     let identifier name = Name name
   end
 
+  let make_name (ident : string) (typ : Type.polar_type option) = { name = ident; typ }
   let defp (name : name) (input : name) (body : cut) = Producer (name, Mu (input, body))
 
   let defc (name : name) (input : name) (body : cut) =
@@ -167,10 +209,10 @@ module Core = struct
     module S = Surface
 
     (* our environment tracks a single combined stack of names and conames *)
-    type env = S.name list
+    type env = string list
 
-    let name_match n m = String.equal n m
-    let empty_env = []
+    let name_match = String.equal
+    let empty_env : env = []
 
     let lookup_identifier env n =
       let rec aux stack n depth =
@@ -181,13 +223,14 @@ module Core = struct
       aux env n 0
     ;;
 
-    let push_name v env = v :: env
+    let push_name (v : S.name) env = v.name :: env
 
     let rec convert_producer env p : producer =
       match p with
       | S.Mu (k, cut) -> Mu (convert_cut (push_name k env) cut)
       | S.Pair (a, b) -> Pair (convert_neutral env a, convert_neutral env b)
       | S.Cosplit (x, y, cut) ->
+        let x, y = x.name, y.name in
         if name_match x y
         then raise (Failure "Cosplit: name conflict in parameters")
         else (
@@ -201,6 +244,7 @@ module Core = struct
       match c with
       | S.MuTilde (v, cut) -> MuTilde (convert_cut (push_name v env) cut)
       | S.Split (x, y, cut) ->
+        let x, y = x.name, y.name in
         if name_match x y
         then raise (Failure "Split: name conflict in parameters")
         else (
@@ -221,9 +265,9 @@ module Core = struct
     (* definitions are evaluated without environment *)
     let convert_definition definition : definition =
       match definition with
-      | S.Producer (n, p) -> Producer (n, convert_producer empty_env p)
-      | S.Consumer (cn, c) -> Consumer (cn, convert_consumer empty_env c)
-      | S.Type -> assert false
+      | S.Producer (n, p) -> Producer (n.name, convert_producer empty_env p)
+      | S.Consumer (cn, c) -> Consumer (cn.name, convert_consumer empty_env c)
+      | S.TypeDef _ -> assert false
     ;;
   end
 
@@ -232,7 +276,7 @@ module Core = struct
       List.filter
         (fun x ->
            match x with
-           | Surface.Type -> false
+           | Surface.TypeDef _ -> false
            | _ -> true)
         t.definitions
     in
