@@ -1,6 +1,6 @@
 (library
  (name moo)
- (modules ast reader parser parser_error lexer runner)
+ (modules ast reader parser parser_error lexer runner env)
  (private_modules parser parser_error lexer))
 
 (menhir
