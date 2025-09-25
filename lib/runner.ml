@@ -1,4 +1,5 @@
-open Ast.Core
+open Ast
+open Core
 
 (* Utilities for beta-reducing terms. 
  * ! this beta reducer assumes that all
@@ -71,7 +72,7 @@ end = struct
   and subst_neutral_in_neutral (index : int) (term : neutral) (target : neutral) : neutral
     =
     match target with
-    | Name (Bound n) when n = index -> term
+    | Name (Bound (n, _)) when n = index -> term
     | Name x -> Name x
     | Positive p -> Positive (subst_neutral_in_producer index term p)
     | Negative c -> Negative (subst_neutral_in_consumer index term c)
@@ -100,15 +101,18 @@ end = struct
 end
 
 module Env = struct
-  type t = (string, neutral) Hashtbl.t
+  type t =
+    { terms : (string, neutral) Hashtbl.t
+    ; types : (Type.type_schema, Type.type_expr) Hashtbl.t
+    }
 
-  let empty_env () : t = Hashtbl.create 10
-  let is_defined i (t : t) = Hashtbl.mem t i
+  let empty_env () : t = { terms = Hashtbl.create 10; types = Hashtbl.create 10 }
+  let is_defined i (t : t) = Hashtbl.mem t.terms i
 
   let get_neutral i (t : t) =
-    match Hashtbl.find_opt t i with
+    match Hashtbl.find_opt t.terms i with
     | None -> failwith "not_found"
-    | Some e -> e
+    | Some n -> n
   ;;
 
   module Substituter = struct
@@ -140,6 +144,12 @@ module Env = struct
     ;;
   end
 
+  let add_term t name term = Hashtbl.replace t.terms name term
+  let add_type t schema expr = Hashtbl.replace t.types schema expr
+
+  (* load the definitions into the environment.
+   * only done after typechecking and syntax checking
+   * has been done. *)
   let load_definitions program t =
     List.iter
       (fun (d : definition) ->
@@ -151,10 +161,14 @@ module Env = struct
          *)
          | Producer (n, p) ->
            let p = Substituter.substitute_producer t p in
-           Hashtbl.replace t n (Positive p)
+           add_term t n (Positive p)
          | Consumer (cn, c) ->
            let c = Substituter.substitute_consumer t c in
-           Hashtbl.replace t cn (Negative c))
+           add_term t cn (Negative c)
+         | TypeDef (schema, expr) ->
+           (* there's no need to substitute other definitions within
+            * the type expr, we leave that work to our typechecker. *)
+           add_type t schema expr)
       program.definitions
   ;;
 
@@ -298,14 +312,14 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
     | Pair (Positive a, b), cons when not (is_val a) ->
       let new_producer = Positive a in
       let new_consumer =
-        let pair = Pair (Name (Bound 0), b) in
+        let pair = Pair (Name (Bound (0, None)), b) in
         Negative (MuTilde { p = Positive pair; c = Negative cons })
       in
       Incomplete { p = new_producer; c = new_consumer }
     | Pair (a, Positive b), cons when not (is_val b) ->
       let new_producer = Positive b in
       let new_consumer =
-        let pair = Pair (a, Name (Bound 0)) in
+        let pair = Pair (a, Name (Bound (0, None))) in
         Negative (MuTilde { p = Positive pair; c = Negative cons })
       in
       Incomplete { p = new_producer; c = new_consumer }
@@ -346,14 +360,14 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
     | prod, Copair (Positive a, b) when not (is_val a) ->
       let new_producer = Positive a in
       let new_consumer =
-        let copair = Copair (Name (Bound 0), b) in
+        let copair = Copair (Name (Bound (0, None)), b) in
         Negative (MuTilde { p = Positive prod; c = Negative copair })
       in
       Incomplete { p = new_producer; c = new_consumer }
     | prod, Copair (a, Positive b) when not (is_val b) ->
       let new_producer = Positive b in
       let new_consumer =
-        let copair = Copair (a, Name (Bound 0)) in
+        let copair = Copair (a, Name (Bound (0, None))) in
         Negative (MuTilde { p = Positive prod; c = Negative copair })
       in
       Incomplete { p = new_producer; c = new_consumer }
@@ -384,14 +398,14 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
     | Pair (Positive a, b) when not (is_val a) ->
       let new_producer = Positive a in
       let new_consumer =
-        let pair = Pair (Name (Bound 0), b) in
+        let pair = Pair (Name (Bound (0, None)), b) in
         Negative (MuTilde { p = Positive pair; c = consumer })
       in
       Incomplete { p = new_producer; c = new_consumer }
     | Pair (a, Positive b) when not (is_val b) ->
       let new_producer = Positive b in
       let new_consumer =
-        let pair = Pair (a, Name (Bound 0)) in
+        let pair = Pair (a, Name (Bound (0, None))) in
         Negative (MuTilde { p = Positive pair; c = consumer })
       in
       Incomplete { p = new_producer; c = new_consumer }
@@ -414,14 +428,14 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
     | Copair (Positive a, b) when not (is_val a) ->
       let new_producer = Positive a in
       let new_consumer =
-        let copair = Copair (Name (Bound 0), b) in
+        let copair = Copair (Name (Bound (0, None)), b) in
         Negative (MuTilde { p = producer; c = Negative copair })
       in
       Incomplete { p = new_producer; c = new_consumer }
     | Copair (a, Positive b) when not (is_val b) ->
       let new_producer = Positive b in
       let new_consumer =
-        let copair = Copair (a, Name (Bound 0)) in
+        let copair = Copair (a, Name (Bound (0, None))) in
         Negative (MuTilde { p = producer; c = Negative copair })
       in
       Incomplete { p = new_producer; c = new_consumer }
@@ -525,14 +539,14 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
     | prod, Copair (Negative a, b) when not (is_coval a) ->
       let new_consumer = Negative a in
       let new_producer =
-        let copair = Copair (Name (Bound 0), b) in
+        let copair = Copair (Name (Bound (0, None)), b) in
         Positive (Mu { c = Negative copair; p = Positive prod })
       in
       Incomplete { p = new_producer; c = new_consumer }
     | prod, Copair (a, Negative b) when not (is_coval b) ->
       let new_consumer = Negative b in
       let new_producer =
-        let copair = Copair (a, Name (Bound 0)) in
+        let copair = Copair (a, Name (Bound (0, None))) in
         Positive (Mu { c = Negative copair; p = Positive prod })
       in
       Incomplete { p = new_producer; c = new_consumer }
@@ -573,14 +587,14 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
     | Pair (Negative a, b), cons when not (is_coval a) ->
       let new_consumer = Negative a in
       let new_producer =
-        let pair = Pair (Name (Bound 0), b) in
+        let pair = Pair (Name (Bound (0, None)), b) in
         Positive (Mu { c = Negative cons; p = Positive pair })
       in
       Incomplete { p = new_producer; c = new_consumer }
     | Pair (a, Negative b), cons when not (is_coval b) ->
       let new_consumer = Negative b in
       let new_producer =
-        let pair = Pair (a, Name (Bound 0)) in
+        let pair = Pair (a, Name (Bound (0, None))) in
         Positive (Mu { c = Negative cons; p = Positive pair })
       in
       Incomplete { p = new_producer; c = new_consumer }
@@ -611,14 +625,14 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
     | Pair (Negative a, b) when not (is_coval a) ->
       let new_consumer = Negative a in
       let new_producer =
-        let pair = Pair (Name (Bound 0), b) in
+        let pair = Pair (Name (Bound (0, None)), b) in
         Positive (Mu { p = Positive pair; c = consumer })
       in
       Incomplete { p = new_producer; c = new_consumer }
     | Pair (a, Negative b) when not (is_coval b) ->
       let new_consumer = Negative b in
       let new_producer =
-        let pair = Pair (a, Name (Bound 0)) in
+        let pair = Pair (a, Name (Bound (0, None))) in
         Positive (Mu { p = Positive pair; c = consumer })
       in
       Incomplete { p = new_producer; c = new_consumer }
@@ -641,14 +655,14 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
     | Copair (Negative a, b) when not (is_coval a) ->
       let new_consumer = Negative a in
       let new_producer =
-        let copair = Copair (Name (Bound 0), b) in
+        let copair = Copair (Name (Bound (0, None)), b) in
         Positive (Mu { p = producer; c = Negative copair })
       in
       Incomplete { p = new_producer; c = new_consumer }
     | Copair (a, Negative b) when not (is_coval b) ->
       let new_consumer = Negative b in
       let new_producer =
-        let copair = Copair (a, Name (Bound 0)) in
+        let copair = Copair (a, Name (Bound (0, None))) in
         Positive (Mu { p = producer; c = Negative copair })
       in
       Incomplete { p = new_producer; c = new_consumer }

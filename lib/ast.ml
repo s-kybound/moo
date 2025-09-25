@@ -202,7 +202,7 @@ end
 module Core = struct
   type identifier =
     | Free of string
-    | Bound of int
+    | Bound of int * Type.polar_type option
 
   type producer =
     | Mu of cut
@@ -242,7 +242,10 @@ module Core = struct
     let show_identifier name =
       match name with
       | Free name -> name
-      | Bound n -> string_of_int n
+      | Bound (n, typ) ->
+        (match typ with
+         | None -> string_of_int n
+         | Some t -> Printf.sprintf "[%d : %s]" n (Type.Show.show_polar_type t))
     ;;
 
     let rec show_producer p =
@@ -292,7 +295,7 @@ module Core = struct
   module Converter = struct
     module S = Surface
 
-    type term_env = string list
+    type term_env = (string * Type.polar_type option) list
 
     let name_match = String.equal
     let empty_term_env : term_env = []
@@ -300,27 +303,27 @@ module Core = struct
     let lookup_identifier env n =
       let rec aux stack n depth =
         match stack with
-        | [] -> Free n
-        | n' :: stack' -> if name_match n n' then Bound depth else aux stack' n (depth + 1)
+        | [] -> Free n (* free variables have no type info *)
+        | (n', typ) :: stack' ->
+          if name_match n n' then Bound (depth, typ) else aux stack' n (depth + 1)
       in
       aux env n 0
     ;;
 
-    let push_name (v : S.name) env = v.name :: env
+    let push_name (v : S.name) env = (v.name, v.typ) :: env
 
     let rec convert_producer term_env p : producer =
       match p with
       | S.Mu (k, cut) -> Mu (convert_cut (push_name k term_env) cut)
       | S.Pair (a, b) -> Pair (convert_neutral term_env a, convert_neutral term_env b)
       | S.Cosplit (x, y, cut) ->
-        let x, y = x.name, y.name in
-        if name_match x y
+        if name_match x.name y.name
         then raise (Failure "Cosplit: name conflict in parameters")
         else (
           (* it is x first, then y, so that
            * x will be the first to be looked up (0)
            * then y (1) *)
-          let term_env' = x :: y :: term_env in
+          let term_env' = (x.name, x.typ) :: (y.name, y.typ) :: term_env in
           Cosplit (convert_cut term_env' cut))
       | S.Unit -> Unit
       | S.Codo cut -> Codo (convert_cut term_env cut)
@@ -329,11 +332,10 @@ module Core = struct
       match c with
       | S.MuTilde (v, cut) -> MuTilde (convert_cut (push_name v term_env) cut)
       | S.Split (x, y, cut) ->
-        let x, y = x.name, y.name in
-        if name_match x y
+        if name_match x.name y.name
         then raise (Failure "Split: name conflict in parameters")
         else (
-          let term_env' = x :: y :: term_env in
+          let term_env' = (x.name, x.typ) :: (y.name, y.typ) :: term_env in
           Split (convert_cut term_env' cut))
       | S.Copair (a, b) -> Copair (convert_neutral term_env a, convert_neutral term_env b)
       | S.Counit -> Counit

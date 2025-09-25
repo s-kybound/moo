@@ -1,5 +1,6 @@
 %{
-  open Ast.Surface
+  open Ast
+  open Surface
   open Parser_error.Parser
   let require_adjacent prev_end curr_start error_msg =
     if prev_end.Lexing.pos_cnum < curr_start.Lexing.pos_cnum then
