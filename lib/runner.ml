@@ -273,6 +273,12 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
         (Beta_reducer.beta_reduce_with_consumer 0 c cut)
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
+    (* any let is evaluated when the right is a covalue *)
+    | p, MuTilde cut when is_val p ->
+      Result.fold
+        (Beta_reducer.beta_reduce_with_producer 0 p cut)
+        ~ok:(fun cut -> Incomplete cut)
+        ~error:(fun exn -> Error exn)
     (* unit semantics *)
     | Unit, Do cut -> Incomplete cut
     (* counit semantics *)
@@ -318,7 +324,7 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
             ~ok:(fun cut -> Incomplete cut)
             ~error:(fun exn -> Error exn))
         ~error:(fun exn -> Error exn)
-    (* any value and mutilde *)
+    (* catchall for any value and mutilde *)
     | p, MuTilde cut ->
       Result.fold
         (Beta_reducer.beta_reduce_with_producer 0 p cut)
@@ -372,6 +378,9 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
         (Beta_reducer.beta_reduce_with_neutral 0 consumer cut)
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
+    | p when is_val p ->
+      let cut = { p = Positive p; c = consumer } in
+      Complete cut
     | Pair (Positive a, b) when not (is_val a) ->
       let new_producer = Positive a in
       let new_consumer =
@@ -399,6 +408,9 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
         (Beta_reducer.beta_reduce_with_neutral 0 producer cut)
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
+    | Copair (a, b) when is_val (Pair (a, b)) ->
+      let cut = { p = producer; c = Negative c } in
+      Complete cut
     | Copair (Positive a, b) when not (is_val a) ->
       let new_producer = Positive a in
       let new_consumer =
@@ -488,6 +500,12 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
         (Beta_reducer.beta_reduce_with_producer 0 p cut)
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
+    (* any letcc is evaluated when the right is a covalue *)
+    | Mu cut, c when is_coval c ->
+      Result.fold
+        (Beta_reducer.beta_reduce_with_consumer 0 c cut)
+        ~ok:(fun cut -> Incomplete cut)
+        ~error:(fun exn -> Error exn)
     (* counit semantics *)
     | Codo cut, Counit -> Incomplete cut
     (* unit semantics *)
@@ -533,7 +551,7 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
             ~ok:(fun cut -> Incomplete cut)
             ~error:(fun exn -> Error exn))
         ~error:(fun exn -> Error exn)
-    (* any covalue and mu *)
+    (* catchall for any covalue and mu *)
     | Mu cut, c ->
       Result.fold
         (Beta_reducer.beta_reduce_with_consumer 0 c cut)
@@ -587,6 +605,9 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
         (Beta_reducer.beta_reduce_with_neutral 0 consumer cut)
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
+    | Pair (a, b) when is_coval (Copair (a, b)) ->
+      let cut = { p = Positive p; c = consumer } in
+      Complete cut
     | Pair (Negative a, b) when not (is_coval a) ->
       let new_consumer = Negative a in
       let new_producer =
@@ -614,6 +635,9 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
         (Beta_reducer.beta_reduce_with_neutral 0 producer cut)
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
+    | c when is_coval c ->
+      let cut = { p = producer; c = Negative c } in
+      Complete cut
     | Copair (Negative a, b) when not (is_coval a) ->
       let new_consumer = Negative a in
       let new_producer =
