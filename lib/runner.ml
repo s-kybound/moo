@@ -385,6 +385,16 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
   ;;
 
   let step_once cut =
+    (* this is necessary to allow types such as
+     * (fun a a) to accept both positive and negative
+     * parameters in the future *)
+    let normalize cut =
+      match cut.p, cut.c with
+      | c, Positive p -> { p = Positive p; c }
+      | Negative n, p -> { p; c = Negative n }
+      | _ -> cut
+    in
+    let cut = normalize cut in
     match cut.p, cut.c with
     (* invalid steps *)
     | Name (Bound _), _ ->
@@ -576,6 +586,16 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
   ;;
 
   let step_once cut =
+    (* this is necessary to allow types such as
+     * (fun a a) to accept both positive and negative
+     * parameters in the future *)
+    let normalize cut =
+      match cut.p, cut.c with
+      | c, Positive p -> { p = Positive p; c }
+      | Negative n, p -> { p; c = Negative n }
+      | _ -> cut
+    in
+    let cut = normalize cut in
     match cut.p, cut.c with
     (* invalid steps *)
     | Name (Bound _), _ ->
