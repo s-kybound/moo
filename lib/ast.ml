@@ -1,38 +1,66 @@
+module Type = struct
+  type type_schema =
+    | Base of string
+    | Kind of string * string list
+
+  type abstract_type =
+    | Var of string
+    | Neg of abstract_type
+
+  type type_expr =
+    | Name of string
+    | PosProd of type_use * type_use
+    | NegProd of type_use * type_use
+    | KindInstantiation of string * type_use list
+
+  and type_use =
+    | Abstract of abstract_type
+    | Instantiated of polar_type
+
+  and polar_type =
+    | Pos of type_expr
+    | Neg of type_expr
+
+  module Show = struct
+    let show_type_schema ts =
+      match ts with
+      | Base s -> s
+      | Kind (k, params) -> Printf.sprintf "(%s %s)" k (String.concat " " params)
+    ;;
+
+    let rec show_abstract_type at =
+      match at with
+      | Var s -> s
+      | Neg at' -> Printf.sprintf "~%s" (show_abstract_type at')
+    ;;
+
+    let rec show_type_expr te =
+      match te with
+      | Name s -> s
+      | PosProd (tu1, tu2) ->
+        Printf.sprintf "(* %s %s)" (show_type_use tu1) (show_type_use tu2)
+      | NegProd (tu1, tu2) ->
+        Printf.sprintf "(& %s %s)" (show_type_use tu1) (show_type_use tu2)
+      | KindInstantiation (k, args) ->
+        Printf.sprintf "(%s %s)" k (String.concat " " (List.map show_type_use args))
+
+    and show_type_use tu =
+      match tu with
+      | Abstract at -> show_abstract_type at
+      | Instantiated pt -> show_polar_type pt
+
+    and show_polar_type pt =
+      match pt with
+      | Pos te -> Printf.sprintf "%s+" (show_type_expr te)
+      | Neg te -> Printf.sprintf "%s-" (show_type_expr te)
+    ;;
+  end
+end
+
 (* This is the user facing AST of moo. 
  * The variables should be converted into using de Brujin indices
  * by a first pass before further execution. *)
 module Surface = struct
-  module Type = struct
-    (* a definition of a type in
-    * the typedef *)
-    type type_schema =
-      | Base of string
-      | Kind of string * string list
-
-    type abstract_type =
-      | Var of string
-      | Neg of abstract_type
-
-    type type_expr =
-      | Name of string
-        (* why not abstract type?
-                      * then i could define a type like (wrap A) = A,
-                      * and when (wrap A+) is subbed out we get A+ ...
-                      * but recall that we only allow base_types in
-                      * the type expr! *)
-      | PosProd of type_use * type_use
-      | NegProd of type_use * type_use
-      | KindInstantiation of string * type_use list
-
-    and type_use =
-      | Abstract of abstract_type
-      | Instantiated of polar_type
-
-    and polar_type =
-      | Pos of type_expr
-      | Neg of type_expr
-  end
-
   type name =
     { name : string
     ; typ : Type.polar_type option
@@ -76,8 +104,11 @@ module Surface = struct
    * but Core will look closer to product-mu-mu calculus.
   *)
   module Show = struct
-    (* for now, don't show the types *)
-    let show_name n = n.name
+    let show_name n =
+      match n.typ with
+      | None -> n.name
+      | Some typ -> Printf.sprintf "[%s : %s]" n.name (Type.Show.show_polar_type typ)
+    ;;
 
     let rec show_producer p =
       match p with
@@ -109,7 +140,24 @@ module Surface = struct
       | Negative c -> show_consumer c
     ;;
 
-    let show t = show_cut t.main
+    let show_definition def =
+      match def with
+      | Producer (name, body) ->
+        Printf.sprintf "defp %s = %s;;" (show_name name) (show_producer body)
+      | Consumer (name, body) ->
+        Printf.sprintf "defc %s = %s;;" (show_name name) (show_consumer body)
+      | TypeDef (schema, expr) ->
+        Printf.sprintf
+          "type %s = %s;;"
+          (Type.Show.show_type_schema schema)
+          (Type.Show.show_type_expr expr)
+    ;;
+
+    let show t =
+      let defs_str = String.concat "\n" (List.map show_definition t.definitions) in
+      let main_str = show_cut t.main in
+      if defs_str = "" then main_str else Printf.sprintf "%s\n\n%s" defs_str main_str
+    ;;
   end
 
   module Producer = struct
@@ -143,9 +191,9 @@ module Surface = struct
   let program definitions main = { definitions; main }
 end
 
-(* Core AST uses de Bruijn indices for bound variables/covariables.
+(* Core AST uses de Brujin indices for bound variables/covariables.
  * 
- * Both names and conames are converted to de Bruijn indices, sharing
+ * Both names and conames are converted to de Brujin indices, sharing
  * a single binding environment. Each binder (μ, μ̃, cosplit, split) 
  * introduces variables at indices 0, 1, etc., with outer bindings
  * shifted accordingly.
@@ -183,6 +231,7 @@ module Core = struct
   type definition =
     | Producer of string * producer
     | Consumer of string * consumer
+    | TypeDef of Type.type_schema * Type.type_expr
 
   type t =
     { definitions : definition list
@@ -190,7 +239,7 @@ module Core = struct
     }
 
   module Show = struct
-    let show_identifer name =
+    let show_identifier name =
       match name with
       | Free name -> name
       | Bound n -> string_of_int n
@@ -217,22 +266,36 @@ module Core = struct
 
     and show_neutral n =
       match n with
-      | Name n -> show_identifer n
+      | Name n -> show_identifier n
       | Positive p -> show_producer p
       | Negative c -> show_consumer c
     ;;
 
-    let show t = show_cut t.main
+    let show_definition def =
+      match def with
+      | Producer (name, body) -> Printf.sprintf "defp %s = %s;;" name (show_producer body)
+      | Consumer (name, body) -> Printf.sprintf "defc %s = %s;;" name (show_consumer body)
+      | TypeDef (schema, expr) ->
+        Printf.sprintf
+          "type %s = %s;;"
+          (Type.Show.show_type_schema schema)
+          (Type.Show.show_type_expr expr)
+    ;;
+
+    let show t =
+      let defs_str = String.concat "\n" (List.map show_definition t.definitions) in
+      let main_str = show_cut t.main in
+      if defs_str = "" then main_str else Printf.sprintf "%s\n\n%s" defs_str main_str
+    ;;
   end
 
   module Converter = struct
     module S = Surface
 
-    (* our environment tracks a single combined stack of names and conames *)
-    type env = string list
+    type term_env = string list
 
     let name_match = String.equal
-    let empty_env : env = []
+    let empty_term_env : term_env = []
 
     let lookup_identifier env n =
       let rec aux stack n depth =
@@ -245,10 +308,10 @@ module Core = struct
 
     let push_name (v : S.name) env = v.name :: env
 
-    let rec convert_producer env p : producer =
+    let rec convert_producer term_env p : producer =
       match p with
-      | S.Mu (k, cut) -> Mu (convert_cut (push_name k env) cut)
-      | S.Pair (a, b) -> Pair (convert_neutral env a, convert_neutral env b)
+      | S.Mu (k, cut) -> Mu (convert_cut (push_name k term_env) cut)
+      | S.Pair (a, b) -> Pair (convert_neutral term_env a, convert_neutral term_env b)
       | S.Cosplit (x, y, cut) ->
         let x, y = x.name, y.name in
         if name_match x y
@@ -257,55 +320,47 @@ module Core = struct
           (* it is x first, then y, so that
            * x will be the first to be looked up (0)
            * then y (1) *)
-          let env' = x :: y :: env in
-          Cosplit (convert_cut env' cut))
+          let term_env' = x :: y :: term_env in
+          Cosplit (convert_cut term_env' cut))
       | S.Unit -> Unit
-      | S.Codo cut -> Codo (convert_cut env cut)
+      | S.Codo cut -> Codo (convert_cut term_env cut)
 
-    and convert_consumer env c : consumer =
+    and convert_consumer term_env c : consumer =
       match c with
-      | S.MuTilde (v, cut) -> MuTilde (convert_cut (push_name v env) cut)
+      | S.MuTilde (v, cut) -> MuTilde (convert_cut (push_name v term_env) cut)
       | S.Split (x, y, cut) ->
         let x, y = x.name, y.name in
         if name_match x y
         then raise (Failure "Split: name conflict in parameters")
         else (
-          let env' = x :: y :: env in
-          Split (convert_cut env' cut))
-      | S.Copair (a, b) -> Copair (convert_neutral env a, convert_neutral env b)
+          let term_env' = x :: y :: term_env in
+          Split (convert_cut term_env' cut))
+      | S.Copair (a, b) -> Copair (convert_neutral term_env a, convert_neutral term_env b)
       | S.Counit -> Counit
-      | S.Do cut -> Do (convert_cut env cut)
+      | S.Do cut -> Do (convert_cut term_env cut)
 
-    and convert_cut env cut : cut =
-      { p = convert_neutral env cut.p; c = convert_neutral env cut.c }
+    and convert_cut term_env cut : cut =
+      { p = convert_neutral term_env cut.p; c = convert_neutral term_env cut.c }
 
-    and convert_neutral env neutral : neutral =
+    and convert_neutral term_env neutral : neutral =
       match neutral with
-      | S.Name n -> Name (lookup_identifier env n)
-      | S.Positive p -> Positive (convert_producer env p)
-      | S.Negative c -> Negative (convert_consumer env c)
+      | S.Name n -> Name (lookup_identifier term_env n)
+      | S.Positive p -> Positive (convert_producer term_env p)
+      | S.Negative c -> Negative (convert_consumer term_env c)
     ;;
 
     (* definitions are evaluated without environment *)
     let convert_definition definition : definition =
       match definition with
-      | S.Producer (n, p) -> Producer (n.name, convert_producer empty_env p)
-      | S.Consumer (cn, c) -> Consumer (cn.name, convert_consumer empty_env c)
-      | S.TypeDef _ -> assert false
+      | S.Producer (n, p) -> Producer (n.name, convert_producer empty_term_env p)
+      | S.Consumer (cn, c) -> Consumer (cn.name, convert_consumer empty_term_env c)
+      | S.TypeDef (schema, expr) -> TypeDef (schema, expr)
     ;;
   end
 
   let convert (t : Surface.t) : t =
-    let removed_types =
-      List.filter
-        (fun x ->
-           match x with
-           | Surface.TypeDef _ -> false
-           | _ -> true)
-        t.definitions
-    in
-    { definitions = List.map Converter.convert_definition removed_types
-    ; main = Converter.convert_cut Converter.empty_env t.main
+    { definitions = List.map Converter.convert_definition t.definitions
+    ; main = Converter.convert_cut Converter.empty_term_env t.main
     }
   ;;
 
