@@ -185,8 +185,6 @@ module type EVALUATION_STRATEGY = sig
   val eval : Env.t -> t -> cut
 end
 
-(* Lazy judgements only care if the value is in computable shape.
- * otherwise it does whatever it wants. *)
 module Lazy : JUDGEMENTS = struct
   let name = "lazy"
 
@@ -209,10 +207,6 @@ module Lazy : JUDGEMENTS = struct
   ;;
 end
 
-(* eager judgements ensure that all values/covalues within
- * a constructor are in principal form before evaluating on it. 
- * in CBV, this also includes the covalue judgement, and same 
- * for CBN and value judgement. *)
 module Eager : JUDGEMENTS = struct
   let name = "eager"
 
@@ -221,7 +215,7 @@ module Eager : JUDGEMENTS = struct
       match n with
       | Name (Free _) -> true
       | Name (Bound _) -> assert false
-      | Negative c -> is_coval c
+      | Negative _ -> true (* any consumer is a value. *)
       | Positive p -> is_val p
     in
     match p with
@@ -230,13 +224,14 @@ module Eager : JUDGEMENTS = struct
     | Cosplit _ -> true
     | Unit -> true
     | Codo _ -> true
+  ;;
 
-  and is_coval (c : consumer) : bool =
+  let rec is_coval (c : consumer) : bool =
     let is_coval_neutral n =
       match n with
       | Name (Free _) -> true
       | Name (Bound _) -> assert false
-      | Positive p -> is_val p
+      | Positive _ -> true (* any producer is a covalue. *)
       | Negative c -> is_coval c
     in
     match c with
@@ -256,7 +251,6 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
 
   let name = Printf.sprintf "%s-call-by-value" J.name
   let is_val = J.is_val
-  let is_coval = J.is_coval
 
   let producer_consumer_step p c =
     match p, c with
@@ -290,7 +284,7 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
     (* counit semantics *)
     | Codo cut, Counit -> Incomplete cut
     (* pair semantics *)
-    (* pair destruction *)
+    (* canonical pair destruction *)
     | Pair (a, b), Split cut when is_val (Pair (a, b)) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 a cut)
@@ -308,25 +302,11 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
         Negative (MuTilde { p = Positive pair; c = Negative cons })
       in
       Incomplete { p = new_producer; c = new_consumer }
-    | Pair (Negative a, b), cons when not (is_coval a) ->
-      let new_consumer = Negative a in
-      let new_producer =
-        let pair = Pair (Name (Bound 0), b) in
-        Positive (Mu { p = Positive pair; c = Negative cons })
-      in
-      Incomplete { p = new_producer; c = new_consumer }
     | Pair (a, Positive b), cons when not (is_val b) ->
       let new_producer = Positive b in
       let new_consumer =
         let pair = Pair (a, Name (Bound 0)) in
         Negative (MuTilde { p = Positive pair; c = Negative cons })
-      in
-      Incomplete { p = new_producer; c = new_consumer }
-    | Pair (a, Negative b), cons when not (is_coval b) ->
-      let new_consumer = Negative b in
-      let new_producer =
-        let pair = Pair (a, Name (Bound 0)) in
-        Positive (Mu { p = Positive pair; c = Negative cons })
       in
       Incomplete { p = new_producer; c = new_consumer }
     (* any pair below is already a value.
@@ -351,9 +331,9 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
     (* copair semantics - any potential simplification is only done
-     * when the left side is completely simplified. *)
-    (* copair destruction *)
-    | Cosplit cut, Copair (a, b) when is_coval (Copair (a, b)) ->
+     * when the left side is completely simplified. in order to treat
+     * the copair using is_val, we pretend it is a pair *)
+    | Cosplit cut, Copair (a, b) when is_val (Pair (a, b)) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 a cut)
         ~ok:(fun cut ->
@@ -370,25 +350,11 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
         Negative (MuTilde { p = Positive prod; c = Negative copair })
       in
       Incomplete { p = new_producer; c = new_consumer }
-    | prod, Copair (Negative a, b) when not (is_coval a) ->
-      let new_consumer = Negative a in
-      let new_producer =
-        let copair = Copair (Name (Bound 0), b) in
-        Positive (Mu { c = Negative copair; p = Positive prod })
-      in
-      Incomplete { p = new_producer; c = new_consumer }
     | prod, Copair (a, Positive b) when not (is_val b) ->
       let new_producer = Positive b in
       let new_consumer =
         let copair = Copair (a, Name (Bound 0)) in
         Negative (MuTilde { p = Positive prod; c = Negative copair })
-      in
-      Incomplete { p = new_producer; c = new_consumer }
-    | prod, Copair (a, Negative b) when not (is_coval b) ->
-      let new_consumer = Negative b in
-      let new_producer =
-        let copair = Copair (a, Name (Bound 0)) in
-        Positive (Mu { c = Negative copair; p = Positive prod })
       in
       Incomplete { p = new_producer; c = new_consumer }
     (* catch-all copair destruction in case the
@@ -422,25 +388,11 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
         Negative (MuTilde { p = Positive pair; c = consumer })
       in
       Incomplete { p = new_producer; c = new_consumer }
-    | Pair (Negative a, b) when not (is_coval a) ->
-      let new_consumer = Negative a in
-      let new_producer =
-        let pair = Pair (Name (Bound 0), b) in
-        Positive (Mu { p = Positive pair; c = consumer })
-      in
-      Incomplete { p = new_producer; c = new_consumer }
     | Pair (a, Positive b) when not (is_val b) ->
       let new_producer = Positive b in
       let new_consumer =
         let pair = Pair (a, Name (Bound 0)) in
         Negative (MuTilde { p = Positive pair; c = consumer })
-      in
-      Incomplete { p = new_producer; c = new_consumer }
-    | Pair (a, Negative b) when not (is_coval b) ->
-      let new_consumer = Negative b in
-      let new_producer =
-        let pair = Pair (a, Name (Bound 0)) in
-        Positive (Mu { p = Positive pair; c = consumer })
       in
       Incomplete { p = new_producer; c = new_consumer }
     | p ->
@@ -456,7 +408,7 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
         (Beta_reducer.beta_reduce_with_neutral 0 producer cut)
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
-    | Copair (a, b) when is_coval (Copair (a, b)) ->
+    | Copair (a, b) when is_val (Pair (a, b)) ->
       let cut = { p = producer; c = Negative c } in
       Complete cut
     | Copair (Positive a, b) when not (is_val a) ->
@@ -466,25 +418,11 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
         Negative (MuTilde { p = producer; c = Negative copair })
       in
       Incomplete { p = new_producer; c = new_consumer }
-    | Copair (Negative a, b) when not (is_coval a) ->
-      let new_consumer = Negative a in
-      let new_producer =
-        let copair = Copair (Name (Bound 0), b) in
-        Positive (Mu { p = producer; c = Negative copair })
-      in
-      Incomplete { p = new_producer; c = new_consumer }
     | Copair (a, Positive b) when not (is_val b) ->
       let new_producer = Positive b in
       let new_consumer =
         let copair = Copair (a, Name (Bound 0)) in
         Negative (MuTilde { p = producer; c = Negative copair })
-      in
-      Incomplete { p = new_producer; c = new_consumer }
-    | Copair (a, Negative b) when not (is_coval b) ->
-      let new_consumer = Negative b in
-      let new_producer =
-        let copair = Copair (a, Name (Bound 0)) in
-        Positive (Mu { p = producer; c = Negative copair })
       in
       Incomplete { p = new_producer; c = new_consumer }
     | c ->
