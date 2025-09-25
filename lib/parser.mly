@@ -13,6 +13,8 @@
 %token LETC LETP (* mu, mu-tilde abstactions *)
 %token PAIR SPLIT (* pair producer and its split consumer *)
 %token COSPLIT COPAIR (* cosplit producer and its copair consumer *)
+%token UNIT DO (* unit producer and its do consumer *)
+%token COUNIT CODO (* counit consumer and its codo producer *)
 %token LTRARROW RTLARROW IN (* statement syntax *)
 %token DEFC DEFP (* top-level definitions *)
 %token EQUALS DELIMITER (* top-level definitions *)
@@ -77,6 +79,16 @@ statement:
              b=var_intro       
     RTLARROW c=either IN m=statement    { cut
                                             (Positive (Producer.cosplit a b m))
+                                            c
+                                        }
+  | DO RTLARROW p=either 
+    IN m=statement                      { cut
+                                            p
+                                            (Negative (Consumer.do_ m))
+                                        }
+  | CODO RTLARROW c=either 
+    IN m=statement                      { cut
+                                            (Positive (Producer.codo m))
                                             c
                                         }
   | cut                                 { $1 }
@@ -216,10 +228,22 @@ cosplit:
   | LPAREN c=cosplit_body RPAREN        { c }
   | LPAREN cosplit_body error           { raisef $startpos($1) $endpos($2) "unclosed cosplit: expected ')' to close expression started here" }
 
+unit:
+  | UNIT                                { Unit }
+
+codo_body:
+  | CODO LTRARROW s=statement           { Producer.codo s }
+
+codo:
+  | LPAREN c=codo_body RPAREN           { c }
+  | LPAREN codo_body error              { raisef $startpos($1) $endpos($2) "unclosed codo: expected ')' to close expression started here" }
+
 producer:
   | letc                                { $1 }
   | product                             { $1 }
   | cosplit                             { $1 }
+  | unit                                { $1 }
+  | codo                                { $1 }
 
 letp_body:
   | LETP v=var_intro 
@@ -253,9 +277,20 @@ coproduct:
   | LPAREN c=coproduct_body RPAREN      { c }
   | LPAREN coproduct_body error         { raisef $startpos($1) $endpos($2) "unclosed copair: expected ')' to close expression started here" }
 
+counit:
+  | COUNIT                              { Counit }
+
+do_body:
+  | DO LTRARROW s=statement             { Consumer.do_ s }
+
+do_:
+  | LPAREN d=do_body RPAREN             { d }
+  | LPAREN do_body error                { raisef $startpos($1) $endpos($2) "unclosed do: expected ')' to close expression started here" }
+
 consumer: 
   | letp                                { $1 }
   | split                               { $1 }
   | coproduct                           { $1 }
-  | error                               { raisef $startpos $endpos "syntax error: expected consumer (let, split, or copair)" }
+  | counit                              { $1 }
+  | do_                                 { $1 }
 

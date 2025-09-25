@@ -13,7 +13,9 @@
       ("in",      IN);
       ("defp",    DEFP);
       ("defc",    DEFC);
-      ("type",    TYPE)
+      ("type",    TYPE);
+      ("do",      DO);
+      ("codo",    CODO);
     ] in
     keywords
     |> List.to_seq
@@ -40,6 +42,8 @@ rule token = parse
   | newline        { Lexing.new_line lexbuf; token lexbuf }
   | "{*"           { skip_comment 1 lexbuf; token lexbuf }
   | "*}"           { raisef lexbuf "Unmatched *}. Was a comment erased incorrectly?" }
+  | "()"           { UNIT }
+  | "'()"          { COUNIT }
   | "->"           { LTRARROW }
   | "<-"           { RTLARROW }
   | '='            { EQUALS }

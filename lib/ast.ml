@@ -42,11 +42,15 @@ module Surface = struct
     | Mu of name * cut
     | Pair of neutral * neutral
     | Cosplit of name * name * cut
+    | Unit
+    | Codo of cut
 
   and consumer =
     | MuTilde of name * cut
     | Split of name * name * cut
     | Copair of neutral * neutral
+    | Counit
+    | Do of cut
 
   and cut =
     { p : neutral
@@ -82,6 +86,8 @@ module Surface = struct
       | Pair (a, b) -> Printf.sprintf "(pair %s %s)" (show_neutral a) (show_neutral b)
       | Cosplit (a, b, cut) ->
         Printf.sprintf "(cosplit %s %s %s)" (show_name a) (show_name b) (show_cut cut)
+      | Unit -> "()"
+      | Codo cut -> Printf.sprintf "(codo %s)" (show_cut cut)
 
     and show_consumer c =
       match c with
@@ -90,6 +96,8 @@ module Surface = struct
       | Split (a, b, cut) ->
         Printf.sprintf "(split %s %s %s)" (show_name a) (show_name b) (show_cut cut)
       | Copair (a, b) -> Printf.sprintf "(copair %s %s)" (show_neutral a) (show_neutral b)
+      | Counit -> "'()"
+      | Do cut -> Printf.sprintf "(do %s)" (show_cut cut)
 
     and show_cut (cut : cut) =
       Printf.sprintf "[%s %s]" (show_neutral cut.p) (show_neutral cut.c)
@@ -108,12 +116,16 @@ module Surface = struct
     let mu coname cut = Mu (coname, cut)
     let pair a b = Pair (a, b)
     let cosplit a b cut = Cosplit (a, b, cut)
+    let unit = Unit
+    let codo cut = Codo cut
   end
 
   module Consumer = struct
     let mutilde name cut = MuTilde (name, cut)
     let split a b cut = Split (a, b, cut)
     let copair a b = Copair (a, b)
+    let counit = Counit
+    let do_ cut = Do cut
   end
 
   module Neutral = struct
@@ -148,11 +160,15 @@ module Core = struct
     | Mu of cut
     | Pair of neutral * neutral
     | Cosplit of cut
+    | Unit
+    | Codo of cut
 
   and consumer =
     | MuTilde of cut
     | Split of cut
     | Copair of neutral * neutral
+    | Counit
+    | Do of cut
 
   and cut =
     { p : neutral
@@ -185,12 +201,16 @@ module Core = struct
       | Mu cut -> Printf.sprintf "(μ.%s)" (show_cut cut)
       | Pair (a, b) -> Printf.sprintf "(%s * %s)" (show_neutral a) (show_neutral b)
       | Cosplit cut -> Printf.sprintf "((0 & 1).%s)" (show_cut cut)
+      | Unit -> "()"
+      | Codo cut -> Printf.sprintf "(codo %s)" (show_cut cut)
 
     and show_consumer c =
       match c with
       | MuTilde cut -> Printf.sprintf "(μ̃.%s)" (show_cut cut)
       | Split cut -> Printf.sprintf "((0 * 1).%s)" (show_cut cut)
       | Copair (a, b) -> Printf.sprintf "(%s & %s)" (show_neutral a) (show_neutral b)
+      | Counit -> "'()"
+      | Do cut -> Printf.sprintf "(do %s)" (show_cut cut)
 
     and show_cut (cut : cut) =
       Printf.sprintf "<%s|%s>" (show_neutral cut.p) (show_neutral cut.c)
@@ -239,6 +259,8 @@ module Core = struct
            * then y (1) *)
           let env' = x :: y :: env in
           Cosplit (convert_cut env' cut))
+      | S.Unit -> Unit
+      | S.Codo cut -> Codo (convert_cut env cut)
 
     and convert_consumer env c : consumer =
       match c with
@@ -251,6 +273,8 @@ module Core = struct
           let env' = x :: y :: env in
           Split (convert_cut env' cut))
       | S.Copair (a, b) -> Copair (convert_neutral env a, convert_neutral env b)
+      | S.Counit -> Counit
+      | S.Do cut -> Do (convert_cut env cut)
 
     and convert_cut env cut : cut =
       { p = convert_neutral env cut.p; c = convert_neutral env cut.c }

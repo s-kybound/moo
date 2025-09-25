@@ -17,6 +17,8 @@ end = struct
       | Mu _ -> 1
       | Pair _ -> 0
       | Cosplit _ -> 2
+      | Unit -> 0
+      | Codo _ -> 0
     ;;
 
     let binding_arity_consumer c =
@@ -24,6 +26,8 @@ end = struct
       | MuTilde _ -> 1
       | Split _ -> 2
       | Copair _ -> 0
+      | Counit -> 0
+      | Do _ -> 0
     ;;
 
     let shift_index_under_producer index producer =
@@ -44,6 +48,8 @@ end = struct
     | Pair (a, b) ->
       Pair (subst_neutral_in_neutral index term a, subst_neutral_in_neutral index term b)
     | Cosplit cut -> Cosplit (subst_neutral_in_cut new_index term cut)
+    | Unit -> Unit
+    | Codo cut -> Codo (subst_neutral_in_cut new_index term cut)
 
   and subst_neutral_in_consumer (index : int) (term : neutral) (target : consumer)
     : consumer
@@ -54,6 +60,8 @@ end = struct
     | Split cut -> Split (subst_neutral_in_cut new_index term cut)
     | Copair (a, b) ->
       Copair (subst_neutral_in_neutral index term a, subst_neutral_in_neutral index term b)
+    | Counit -> Counit
+    | Do cut -> Do (subst_neutral_in_cut new_index term cut)
 
   and subst_neutral_in_cut (index : int) (term : neutral) (target : cut) : cut =
     { p = subst_neutral_in_neutral index term target.p
@@ -109,12 +117,16 @@ module Env = struct
       | Mu cut -> Mu (substitute_cut env cut)
       | Pair (a, b) -> Pair (substitute_neutral env a, substitute_neutral env b)
       | Cosplit cut -> Cosplit (substitute_cut env cut)
+      | Unit -> Unit
+      | Codo cut -> Codo (substitute_cut env cut)
 
     and substitute_consumer env c =
       match c with
       | MuTilde cut -> MuTilde (substitute_cut env cut)
       | Split cut -> Split (substitute_cut env cut)
       | Copair (a, b) -> Copair (substitute_neutral env a, substitute_neutral env b)
+      | Counit -> Counit
+      | Do cut -> Do (substitute_cut env cut)
 
     and substitute_cut env cut =
       { p = substitute_neutral env cut.p; c = substitute_neutral env cut.c }
@@ -181,6 +193,8 @@ module Lazy : JUDGEMENTS = struct
     | Mu _ -> false
     | Pair _ -> true
     | Cosplit _ -> true
+    | Unit -> true
+    | Codo _ -> true
   ;;
 
   let is_coval (c : consumer) : bool =
@@ -188,6 +202,8 @@ module Lazy : JUDGEMENTS = struct
     | MuTilde _ -> false
     | Copair _ -> true
     | Split _ -> true
+    | Counit -> true
+    | Do _ -> true
   ;;
 end
 
@@ -206,6 +222,8 @@ module Eager : JUDGEMENTS = struct
     | Mu _ -> false
     | Pair (a, b) -> is_val_neutral a && is_val_neutral b
     | Cosplit _ -> true
+    | Unit -> true
+    | Codo _ -> true
   ;;
 
   let rec is_coval (c : consumer) : bool =
@@ -220,6 +238,8 @@ module Eager : JUDGEMENTS = struct
     | MuTilde _ -> false
     | Copair (a, b) -> is_coval_neutral a && is_coval_neutral b
     | Split _ -> true
+    | Counit -> true
+    | Do _ -> true
   ;;
 end
 
@@ -236,13 +256,27 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
     match p, c with
     (* encode type errors *)
     | Pair _, Copair _ -> Error (Failure "type error: A*B producer, C&D consumer")
+    | Pair _, Counit -> Error (Failure "type error: A*B producer, counit consumer")
+    | Pair _, Do _ -> Error (Failure "type error: A*B producer, unit consumer")
     | Cosplit _, Split _ -> Error (Failure "type error: A&B producer, C*D consumer")
+    | Cosplit _, Counit -> Error (Failure "type error: A&B producer, counit consumer")
+    | Cosplit _, Do _ -> Error (Failure "type error: A&B producer, unit consumer")
+    | Unit, Copair _ -> Error (Failure "type error; unit producer, A&B consumer")
+    | Unit, Split _ -> Error (Failure "type error; unit producer, A*B consumer")
+    | Unit, Counit -> Error (Failure "type error; unit producer, counit consumer")
+    | Codo _, Copair _ -> Error (Failure "type error: counit producer, A&B consumer")
+    | Codo _, Split _ -> Error (Failure "type error: counit producer, A*B consumer")
+    | Codo _, Do _ -> Error (Failure "type error: counit producer, unit consumer")
     (* any letcc is immediately evaluated *)
     | Mu cut, c ->
       Result.fold
         (Beta_reducer.beta_reduce_with_consumer 0 c cut)
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
+    (* unit semantics *)
+    | Unit, Do cut -> Incomplete cut
+    (* counit semantics *)
+    | Codo cut, Counit -> Incomplete cut
     (* pair semantics *)
     (* canonical pair destruction *)
     | Pair (a, b), Split cut when is_val (Pair (a, b)) ->
@@ -437,13 +471,27 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
     match p, c with
     (* encode type errors *)
     | Pair _, Copair _ -> Error (Failure "type error: A*B producer, C&D consumer")
+    | Pair _, Counit -> Error (Failure "type error: A*B producer, counit consumer")
+    | Pair _, Do _ -> Error (Failure "type error: A*B producer, unit consumer")
     | Cosplit _, Split _ -> Error (Failure "type error: A&B producer, C*D consumer")
+    | Cosplit _, Counit -> Error (Failure "type error: A&B producer, counit consumer")
+    | Cosplit _, Do _ -> Error (Failure "type error: A&B producer, unit consumer")
+    | Unit, Copair _ -> Error (Failure "type error; unit producer, A&B consumer")
+    | Unit, Split _ -> Error (Failure "type error; unit producer, A*B consumer")
+    | Unit, Counit -> Error (Failure "type error; unit producer, counit consumer")
+    | Codo _, Copair _ -> Error (Failure "type error: counit producer, A&B consumer")
+    | Codo _, Split _ -> Error (Failure "type error: counit producer, A*B consumer")
+    | Codo _, Do _ -> Error (Failure "type error: counit producer, unit consumer")
     (* any let is immediately evaluated *)
     | p, MuTilde cut ->
       Result.fold
         (Beta_reducer.beta_reduce_with_producer 0 p cut)
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
+    (* counit semantics *)
+    | Codo cut, Counit -> Incomplete cut
+    (* unit semantics *)
+    | Unit, Do cut -> Incomplete cut
     (* copair semantics *)
     (* canonical copair destruction *)
     | Cosplit cut, Copair (a, b) when is_coval (Copair (a, b)) ->
