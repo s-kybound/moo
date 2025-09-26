@@ -94,6 +94,7 @@ module State = struct
   ;;
 end
 
+let print_ast ast = Printf.printf "%s\n%!" (Core.Show.show ast)
 let print_result result = Printf.printf "=> %s\n%!" (Core.Show.show_cut result)
 let print_error msg = Printf.eprintf "Error: %s\n%!" msg
 let get_ast str = str |> Reader.of_string ~filename:"REPL" |> Core.convert
@@ -104,6 +105,14 @@ let parse_and_eval input =
     let core_ast = get_ast input in
     let result = Strategy.eval !State.current_environment core_ast in
     print_result result
+  with
+  | exn -> print_error (Printexc.to_string exn)
+;;
+
+let parse_and_show input =
+  try
+    let core_ast = get_ast input in
+    print_ast core_ast
   with
   | exn -> print_error (Printexc.to_string exn)
 ;;
@@ -249,8 +258,7 @@ let rec repl_loop () =
   | Some line when String.starts_with ~prefix:":show " line ->
     add_to_history line;
     let expr = String.sub line 6 (String.length line - 6) |> String.trim in
-    let ast = get_ast expr in
-    print_result ast.main;
+    parse_and_show expr;
     repl_loop ()
   | Some line when String.starts_with ~prefix:":load " line ->
     add_to_history line;

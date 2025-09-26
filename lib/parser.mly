@@ -1,6 +1,5 @@
 %{
-  open Ast
-  open Surface
+  open Ast.Surface
   open Parser_error.Parser
   let require_adjacent prev_end curr_start error_msg =
     if prev_end.Lexing.pos_cnum < curr_start.Lexing.pos_cnum then
@@ -166,11 +165,11 @@ base_type(use_rule):
 polar_type(use_rule):
   | b=base_type(use_rule) PLUS          { 
                                           require_adjacent $endpos(b) $startpos($2) "'+' must immediately follow the type (no spaces)"; 
-                                          Type.Pos b
+                                          Type.Plus b
                                         }
   | b=base_type(use_rule) MINUS         { 
                                           require_adjacent $endpos(b) $startpos($2) "'-' must immediately follow the type (no spaces)"; 
-                                          Type.Neg b
+                                          Type.Minus b
                                         }
 
 typed_var_body:
