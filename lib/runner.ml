@@ -45,10 +45,11 @@ end = struct
     =
     let new_index = Utils.shift_index_under_producer index target in
     match target with
-    | Mu cut -> Mu (subst_neutral_in_cut new_index term cut)
+    | Mu (cut, typ) -> Mu (subst_neutral_in_cut new_index term cut, typ)
     | Pair (a, b) ->
       Pair (subst_neutral_in_neutral index term a, subst_neutral_in_neutral index term b)
-    | Cosplit cut -> Cosplit (subst_neutral_in_cut new_index term cut)
+    | Cosplit (cut, typ1, typ2) ->
+      Cosplit (subst_neutral_in_cut new_index term cut, typ1, typ2)
     | Unit -> Unit
     | Codo cut -> Codo (subst_neutral_in_cut new_index term cut)
 
@@ -57,8 +58,9 @@ end = struct
     =
     let new_index = Utils.shift_index_under_consumer index target in
     match target with
-    | MuTilde cut -> MuTilde (subst_neutral_in_cut new_index term cut)
-    | Split cut -> Split (subst_neutral_in_cut new_index term cut)
+    | MuTilde (cut, typ) -> MuTilde (subst_neutral_in_cut new_index term cut, typ)
+    | Split (cut, typ1, typ2) ->
+      Split (subst_neutral_in_cut new_index term cut, typ1, typ2)
     | Copair (a, b) ->
       Copair (subst_neutral_in_neutral index term a, subst_neutral_in_neutral index term b)
     | Counit -> Counit
@@ -207,13 +209,13 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
     | Codo _, Split _ -> Error (Failure "type error: counit producer, A*B consumer")
     | Codo _, Do _ -> Error (Failure "type error: counit producer, unit consumer")
     (* any letcc is immediately evaluated *)
-    | Mu cut, c ->
+    | Mu (cut, _), c ->
       Result.fold
         (Beta_reducer.beta_reduce_with_consumer 0 c cut)
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
     (* any let is evaluated when the right is a covalue *)
-    | p, MuTilde cut when is_val p ->
+    | p, MuTilde (cut, _) when is_val p ->
       Result.fold
         (Beta_reducer.beta_reduce_with_producer 0 p cut)
         ~ok:(fun cut -> Incomplete cut)
@@ -224,7 +226,7 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
     | Codo cut, Counit -> Incomplete cut
     (* pair semantics *)
     (* canonical pair destruction *)
-    | Pair (a, b), Split cut when is_val (Pair (a, b)) ->
+    | Pair (a, b), Split (cut, _, _) when is_val (Pair (a, b)) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 a cut)
         ~ok:(fun cut ->
@@ -238,14 +240,14 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
       let new_producer = Positive a in
       let new_consumer =
         let pair = Pair (Name (Bound (0, None)), b) in
-        Negative (MuTilde { p = Positive pair; c = Negative cons })
+        Negative (MuTilde ({ p = Positive pair; c = Negative cons }, None))
       in
       Incomplete { p = new_producer; c = new_consumer }
     | Pair (a, Positive b), cons when not (is_val b) ->
       let new_producer = Positive b in
       let new_consumer =
         let pair = Pair (a, Name (Bound (0, None))) in
-        Negative (MuTilde { p = Positive pair; c = Negative cons })
+        Negative (MuTilde ({ p = Positive pair; c = Negative cons }, None))
       in
       Incomplete { p = new_producer; c = new_consumer }
     (* any pair below is already a value.
@@ -254,7 +256,7 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
      * ANYTHING here is a value. *)
     (* catch-all pair destruction in case the
      * is_val judgement is ill-formed *)
-    | Pair (a, b), Split cut ->
+    | Pair (a, b), Split (cut, _, _) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 a cut)
         ~ok:(fun cut ->
@@ -264,7 +266,7 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
             ~error:(fun exn -> Error exn))
         ~error:(fun exn -> Error exn)
     (* catchall for any value and mutilde *)
-    | p, MuTilde cut ->
+    | p, MuTilde (cut, _) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_producer 0 p cut)
         ~ok:(fun cut -> Incomplete cut)
@@ -272,7 +274,7 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
     (* copair semantics - any potential simplification is only done
      * when the left side is completely simplified. in order to treat
      * the copair using is_val, we pretend it is a pair *)
-    | Cosplit cut, Copair (a, b) when is_val (Pair (a, b)) ->
+    | Cosplit (cut, _, _), Copair (a, b) when is_val (Pair (a, b)) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 a cut)
         ~ok:(fun cut ->
@@ -286,19 +288,19 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
       let new_producer = Positive a in
       let new_consumer =
         let copair = Copair (Name (Bound (0, None)), b) in
-        Negative (MuTilde { p = Positive prod; c = Negative copair })
+        Negative (MuTilde ({ p = Positive prod; c = Negative copair }, None))
       in
       Incomplete { p = new_producer; c = new_consumer }
     | prod, Copair (a, Positive b) when not (is_val b) ->
       let new_producer = Positive b in
       let new_consumer =
         let copair = Copair (a, Name (Bound (0, None))) in
-        Negative (MuTilde { p = Positive prod; c = Negative copair })
+        Negative (MuTilde ({ p = Positive prod; c = Negative copair }, None))
       in
       Incomplete { p = new_producer; c = new_consumer }
     (* catch-all copair destruction in case the
      * is_val judgement is ill-formed *)
-    | Cosplit cut, Copair (a, b) ->
+    | Cosplit (cut, _, _), Copair (a, b) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 a cut)
         ~ok:(fun cut ->
@@ -312,7 +314,7 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
   let producer_name_step p n =
     let consumer = Name (Free n) in
     match p with
-    | Mu cut ->
+    | Mu (cut, _) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 consumer cut)
         ~ok:(fun cut -> Incomplete cut)
@@ -324,14 +326,14 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
       let new_producer = Positive a in
       let new_consumer =
         let pair = Pair (Name (Bound (0, None)), b) in
-        Negative (MuTilde { p = Positive pair; c = consumer })
+        Negative (MuTilde ({ p = Positive pair; c = consumer }, None))
       in
       Incomplete { p = new_producer; c = new_consumer }
     | Pair (a, Positive b) when not (is_val b) ->
       let new_producer = Positive b in
       let new_consumer =
         let pair = Pair (a, Name (Bound (0, None))) in
-        Negative (MuTilde { p = Positive pair; c = consumer })
+        Negative (MuTilde ({ p = Positive pair; c = consumer }, None))
       in
       Incomplete { p = new_producer; c = new_consumer }
     | p ->
@@ -342,7 +344,7 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
   let name_consumer_step n c =
     let producer = Name (Free n) in
     match c with
-    | MuTilde cut ->
+    | MuTilde (cut, _) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 producer cut)
         ~ok:(fun cut -> Incomplete cut)
@@ -354,14 +356,14 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
       let new_producer = Positive a in
       let new_consumer =
         let copair = Copair (Name (Bound (0, None)), b) in
-        Negative (MuTilde { p = producer; c = Negative copair })
+        Negative (MuTilde ({ p = producer; c = Negative copair }, None))
       in
       Incomplete { p = new_producer; c = new_consumer }
     | Copair (a, Positive b) when not (is_val b) ->
       let new_producer = Positive b in
       let new_consumer =
         let copair = Copair (a, Name (Bound (0, None))) in
-        Negative (MuTilde { p = producer; c = Negative copair })
+        Negative (MuTilde ({ p = producer; c = Negative copair }, None))
       in
       Incomplete { p = new_producer; c = new_consumer }
     | c ->
@@ -434,13 +436,13 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
     | Codo _, Split _ -> Error (Failure "type error: counit producer, A*B consumer")
     | Codo _, Do _ -> Error (Failure "type error: counit producer, unit consumer")
     (* any let is immediately evaluated *)
-    | p, MuTilde cut ->
+    | p, MuTilde (cut, _) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_producer 0 p cut)
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
     (* any letcc is evaluated when the right is a covalue *)
-    | Mu cut, c when is_coval c ->
+    | Mu (cut, _), c when is_coval c ->
       Result.fold
         (Beta_reducer.beta_reduce_with_consumer 0 c cut)
         ~ok:(fun cut -> Incomplete cut)
@@ -451,7 +453,7 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
     | Unit, Do cut -> Incomplete cut
     (* copair semantics *)
     (* canonical copair destruction *)
-    | Cosplit cut, Copair (a, b) when is_coval (Copair (a, b)) ->
+    | Cosplit (cut, _, _), Copair (a, b) when is_coval (Copair (a, b)) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 a cut)
         ~ok:(fun cut ->
@@ -465,14 +467,14 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
       let new_consumer = Negative a in
       let new_producer =
         let copair = Copair (Name (Bound (0, None)), b) in
-        Positive (Mu { c = Negative copair; p = Positive prod })
+        Positive (Mu ({ c = Negative copair; p = Positive prod }, None))
       in
       Incomplete { p = new_producer; c = new_consumer }
     | prod, Copair (a, Negative b) when not (is_coval b) ->
       let new_consumer = Negative b in
       let new_producer =
         let copair = Copair (a, Name (Bound (0, None))) in
-        Positive (Mu { c = Negative copair; p = Positive prod })
+        Positive (Mu ({ c = Negative copair; p = Positive prod }, None))
       in
       Incomplete { p = new_producer; c = new_consumer }
     (* any copair below is already a covalue.
@@ -481,7 +483,7 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
      * ANYTHING here is a covalue. *)
     (* catch-all copair destruction in case the
      * is_coval judgement is ill-formed *)
-    | Cosplit cut, Copair (a, b) ->
+    | Cosplit (cut, _, _), Copair (a, b) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 a cut)
         ~ok:(fun cut ->
@@ -491,7 +493,7 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
             ~error:(fun exn -> Error exn))
         ~error:(fun exn -> Error exn)
     (* catchall for any covalue and mu *)
-    | Mu cut, c ->
+    | Mu (cut, _), c ->
       Result.fold
         (Beta_reducer.beta_reduce_with_consumer 0 c cut)
         ~ok:(fun cut -> Incomplete cut)
@@ -499,7 +501,7 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
     (* pair semantics - any potential simplification is only done
      * when the right side is completely simplified. in order to treat
      * the pair using is_coval, we pretend it is a copair *)
-    | Pair (a, b), Split cut when is_coval (Copair (a, b)) ->
+    | Pair (a, b), Split (cut, _, _) when is_coval (Copair (a, b)) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 a cut)
         ~ok:(fun cut ->
@@ -513,19 +515,19 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
       let new_consumer = Negative a in
       let new_producer =
         let pair = Pair (Name (Bound (0, None)), b) in
-        Positive (Mu { c = Negative cons; p = Positive pair })
+        Positive (Mu ({ c = Negative cons; p = Positive pair }, None))
       in
       Incomplete { p = new_producer; c = new_consumer }
     | Pair (a, Negative b), cons when not (is_coval b) ->
       let new_consumer = Negative b in
       let new_producer =
         let pair = Pair (a, Name (Bound (0, None))) in
-        Positive (Mu { c = Negative cons; p = Positive pair })
+        Positive (Mu ({ c = Negative cons; p = Positive pair }, None))
       in
       Incomplete { p = new_producer; c = new_consumer }
     (* catch-all pair destruction in case the
      * is_val judgement is ill-formed *)
-    | Pair (a, b), Split cut ->
+    | Pair (a, b), Split (cut, _, _) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 a cut)
         ~ok:(fun cut ->
@@ -539,7 +541,7 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
   let producer_name_step p n =
     let consumer = Name (Free n) in
     match p with
-    | Mu cut ->
+    | Mu (cut, _) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 consumer cut)
         ~ok:(fun cut -> Incomplete cut)
@@ -551,14 +553,14 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
       let new_consumer = Negative a in
       let new_producer =
         let pair = Pair (Name (Bound (0, None)), b) in
-        Positive (Mu { p = Positive pair; c = consumer })
+        Positive (Mu ({ p = Positive pair; c = consumer }, None))
       in
       Incomplete { p = new_producer; c = new_consumer }
     | Pair (a, Negative b) when not (is_coval b) ->
       let new_consumer = Negative b in
       let new_producer =
         let pair = Pair (a, Name (Bound (0, None))) in
-        Positive (Mu { p = Positive pair; c = consumer })
+        Positive (Mu ({ p = Positive pair; c = consumer }, None))
       in
       Incomplete { p = new_producer; c = new_consumer }
     | p ->
@@ -569,7 +571,7 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
   let name_consumer_step n c =
     let producer = Name (Free n) in
     match c with
-    | MuTilde cut ->
+    | MuTilde (cut, _) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_neutral 0 producer cut)
         ~ok:(fun cut -> Incomplete cut)
@@ -581,14 +583,14 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
       let new_consumer = Negative a in
       let new_producer =
         let copair = Copair (Name (Bound (0, None)), b) in
-        Positive (Mu { p = producer; c = Negative copair })
+        Positive (Mu ({ p = producer; c = Negative copair }, None))
       in
       Incomplete { p = new_producer; c = new_consumer }
     | Copair (a, Negative b) when not (is_coval b) ->
       let new_consumer = Negative b in
       let new_producer =
         let copair = Copair (a, Name (Bound (0, None))) in
-        Positive (Mu { p = producer; c = Negative copair })
+        Positive (Mu ({ p = producer; c = Negative copair }, None))
       in
       Incomplete { p = new_producer; c = new_consumer }
     | c ->

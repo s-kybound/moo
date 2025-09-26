@@ -20,16 +20,16 @@ let get_neutral i (t : t) =
 module Substituter = struct
   let rec substitute_producer env p =
     match p with
-    | Mu cut -> Mu (substitute_cut env cut)
+    | Mu (cut, typ) -> Mu (substitute_cut env cut, typ)
     | Pair (a, b) -> Pair (substitute_neutral env a, substitute_neutral env b)
-    | Cosplit cut -> Cosplit (substitute_cut env cut)
+    | Cosplit (cut, typ1, typ2) -> Cosplit (substitute_cut env cut, typ1, typ2)
     | Unit -> Unit
     | Codo cut -> Codo (substitute_cut env cut)
 
   and substitute_consumer env c =
     match c with
-    | MuTilde cut -> MuTilde (substitute_cut env cut)
-    | Split cut -> Split (substitute_cut env cut)
+    | MuTilde (cut, typ) -> MuTilde (substitute_cut env cut, typ)
+    | Split (cut, typ1, typ2) -> Split (substitute_cut env cut, typ1, typ2)
     | Copair (a, b) -> Copair (substitute_neutral env a, substitute_neutral env b)
     | Counit -> Counit
     | Do cut -> Do (substitute_cut env cut)

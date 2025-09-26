@@ -204,16 +204,18 @@ module Core = struct
     | Free of string
     | Bound of int * Type.polar_type option
 
+  (* the debrujin index conversion will lose us the type information of the bound variables, 
+   * so we leave them in the producer and consumer *)
   type producer =
-    | Mu of cut
+    | Mu of cut * Type.polar_type option
     | Pair of neutral * neutral
-    | Cosplit of cut
+    | Cosplit of cut * Type.polar_type option * Type.polar_type option
     | Unit
     | Codo of cut
 
   and consumer =
-    | MuTilde of cut
-    | Split of cut
+    | MuTilde of cut * Type.polar_type option
+    | Split of cut * Type.polar_type option * Type.polar_type option
     | Copair of neutral * neutral
     | Counit
     | Do of cut
@@ -250,16 +252,16 @@ module Core = struct
 
     let rec show_producer p =
       match p with
-      | Mu cut -> Printf.sprintf "(μ.%s)" (show_cut cut)
+      | Mu (cut, _) -> Printf.sprintf "(μ.%s)" (show_cut cut)
       | Pair (a, b) -> Printf.sprintf "(%s * %s)" (show_neutral a) (show_neutral b)
-      | Cosplit cut -> Printf.sprintf "((0 & 1).%s)" (show_cut cut)
+      | Cosplit (cut, _, _) -> Printf.sprintf "((0 & 1).%s)" (show_cut cut)
       | Unit -> "()"
       | Codo cut -> Printf.sprintf "(codo %s)" (show_cut cut)
 
     and show_consumer c =
       match c with
-      | MuTilde cut -> Printf.sprintf "(μ̃.%s)" (show_cut cut)
-      | Split cut -> Printf.sprintf "((0 * 1).%s)" (show_cut cut)
+      | MuTilde (cut, _) -> Printf.sprintf "(μ̃.%s)" (show_cut cut)
+      | Split (cut, _, _) -> Printf.sprintf "((0 * 1).%s)" (show_cut cut)
       | Copair (a, b) -> Printf.sprintf "(%s & %s)" (show_neutral a) (show_neutral b)
       | Counit -> "'()"
       | Do cut -> Printf.sprintf "(do %s)" (show_cut cut)
@@ -314,7 +316,7 @@ module Core = struct
 
     let rec convert_producer term_env p : producer =
       match p with
-      | S.Mu (k, cut) -> Mu (convert_cut (push_name k term_env) cut)
+      | S.Mu (k, cut) -> Mu (convert_cut (push_name k term_env) cut, k.typ)
       | S.Pair (a, b) -> Pair (convert_neutral term_env a, convert_neutral term_env b)
       | S.Cosplit (x, y, cut) ->
         if name_match x.name y.name
@@ -324,19 +326,19 @@ module Core = struct
            * x will be the first to be looked up (0)
            * then y (1) *)
           let term_env' = (x.name, x.typ) :: (y.name, y.typ) :: term_env in
-          Cosplit (convert_cut term_env' cut))
+          Cosplit (convert_cut term_env' cut, x.typ, y.typ))
       | S.Unit -> Unit
       | S.Codo cut -> Codo (convert_cut term_env cut)
 
     and convert_consumer term_env c : consumer =
       match c with
-      | S.MuTilde (v, cut) -> MuTilde (convert_cut (push_name v term_env) cut)
+      | S.MuTilde (v, cut) -> MuTilde (convert_cut (push_name v term_env) cut, v.typ)
       | S.Split (x, y, cut) ->
         if name_match x.name y.name
         then raise (Failure "Split: name conflict in parameters")
         else (
           let term_env' = (x.name, x.typ) :: (y.name, y.typ) :: term_env in
-          Split (convert_cut term_env' cut))
+          Split (convert_cut term_env' cut, x.typ, y.typ))
       | S.Copair (a, b) -> Copair (convert_neutral term_env a, convert_neutral term_env b)
       | S.Counit -> Counit
       | S.Do cut -> Do (convert_cut term_env cut)
@@ -368,16 +370,20 @@ module Core = struct
 
   let rec aequiv_producer (a : producer) (b : producer) =
     match a, b with
-    | Mu cut, Mu cut' -> aequiv_cut cut cut'
+    | Mu (cut, _), Mu (cut', _) -> aequiv_cut cut cut'
     | Pair (a, b), Pair (c, d) -> aequiv_neutral a c && aequiv_neutral b d
-    | Cosplit cut, Cosplit cut' -> aequiv_cut cut cut'
+    | Cosplit (cut, _, _), Cosplit (cut', _, _) -> aequiv_cut cut cut'
+    | Unit, Unit -> true
+    | Codo cut, Codo cut' -> aequiv_cut cut cut'
     | _, _ -> false
 
   and aequiv_consumer (a : consumer) (b : consumer) =
     match a, b with
-    | MuTilde cut, MuTilde cut' -> aequiv_cut cut cut'
-    | Split cut, Split cut' -> aequiv_cut cut cut'
+    | MuTilde (cut, _), MuTilde (cut', _) -> aequiv_cut cut cut'
+    | Split (cut, _, _), Split (cut', _, _) -> aequiv_cut cut cut'
     | Copair (a, b), Copair (c, d) -> aequiv_neutral a c && aequiv_neutral b d
+    | Counit, Counit -> true
+    | Do cut, Do cut' -> aequiv_cut cut cut'
     | _, _ -> false
 
   and aequiv_cut (a : cut) (b : cut) = aequiv_neutral a.p b.p && aequiv_neutral a.c b.c
