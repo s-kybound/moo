@@ -63,7 +63,7 @@ module Surface = struct
 
   type name =
     { name : string
-    ; typ : Type.polar_type option
+    ; typ : Type.type_use option
     }
 
   type producer =
@@ -107,7 +107,7 @@ module Surface = struct
     let show_name n =
       match n.typ with
       | None -> n.name
-      | Some typ -> Printf.sprintf "[%s : %s]" n.name (Type.Show.show_polar_type typ)
+      | Some typ -> Printf.sprintf "[%s : %s]" n.name (Type.Show.show_type_use typ)
     ;;
 
     let rec show_producer p =
@@ -180,7 +180,7 @@ module Surface = struct
     let identifier name = Name name
   end
 
-  let make_name (ident : string) (typ : Type.polar_type option) = { name = ident; typ }
+  let make_name (ident : string) (typ : Type.type_use option) = { name = ident; typ }
   let defp (name : name) (input : name) (body : cut) = Producer (name, Mu (input, body))
 
   let defc (name : name) (input : name) (body : cut) =
@@ -263,20 +263,20 @@ module Core = struct
 
   type identifier =
     | Free of string
-    | Bound of int * Type.polar_type option
+    | Bound of int * Type.type_use option
 
   (* the debrujin index conversion will lose us the type information of the bound variables, 
    * so we leave them in the producer and consumer *)
   type producer =
-    | Mu of cut * Type.polar_type option
+    | Mu of cut * Type.type_use option
     | Pair of neutral * neutral
-    | Cosplit of cut * Type.polar_type option * Type.polar_type option
+    | Cosplit of cut * Type.type_use option * Type.type_use option
     | Unit
     | Codo of cut
 
   and consumer =
-    | MuTilde of cut * Type.polar_type option
-    | Split of cut * Type.polar_type option * Type.polar_type option
+    | MuTilde of cut * Type.type_use option
+    | Split of cut * Type.type_use option * Type.type_use option
     | Copair of neutral * neutral
     | Counit
     | Do of cut
@@ -308,7 +308,7 @@ module Core = struct
       | Bound (n, typ) ->
         (match typ with
          | None -> string_of_int n
-         | Some t -> Printf.sprintf "[%d : %s]" n (Type.Show.show_polar_type t))
+         | Some t -> Printf.sprintf "[%d : %s]" n (Type.Show.show_type_use t))
     ;;
 
     let rec show_producer p =
@@ -389,7 +389,7 @@ module Core = struct
           if Hashtbl.mem abstract_type_env s
           then Hashtbl.find abstract_type_env s
           else (
-            let next_num = Hashtbl.length abstract_type_env + 1 in
+            let next_num = Hashtbl.length abstract_type_env in
             Hashtbl.add abstract_type_env s (T.Var next_num);
             T.Var next_num)
         | ST.Neg at -> T.Neg (convert_abstract_type abstract_type_env at)
@@ -398,13 +398,13 @@ module Core = struct
         match type_expr with
         | ST.Name s -> T.Name s
         | ST.PosProd (tu1, tu2) ->
-          T.PosProd
-            ( convert_type_use abstract_type_env tu1
-            , convert_type_use abstract_type_env tu2 )
+          let tu1 = convert_type_use abstract_type_env tu1 in
+          let tu2 = convert_type_use abstract_type_env tu2 in
+          T.PosProd (tu1, tu2)
         | ST.NegProd (tu1, tu2) ->
-          T.NegProd
-            ( convert_type_use abstract_type_env tu1
-            , convert_type_use abstract_type_env tu2 )
+          let tu1 = convert_type_use abstract_type_env tu1 in
+          let tu2 = convert_type_use abstract_type_env tu2 in
+          T.NegProd (tu1, tu2)
         | ST.KindInstantiation (k, args) ->
           T.KindInstantiation (k, List.map (convert_type_use abstract_type_env) args)
 
@@ -420,7 +420,7 @@ module Core = struct
       ;;
     end
 
-    type term_env = (string * Type.polar_type option) list
+    type term_env = (string * Type.type_use option) list
 
     let name_match = String.equal
     let empty_term_env : term_env = []
@@ -438,7 +438,7 @@ module Core = struct
     let convert_binder_type (binder : S.name) =
       let abstract_type_env = TypeConverter.empty_abstract_type_env () in
       Option.map
-        (fun typ -> TypeConverter.convert_polar_type abstract_type_env typ)
+        (fun typ -> TypeConverter.convert_type_use abstract_type_env typ)
         binder.typ
     ;;
 

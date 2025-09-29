@@ -127,68 +127,60 @@ abstract_type:
 (* usage of a type, only allowed within 
  * the body of another polar type *)
 type_use:
-  | p=polar_type(type_use)              { Type.Instantiated p }
+  | p=polar_type                        { Type.Instantiated p }
   | a=abstract_type                     { Type.Abstract a }
 
-type_use_strict:
-  | p=polar_type(type_use_strict)       { Type.Instantiated p }
-  | abstract_type error                 { raisef $startpos($1) $endpos($1) "abstract type is not allowed in a strict context (most likely this type is being used to type a term)" }
-
-type_invocation_body(use_rule):
-  | kind=tyvar vars=use_rule+           { Type.KindInstantiation (kind, vars) }
+type_invocation_body:
+  | kind=tyvar vars=type_use+           { Type.KindInstantiation (kind, vars) }
   | tyvar error                         { raisef $startpos($1) $endpos($1) "we do not allow nullary kinds, that's what the base kinds is for!" }
 
-positive_product_body(use_rule):
-  | STAR a=use_rule b=use_rule          { Type.PosProd (a, b) }
-  | STAR use_rule use_rule error        { raisef $startpos($1) $endpos($1) "* expects ONLY two types!" }
-  | STAR use_rule error                 { raisef $startpos($1) $endpos($1) "* expects two types! please supply another type" }
+positive_product_body:
+  | STAR a=type_use b=type_use          { Type.PosProd (a, b) }
+  | STAR type_use type_use error        { raisef $startpos($1) $endpos($1) "* expects ONLY two types!" }
+  | STAR type_use error                 { raisef $startpos($1) $endpos($1) "* expects two types! please supply another type" }
 
-negative_product_body(use_rule):
-  | AMPERSAND a=use_rule b=use_rule     { Type.NegProd (a, b) }
-  | AMPERSAND use_rule use_rule error   { raisef $startpos($1) $endpos($1) "& expects ONLY two types!" }
-  | AMPERSAND use_rule error            { raisef $startpos($1) $endpos($1) "& expects two types! please supply another type" }
+negative_product_body:
+  | AMPERSAND a=type_use b=type_use     { Type.NegProd (a, b) }
+  | AMPERSAND type_use type_use error   { raisef $startpos($1) $endpos($1) "& expects ONLY two types!" }
+  | AMPERSAND type_use error            { raisef $startpos($1) $endpos($1) "& expects two types! please supply another type" }
 
 (* base_types, only used in definitions. 
  * should be unpolarized. *)
-base_type(use_rule):
+base_type:
   | v=tyvar                             { Type.Name v }
   | LPAREN 
-    app=type_invocation_body(use_rule)  
+    app=type_invocation_body  
     RPAREN                              { app }
   | LPAREN 
-    pprod=positive_product_body(use_rule) 
+    pprod=positive_product_body 
     RPAREN                              { pprod }
   | LPAREN 
-    nprod=negative_product_body(use_rule) 
+    nprod=negative_product_body
     RPAREN                              { nprod }
 
-polar_type(use_rule):
-  | b=base_type(use_rule) PLUS          { 
+polar_type:
+  | b=base_type PLUS                    { 
                                           require_adjacent $endpos(b) $startpos($2) "'+' must immediately follow the type (no spaces)"; 
                                           Type.Plus b
                                         }
-  | b=base_type(use_rule) MINUS         { 
+  | b=base_type MINUS                   { 
                                           require_adjacent $endpos(b) $startpos($2) "'-' must immediately follow the type (no spaces)"; 
                                           Type.Minus b
                                         }
 
 typed_var_body:
-  | v=IDENT COLON t=type_use_strict     { 
-                                          match t with
-                                          | Type.Abstract _ -> assert false
-                                          | Type.Instantiated t -> make_name v (Some t) 
-                                        }
+  | v=IDENT COLON t=type_use            { make_name v (Some t) }
 
 type_definition:
   | TYPE shape=type_schema
-    EQUALS expr=base_type(type_use) 
+    EQUALS expr=base_type
     DELIMITER?                          { TypeDef (shape, expr) }
 
 typed_var:
   | LBRACK t=typed_var_body RBRACK      { t }
 
 untyped_var:
-  | IDENT                               { raisef $startpos($1) $endpos($1) "welcome to the simply typed product mu mu-tilde calculus! please type this with [%s : <type>]." $1 }
+  | v=IDENT                             { make_name v None }
 
 (* either a usage of a value, or a name usage *)
 either:

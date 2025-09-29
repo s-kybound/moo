@@ -5,7 +5,7 @@ open Core
  * terms and types. *)
 type t =
   { terms : (string, neutral) Hashtbl.t
-  ; types : (Type.type_schema, Type.type_expr) Hashtbl.t
+  ; types : (string, Type.type_schema * Type.type_expr) Hashtbl.t
   }
 
 let empty_env () : t = { terms = Hashtbl.create 10; types = Hashtbl.create 10 }
@@ -47,7 +47,15 @@ module Substituter = struct
 end
 
 let add_term t name term = Hashtbl.replace t.terms name term
-let add_type t schema expr = Hashtbl.replace t.types schema expr
+
+let add_type t schema expr =
+  match schema with
+  | Type.Base n -> Hashtbl.replace t.types n (schema, expr)
+  | Type.Kind (n, _) -> Hashtbl.replace t.types n (schema, expr)
+;;
+
+let has_term t name = Hashtbl.mem t.terms name
+let has_type t name = Hashtbl.mem t.types name
 
 (* load the definitions into the environment.
    * only done after typechecking and syntax checking
