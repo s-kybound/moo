@@ -77,7 +77,7 @@ In this case, the consumer tells us what to do!
 A personal hypothesis behind why cosplit is not as well known as cocase is because cocase and case are usually used as general pattern 
 matchers against algebraic datatypes, which encode for both products and sums.
 
-## let-style cuts
+## the cutlet-style
 
 Cuts are nice, but managing raw cuts is difficult to look at, especially when composing several of them in tandem.
 So I also sought a way to make them more pleasing to the eye.
