@@ -275,7 +275,9 @@ let start_repl eval_strat value_strat =
   init_repl ();
   State.set_evaluator eval_strat value_strat;
   let (module Strategy) = State.get_evaluator () in
-  Printf.printf "moo REPL (%s) - enter :q to quit\n%!" Strategy.name;
+  Printf.printf
+    "Welcome to moo %s.\nType \":help\" for more information.\n%!"
+    Utils.version;
   try repl_loop () with
   | Sys.Break ->
     print_endline "Goodbye!";

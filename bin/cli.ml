@@ -45,12 +45,6 @@ let moo_cmd =
 let cmd =
   let doc = "Interpreter for the moo language" in
   let man = [ `S Manpage.s_bugs; `P "Report bugs to <github.com/s-kybound/moo>" ] in
-  let version =
-    Option.fold
-      (Build_info.V1.version ())
-      ~none:"development"
-      ~some:Build_info.V1.Version.to_string
-  in
-  let info = Cmd.info "moo" ~version ~doc ~man ~exits:Cmd.Exit.defaults in
+  let info = Cmd.info "moo" ~version:Utils.version ~doc ~man ~exits:Cmd.Exit.defaults in
   Cmd.group ~default:runner_body info [ repl_cmd; runner_cmd; moo_cmd ]
 ;;
