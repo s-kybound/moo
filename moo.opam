@@ -11,6 +11,9 @@ bug-reports: "https://github.com/s-kybound/moo/issues"
 depends: [
   "dune" {>= "3.20"}
   "ocaml"
+  "cmdliner"
+  "dune-build-info"
+  "linenoise"
   "odoc" {with-doc}
 ]
 build: [

@@ -16,7 +16,7 @@
  (name moo)
  (synopsis "A language for a minimal mu mu-tilde dual calculus")
  (description "A language to investigate the minimal language needed to support ergonomic sequent-calculus based programming")
- (depends ocaml)
+ (depends ocaml cmdliner dune-build-info linenoise menhir)
  (tags
   ("duality" "continuations" "interpreter")))
 
