@@ -14,6 +14,7 @@ depends: [
   "cmdliner"
   "dune-build-info"
   "linenoise"
+  "menhir"
   "odoc" {with-doc}
 ]
 build: [
