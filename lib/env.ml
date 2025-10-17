@@ -57,9 +57,15 @@ let add_type t schema expr =
 let has_term t name = Hashtbl.mem t.terms name
 let has_type t name = Hashtbl.mem t.types name
 
+let get_type t name =
+  match Hashtbl.find_opt t.types name with
+  | None -> Error Not_found
+  | Some body -> Ok body
+;;
+
 (* load the definitions into the environment.
-   * only done after typechecking and syntax checking
-   * has been done. *)
+ * only done after typechecking and syntax checking
+ * has been done. *)
 let load_definitions program t =
   List.iter
     (fun (d : definition) ->
