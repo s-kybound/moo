@@ -16,12 +16,39 @@ let value_strategy =
   Arg.(value & vflag `Eager [ `Lazy, lazy_flag; `Eager, eager_flag ])
 ;;
 
+let typechecker_strategy =
+  let doc = "Use untyped typechecker (default)" in
+  let untyped_flag = Arg.info [ "untyped" ] ~doc in
+  let doc = "Use simply-typed typechecker" in
+  let simply_typed_flag = Arg.info [ "st"; "simply-typed" ] ~doc in
+  let doc = "Use system-f typechecker" in
+  let system_f_flag = Arg.info [ "sf"; "system-f" ] ~doc in
+  let doc = "Use HM typechecker" in
+  let hindley_milner_flag = Arg.info [ "HM"; "hindley-milner" ] ~doc in
+  Arg.(
+    value
+    & vflag
+        `Untyped
+        [ `Untyped, untyped_flag
+        ; `Simply_typed, simply_typed_flag
+        ; `System_f, system_f_flag
+        ; `Hindley_milner, hindley_milner_flag
+        ])
+;;
+
 let filename_arg =
   let doc = "Input program to evaluate" in
   Arg.(required & pos 0 (some file) None & info [] ~docv:"PROGRAM" ~doc)
 ;;
 
-let runner_body = Term.(const Runner.run $ eval_strategy $ value_strategy $ filename_arg)
+let runner_body =
+  Term.(
+    const Runner.run
+    $ eval_strategy
+    $ value_strategy
+    $ typechecker_strategy
+    $ filename_arg)
+;;
 
 let runner_cmd =
   let doc = "Run a moo program" in
@@ -32,7 +59,9 @@ let runner_cmd =
 let repl_cmd =
   let doc = "REPL for the moo language" in
   let info = Cmd.info "repl" ~doc in
-  Cmd.v info Term.(const Repl.start_repl $ eval_strategy $ value_strategy)
+  Cmd.v
+    info
+    Term.(const Repl.start_repl $ eval_strategy $ value_strategy $ typechecker_strategy)
 ;;
 
 let moo_cmd =

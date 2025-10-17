@@ -1,6 +1,7 @@
 open Moo
 open Ast
 open Runner
+open Typechecker
 
 (* O(1) addition, O(1) (implicit) deletion,
  * allows us to filter and access the relevant
@@ -58,13 +59,30 @@ end
 module State = struct
   let current_history : string History.t option ref = ref None
   let current_evaluator : (module EVALUATION_STRATEGY) option ref = ref None
+  let current_typechecker : (module TYPECHECKER) option ref = ref None
   let current_val_strat : [ `Lazy | `Eager ] ref = ref `Eager
   let current_eval_strat : [ `CBN | `CBV ] ref = ref `CBV
+
+  let current_typecheck_strat
+    : [ `Untyped | `Simply_typed | `System_f | `Hindley_milner ] ref
+    =
+    ref `Untyped
+  ;;
+
   let current_environment : Env.t ref = ref (Env.empty_env ())
 
-  let set_evaluator eval_strat val_strat =
+  let set_evaluator eval_strat val_strat typecheck_strat =
     current_eval_strat := eval_strat;
     current_val_strat := val_strat;
+    current_typecheck_strat := typecheck_strat;
+    let (module Typechecker : TYPECHECKER) =
+      match typecheck_strat with
+      | `Untyped -> (module Typechecker.Untyped)
+      | `Simply_typed -> (module Typechecker.SimplyTyped)
+      | `System_f -> (module Typechecker.SystemF)
+      | `Hindley_milner -> (module Typechecker.HindleyMilner)
+    in
+    current_typechecker := Some (module Typechecker);
     let (module J : JUDGEMENTS) =
       match val_strat with
       | `Lazy -> (module Lazy)
@@ -87,6 +105,12 @@ module State = struct
     | Some e -> e
   ;;
 
+  let get_typechecker () =
+    match !current_typechecker with
+    | None -> raise (Failure "Tried to get uninitialized typechecker")
+    | Some e -> e
+  ;;
+
   let get_history () =
     match !current_history with
     | None -> raise (Failure "Tried to get uninitialized history")
@@ -101,10 +125,14 @@ let get_ast str = str |> Reader.of_string ~filename:"REPL" |> Core.convert
 
 let parse_and_eval input =
   let (module Strategy : EVALUATION_STRATEGY) = State.get_evaluator () in
+  let (module Typechecker : TYPECHECKER) = State.get_typechecker () in
   try
     let core_ast = get_ast input in
-    let result = Strategy.eval !State.current_environment core_ast in
-    print_result result
+    match Typechecker.typecheck core_ast with
+    | Error exn -> raise exn
+    | Ok core_ast ->
+      let result = Strategy.eval !State.current_environment core_ast in
+      print_result result
   with
   | exn -> print_error (Printexc.to_string exn)
 ;;
@@ -223,16 +251,16 @@ let rec repl_loop () =
     print_endline "Goodbye!";
     exit 0
   | Some ":cbn" | Some ":call-by-name" ->
-    State.set_evaluator `CBN !State.current_val_strat;
+    State.set_evaluator `CBN !State.current_val_strat !State.current_typecheck_strat;
     repl_loop ()
   | Some ":cbv" | Some ":call-by-value" ->
-    State.set_evaluator `CBV !State.current_val_strat;
+    State.set_evaluator `CBV !State.current_val_strat !State.current_typecheck_strat;
     repl_loop ()
   | Some ":lazy" ->
-    State.set_evaluator !State.current_eval_strat `Lazy;
+    State.set_evaluator !State.current_eval_strat `Lazy !State.current_typecheck_strat;
     repl_loop ()
   | Some ":eager" ->
-    State.set_evaluator !State.current_eval_strat `Eager;
+    State.set_evaluator !State.current_eval_strat `Eager !State.current_typecheck_strat;
     repl_loop ()
   | Some ":clear" ->
     State.clear_environment ();
@@ -271,9 +299,9 @@ let rec repl_loop () =
     repl_loop ()
 ;;
 
-let start_repl eval_strat value_strat =
+let start_repl eval_strat value_strat typecheck_strat =
   init_repl ();
-  State.set_evaluator eval_strat value_strat;
+  State.set_evaluator eval_strat value_strat typecheck_strat;
   let (module Strategy) = State.get_evaluator () in
   Printf.printf
     "Welcome to moo %s.\nType \":help\" for more information.\n%!"
