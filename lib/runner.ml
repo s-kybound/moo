@@ -16,19 +16,15 @@ end = struct
     let binding_arity_producer p =
       match p with
       | Mu _ -> 1
-      | Pair _ -> 0
-      | Cosplit _ -> 2
-      | Unit -> 0
-      | Codo _ -> 0
+      | Tuple _ -> 0
+      | Cosplit (_, binders) -> List.length binders
     ;;
 
     let binding_arity_consumer c =
       match c with
       | MuTilde _ -> 1
-      | Split _ -> 2
-      | Copair _ -> 0
-      | Counit -> 0
-      | Do _ -> 0
+      | Split (_, binders) -> List.length binders
+      | Cotuple _ -> 0
     ;;
 
     let shift_index_under_producer index producer =
@@ -46,12 +42,8 @@ end = struct
     let new_index = Utils.shift_index_under_producer index target in
     match target with
     | Mu (cut, typ) -> Mu (subst_neutral_in_cut new_index term cut, typ)
-    | Pair (a, b) ->
-      Pair (subst_neutral_in_neutral index term a, subst_neutral_in_neutral index term b)
-    | Cosplit (cut, typ1, typ2) ->
-      Cosplit (subst_neutral_in_cut new_index term cut, typ1, typ2)
-    | Unit -> Unit
-    | Codo cut -> Codo (subst_neutral_in_cut new_index term cut)
+    | Tuple xs -> Tuple (List.map (subst_neutral_in_neutral index term) xs)
+    | Cosplit (cut, typs) -> Cosplit (subst_neutral_in_cut new_index term cut, typs)
 
   and subst_neutral_in_consumer (index : int) (term : neutral) (target : consumer)
     : consumer
@@ -59,12 +51,8 @@ end = struct
     let new_index = Utils.shift_index_under_consumer index target in
     match target with
     | MuTilde (cut, typ) -> MuTilde (subst_neutral_in_cut new_index term cut, typ)
-    | Split (cut, typ1, typ2) ->
-      Split (subst_neutral_in_cut new_index term cut, typ1, typ2)
-    | Copair (a, b) ->
-      Copair (subst_neutral_in_neutral index term a, subst_neutral_in_neutral index term b)
-    | Counit -> Counit
-    | Do cut -> Do (subst_neutral_in_cut new_index term cut)
+    | Split (cut, typs) -> Split (subst_neutral_in_cut new_index term cut, typs)
+    | Cotuple xs -> Cotuple (List.map (subst_neutral_in_neutral index term) xs)
 
   and subst_neutral_in_cut (index : int) (term : neutral) (target : cut) : cut =
     { p = subst_neutral_in_neutral index term target.p
@@ -132,19 +120,15 @@ module Lazy : JUDGEMENTS = struct
   let is_val (p : producer) : bool =
     match p with
     | Mu _ -> false
-    | Pair _ -> true
+    | Tuple _ -> true
     | Cosplit _ -> true
-    | Unit -> true
-    | Codo _ -> true
   ;;
 
   let is_coval (c : consumer) : bool =
     match c with
     | MuTilde _ -> false
-    | Copair _ -> true
+    | Cotuple _ -> true
     | Split _ -> true
-    | Counit -> true
-    | Do _ -> true
   ;;
 end
 
@@ -161,10 +145,8 @@ module Eager : JUDGEMENTS = struct
     in
     match p with
     | Mu _ -> false
-    | Pair (a, b) -> is_val_neutral a && is_val_neutral b
+    | Tuple xs -> List.fold_left (fun acc v -> acc && is_val_neutral v) true xs
     | Cosplit _ -> true
-    | Unit -> true
-    | Codo _ -> true
   ;;
 
   let rec is_coval (c : consumer) : bool =
@@ -177,10 +159,8 @@ module Eager : JUDGEMENTS = struct
     in
     match c with
     | MuTilde _ -> false
-    | Copair (a, b) -> is_coval_neutral a && is_coval_neutral b
+    | Cotuple xs -> List.fold_left (fun acc v -> acc && is_coval_neutral v) true xs
     | Split _ -> true
-    | Counit -> true
-    | Do _ -> true
   ;;
 end
 
@@ -196,18 +176,12 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
   let producer_consumer_step p c =
     match p, c with
     (* encode type errors *)
-    | Pair _, Copair _ -> Error (Failure "type error: A*B producer, C&D consumer")
-    | Pair _, Counit -> Error (Failure "type error: A*B producer, counit consumer")
-    | Pair _, Do _ -> Error (Failure "type error: A*B producer, unit consumer")
+    | Tuple _, Cotuple _ -> Error (Failure "type error: A*B producer, C&D consumer")
+    | Tuple xs, Split (_, binders) when List.compare_lengths xs binders != 0 ->
+      Error (Failure "type error: arity mismatch in tuple split")
     | Cosplit _, Split _ -> Error (Failure "type error: A&B producer, C*D consumer")
-    | Cosplit _, Counit -> Error (Failure "type error: A&B producer, counit consumer")
-    | Cosplit _, Do _ -> Error (Failure "type error: A&B producer, unit consumer")
-    | Unit, Copair _ -> Error (Failure "type error; unit producer, A&B consumer")
-    | Unit, Split _ -> Error (Failure "type error; unit producer, A*B consumer")
-    | Unit, Counit -> Error (Failure "type error; unit producer, counit consumer")
-    | Codo _, Copair _ -> Error (Failure "type error: counit producer, A&B consumer")
-    | Codo _, Split _ -> Error (Failure "type error: counit producer, A*B consumer")
-    | Codo _, Do _ -> Error (Failure "type error: counit producer, unit consumer")
+    | Cosplit (_, binders), Cotuple xs when List.compare_lengths xs binders != 0 ->
+      Error (Failure "type error: arity mismatch in cotuple split")
     (* any letcc is immediately evaluated *)
     | Mu (cut, _), c ->
       Result.fold
@@ -220,95 +194,68 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
         (Beta_reducer.beta_reduce_with_producer 0 p cut)
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
-    (* unit semantics *)
-    | Unit, Do cut -> Incomplete cut
-    (* counit semantics *)
-    | Codo cut, Counit -> Incomplete cut
-    (* pair semantics *)
-    (* canonical pair destruction *)
-    | Pair (a, b), Split (cut, _, _) when is_val (Pair (a, b)) ->
-      Result.fold
-        (Beta_reducer.beta_reduce_with_neutral 0 a cut)
-        ~ok:(fun cut ->
-          Result.fold
-            (Beta_reducer.beta_reduce_with_neutral 1 b cut)
-            ~ok:(fun cut -> Incomplete cut)
-            ~error:(fun exn -> Error exn))
-        ~error:(fun exn -> Error exn)
-    (* pair focusing rules, left to right *)
-    | Pair (Positive a, b), cons when not (is_val a) ->
-      let new_producer = Positive a in
-      let new_consumer =
-        let pair = Pair (Name (Bound (0, None)), b) in
-        Negative (MuTilde ({ p = Positive pair; c = Negative cons }, None))
+    (* tuple semantics *)
+    (* canonical tuple destruction *)
+    | Tuple xs, Split (cut, _) when is_val (Tuple xs) ->
+      (* beta-reduce each x in xs one by one *)
+      List.fold_left
+        (fun acc (x, i) ->
+           Result.fold
+             acc
+             ~ok:(fun cut -> Beta_reducer.beta_reduce_with_neutral i x cut)
+             ~error:(fun exn -> Error exn))
+        (Ok cut)
+        (List.mapi (fun i x -> x, i) xs)
+      |> Result.fold ~ok:(fun cut -> Incomplete cut) ~error:(fun exn -> Error exn)
+    (* tuple focusing rules, left to right *)
+    | Tuple xs, cons ->
+      (* find the element and position of the non-value in xs, create a continuation that feeds the non-value into that position *)
+      let rec find_non_value lst index =
+        match lst with
+        | [] -> None
+        | Name _ :: xs -> find_non_value xs (index + 1)
+        | Negative _ :: xs -> find_non_value xs (index + 1)
+        | Positive x :: xs ->
+          if not (is_val x) then Some (x, index) else find_non_value xs (index + 1)
       in
-      Incomplete { p = new_producer; c = new_consumer }
-    | Pair (a, Positive b), cons when not (is_val b) ->
-      let new_producer = Positive b in
-      let new_consumer =
-        let pair = Pair (a, Name (Bound (0, None))) in
-        Negative (MuTilde ({ p = Positive pair; c = Negative cons }, None))
-      in
-      Incomplete { p = new_producer; c = new_consumer }
-    (* any pair below is already a value.
+      (match find_non_value xs 0 with
+       | None -> Error (Failure "internal error: expected a non-value in tuple focusing")
+       | Some (non_val, pos) ->
+         let new_producer = Positive non_val in
+         let new_consumer =
+           (* map over the original list, but replace the non-value with a bound variable *)
+           let new_elems =
+             List.mapi (fun i x -> if i = pos then Name (Bound (0, None)) else x) xs
+           in
+           let tuple = Tuple new_elems in
+           (* this is done in order to cut the non-value with a continuation, substituting that
+           * non-value right there! (it will be evaluated at that point) *)
+           Negative (MuTilde ({ p = Positive tuple; c = Negative cons }, None))
+         in
+         Incomplete { p = new_producer; c = new_consumer })
+    (* any tuple below is already a value.
      * and since the only non_value was mu
      * and it has already been dealt with,
      * ANYTHING here is a value. *)
-    (* catch-all pair destruction in case the
-     * is_val judgement is ill-formed *)
-    | Pair (a, b), Split (cut, _, _) ->
-      Result.fold
-        (Beta_reducer.beta_reduce_with_neutral 0 a cut)
-        ~ok:(fun cut ->
-          Result.fold
-            (Beta_reducer.beta_reduce_with_neutral 1 b cut)
-            ~ok:(fun cut -> Incomplete cut)
-            ~error:(fun exn -> Error exn))
-        ~error:(fun exn -> Error exn)
     (* catchall for any value and mutilde *)
     | p, MuTilde (cut, _) ->
       Result.fold
         (Beta_reducer.beta_reduce_with_producer 0 p cut)
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
-    (* copair semantics - any potential simplification is only done
-     * when the left side is completely simplified. in order to treat
-     * the copair using is_val, we pretend it is a pair *)
-    | Cosplit (cut, _, _), Copair (a, b) when is_val (Pair (a, b)) ->
-      Result.fold
-        (Beta_reducer.beta_reduce_with_neutral 0 a cut)
-        ~ok:(fun cut ->
-          Result.fold
-            (Beta_reducer.beta_reduce_with_neutral 1 b cut)
-            ~ok:(fun cut -> Incomplete cut)
-            ~error:(fun exn -> Error exn))
-        ~error:(fun exn -> Error exn)
-    (* copair focusing rules, left to right *)
-    | prod, Copair (Positive a, b) when not (is_val a) ->
-      let new_producer = Positive a in
-      let new_consumer =
-        let copair = Copair (Name (Bound (0, None)), b) in
-        Negative (MuTilde ({ p = Positive prod; c = Negative copair }, None))
-      in
-      Incomplete { p = new_producer; c = new_consumer }
-    | prod, Copair (a, Positive b) when not (is_val b) ->
-      let new_producer = Positive b in
-      let new_consumer =
-        let copair = Copair (a, Name (Bound (0, None))) in
-        Negative (MuTilde ({ p = Positive prod; c = Negative copair }, None))
-      in
-      Incomplete { p = new_producer; c = new_consumer }
-    (* catch-all copair destruction in case the
-     * is_val judgement is ill-formed *)
-    | Cosplit (cut, _, _), Copair (a, b) ->
-      Result.fold
-        (Beta_reducer.beta_reduce_with_neutral 0 a cut)
-        ~ok:(fun cut ->
-          Result.fold
-            (Beta_reducer.beta_reduce_with_neutral 1 b cut)
-            ~ok:(fun cut -> Incomplete cut)
-            ~error:(fun exn -> Error exn))
-        ~error:(fun exn -> Error exn)
+    (* cotuple semantics - under CBV, the cotuple is not expected to focus.
+     * cut any cotuple. *)
+    | Cosplit (cut, _), Cotuple xs ->
+      (* beta-reduce each x in xs one by one *)
+      List.fold_left
+        (fun acc (x, i) ->
+           Result.fold
+             acc
+             ~ok:(fun cut -> Beta_reducer.beta_reduce_with_neutral i x cut)
+             ~error:(fun exn -> Error exn))
+        (Ok cut)
+        (List.mapi (fun i x -> x, i) xs)
+      |> Result.fold ~ok:(fun cut -> Incomplete cut) ~error:(fun exn -> Error exn)
   ;;
 
   let producer_name_step p n =
@@ -322,20 +269,31 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
     | p when is_val p ->
       let cut = { p = Positive p; c = consumer } in
       Complete cut
-    | Pair (Positive a, b) when not (is_val a) ->
-      let new_producer = Positive a in
-      let new_consumer =
-        let pair = Pair (Name (Bound (0, None)), b) in
-        Negative (MuTilde ({ p = Positive pair; c = consumer }, None))
+    | Tuple xs ->
+      (* find the element and position of the non-value in xs, create a continuation that feeds the non-value into that position *)
+      let rec find_non_value lst index =
+        match lst with
+        | [] -> None
+        | Name _ :: xs -> find_non_value xs (index + 1)
+        | Negative _ :: xs -> find_non_value xs (index + 1)
+        | Positive x :: xs ->
+          if not (is_val x) then Some (x, index) else find_non_value xs (index + 1)
       in
-      Incomplete { p = new_producer; c = new_consumer }
-    | Pair (a, Positive b) when not (is_val b) ->
-      let new_producer = Positive b in
-      let new_consumer =
-        let pair = Pair (a, Name (Bound (0, None))) in
-        Negative (MuTilde ({ p = Positive pair; c = consumer }, None))
-      in
-      Incomplete { p = new_producer; c = new_consumer }
+      (match find_non_value xs 0 with
+       | None -> Error (Failure "internal error: expected a non-value in tuple focusing")
+       | Some (non_val, pos) ->
+         let new_producer = Positive non_val in
+         let new_consumer =
+           (* map over the original list, but replace the non-value with a bound variable *)
+           let new_elems =
+             List.mapi (fun i x -> if i = pos then Name (Bound (0, None)) else x) xs
+           in
+           let tuple = Tuple new_elems in
+           (* this is done in order to cut the non-value with a continuation, substituting that
+           * non-value right there! (it will be evaluated at that point) *)
+           Negative (MuTilde ({ p = Positive tuple; c = consumer }, None))
+         in
+         Incomplete { p = new_producer; c = new_consumer })
     | p ->
       let cut = { p = Positive p; c = consumer } in
       Complete cut
@@ -349,23 +307,6 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
         (Beta_reducer.beta_reduce_with_neutral 0 producer cut)
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
-    | Copair (a, b) when is_val (Pair (a, b)) ->
-      let cut = { p = producer; c = Negative c } in
-      Complete cut
-    | Copair (Positive a, b) when not (is_val a) ->
-      let new_producer = Positive a in
-      let new_consumer =
-        let copair = Copair (Name (Bound (0, None)), b) in
-        Negative (MuTilde ({ p = producer; c = Negative copair }, None))
-      in
-      Incomplete { p = new_producer; c = new_consumer }
-    | Copair (a, Positive b) when not (is_val b) ->
-      let new_producer = Positive b in
-      let new_consumer =
-        let copair = Copair (a, Name (Bound (0, None))) in
-        Negative (MuTilde ({ p = producer; c = Negative copair }, None))
-      in
-      Incomplete { p = new_producer; c = new_consumer }
     | c ->
       let cut = { p = producer; c = Negative c } in
       Complete cut
@@ -423,18 +364,8 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
   let producer_consumer_step p c =
     match p, c with
     (* encode type errors *)
-    | Pair _, Copair _ -> Error (Failure "type error: A*B producer, C&D consumer")
-    | Pair _, Counit -> Error (Failure "type error: A*B producer, counit consumer")
-    | Pair _, Do _ -> Error (Failure "type error: A*B producer, unit consumer")
+    | Tuple _, Cotuple _ -> Error (Failure "type error: A*B producer, C&D consumer")
     | Cosplit _, Split _ -> Error (Failure "type error: A&B producer, C*D consumer")
-    | Cosplit _, Counit -> Error (Failure "type error: A&B producer, counit consumer")
-    | Cosplit _, Do _ -> Error (Failure "type error: A&B producer, unit consumer")
-    | Unit, Copair _ -> Error (Failure "type error; unit producer, A&B consumer")
-    | Unit, Split _ -> Error (Failure "type error; unit producer, A*B consumer")
-    | Unit, Counit -> Error (Failure "type error; unit producer, counit consumer")
-    | Codo _, Copair _ -> Error (Failure "type error: counit producer, A&B consumer")
-    | Codo _, Split _ -> Error (Failure "type error: counit producer, A*B consumer")
-    | Codo _, Do _ -> Error (Failure "type error: counit producer, unit consumer")
     (* any let is immediately evaluated *)
     | p, MuTilde (cut, _) ->
       Result.fold
@@ -447,95 +378,72 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
         (Beta_reducer.beta_reduce_with_consumer 0 c cut)
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
-    (* counit semantics *)
-    | Codo cut, Counit -> Incomplete cut
-    (* unit semantics *)
-    | Unit, Do cut -> Incomplete cut
-    (* copair semantics *)
-    (* canonical copair destruction *)
-    | Cosplit (cut, _, _), Copair (a, b) when is_coval (Copair (a, b)) ->
-      Result.fold
-        (Beta_reducer.beta_reduce_with_neutral 0 a cut)
-        ~ok:(fun cut ->
-          Result.fold
-            (Beta_reducer.beta_reduce_with_neutral 1 b cut)
-            ~ok:(fun cut -> Incomplete cut)
-            ~error:(fun exn -> Error exn))
-        ~error:(fun exn -> Error exn)
-    (* copair focusing rules, left to right *)
-    | prod, Copair (Negative a, b) when not (is_coval a) ->
-      let new_consumer = Negative a in
-      let new_producer =
-        let copair = Copair (Name (Bound (0, None)), b) in
-        Positive (Mu ({ c = Negative copair; p = Positive prod }, None))
+    (* cotuple semantics *)
+    (* canonical cotuple destruction *)
+    | Cosplit (cut, _), Cotuple xs when is_coval (Cotuple xs) ->
+      (* beta-reduce each x in xs one by one *)
+      List.fold_left
+        (fun acc (x, i) ->
+           Result.fold
+             acc
+             ~ok:(fun cut -> Beta_reducer.beta_reduce_with_neutral i x cut)
+             ~error:(fun exn -> Error exn))
+        (Ok cut)
+        (List.mapi (fun i x -> x, i) xs)
+      |> Result.fold ~ok:(fun cut -> Incomplete cut) ~error:(fun exn -> Error exn)
+    (* cotuple focusing rules, left to right *)
+    | prod, Cotuple xs ->
+      (* find the element and position of the non-covalue in xs, create a continuation that feeds the non-covalue into that position *)
+      let rec find_non_covalue lst index =
+        match lst with
+        | [] -> None
+        | Name _ :: xs -> find_non_covalue xs (index + 1)
+        | Positive _ :: xs -> find_non_covalue xs (index + 1)
+        | Negative x :: xs ->
+          if not (is_coval x) then Some (x, index) else find_non_covalue xs (index + 1)
       in
-      Incomplete { p = new_producer; c = new_consumer }
-    | prod, Copair (a, Negative b) when not (is_coval b) ->
-      let new_consumer = Negative b in
-      let new_producer =
-        let copair = Copair (a, Name (Bound (0, None))) in
-        Positive (Mu ({ c = Negative copair; p = Positive prod }, None))
-      in
-      Incomplete { p = new_producer; c = new_consumer }
-    (* any copair below is already a covalue.
+      (match find_non_covalue xs 0 with
+       | None ->
+         Error (Failure "internal error: expected a non-covalue in cotuple focusing")
+       | Some (non_coval, pos) ->
+         let new_consumer = Negative non_coval in
+         let new_producer =
+           (* map over the original list, but replace the non-covalue with a bound variable *)
+           let new_elems =
+             List.mapi (fun i x -> if i = pos then Name (Bound (0, None)) else x) xs
+           in
+           let cotuple = Cotuple new_elems in
+           (* this is done in order to cut the non-covalue with a continuation, substituting that
+           * non-covalue right there! (it will be evaluated at that point) *)
+           Positive (Mu ({ c = Negative cotuple; p = Positive prod }, None))
+         in
+         Incomplete { p = new_producer; c = new_consumer })
+    (* any cotuple below is already a covalue.
      * and since the only non_covalue was mutilde
      * and it has already been dealt with,
      * ANYTHING here is a covalue. *)
-    (* catch-all copair destruction in case the
-     * is_coval judgement is ill-formed *)
-    | Cosplit (cut, _, _), Copair (a, b) ->
-      Result.fold
-        (Beta_reducer.beta_reduce_with_neutral 0 a cut)
-        ~ok:(fun cut ->
-          Result.fold
-            (Beta_reducer.beta_reduce_with_neutral 1 b cut)
-            ~ok:(fun cut -> Incomplete cut)
-            ~error:(fun exn -> Error exn))
-        ~error:(fun exn -> Error exn)
     (* catchall for any covalue and mu *)
     | Mu (cut, _), c ->
       Result.fold
         (Beta_reducer.beta_reduce_with_consumer 0 c cut)
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
-    (* pair semantics - any potential simplification is only done
+    (* tuple semantics - under CBN, the tuple is not expected to focus.
+     * cut any tuple. *)
+    (* tuple semantics - any potential simplification is only done
      * when the right side is completely simplified. in order to treat
-     * the pair using is_coval, we pretend it is a copair *)
-    | Pair (a, b), Split (cut, _, _) when is_coval (Copair (a, b)) ->
-      Result.fold
-        (Beta_reducer.beta_reduce_with_neutral 0 a cut)
-        ~ok:(fun cut ->
-          Result.fold
-            (Beta_reducer.beta_reduce_with_neutral 1 b cut)
-            ~ok:(fun cut -> Incomplete cut)
-            ~error:(fun exn -> Error exn))
-        ~error:(fun exn -> Error exn)
-    (* pair focusing rules, left to right *)
-    | Pair (Negative a, b), cons when not (is_coval a) ->
-      let new_consumer = Negative a in
-      let new_producer =
-        let pair = Pair (Name (Bound (0, None)), b) in
-        Positive (Mu ({ c = Negative cons; p = Positive pair }, None))
-      in
-      Incomplete { p = new_producer; c = new_consumer }
-    | Pair (a, Negative b), cons when not (is_coval b) ->
-      let new_consumer = Negative b in
-      let new_producer =
-        let pair = Pair (a, Name (Bound (0, None))) in
-        Positive (Mu ({ c = Negative cons; p = Positive pair }, None))
-      in
-      Incomplete { p = new_producer; c = new_consumer }
-    (* catch-all pair destruction in case the
-     * is_val judgement is ill-formed *)
-    | Pair (a, b), Split (cut, _, _) ->
-      Result.fold
-        (Beta_reducer.beta_reduce_with_neutral 0 a cut)
-        ~ok:(fun cut ->
-          Result.fold
-            (Beta_reducer.beta_reduce_with_neutral 1 b cut)
-            ~ok:(fun cut -> Incomplete cut)
-            ~error:(fun exn -> Error exn))
-        ~error:(fun exn -> Error exn)
+     * the tuple using is_coval, we pretend it is a cotuple *)
+    | Tuple xs, Split (cut, _) ->
+      (* beta-reduce each x in xs one by one *)
+      List.fold_left
+        (fun acc (x, i) ->
+           Result.fold
+             acc
+             ~ok:(fun cut -> Beta_reducer.beta_reduce_with_neutral i x cut)
+             ~error:(fun exn -> Error exn))
+        (Ok cut)
+        (List.mapi (fun i x -> x, i) xs)
+      |> Result.fold ~ok:(fun cut -> Incomplete cut) ~error:(fun exn -> Error exn)
   ;;
 
   let producer_name_step p n =
@@ -546,23 +454,6 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
         (Beta_reducer.beta_reduce_with_neutral 0 consumer cut)
         ~ok:(fun cut -> Incomplete cut)
         ~error:(fun exn -> Error exn)
-    | Pair (a, b) when is_coval (Copair (a, b)) ->
-      let cut = { p = Positive p; c = consumer } in
-      Complete cut
-    | Pair (Negative a, b) when not (is_coval a) ->
-      let new_consumer = Negative a in
-      let new_producer =
-        let pair = Pair (Name (Bound (0, None)), b) in
-        Positive (Mu ({ p = Positive pair; c = consumer }, None))
-      in
-      Incomplete { p = new_producer; c = new_consumer }
-    | Pair (a, Negative b) when not (is_coval b) ->
-      let new_consumer = Negative b in
-      let new_producer =
-        let pair = Pair (a, Name (Bound (0, None))) in
-        Positive (Mu ({ p = Positive pair; c = consumer }, None))
-      in
-      Incomplete { p = new_producer; c = new_consumer }
     | p ->
       let cut = { p = Positive p; c = consumer } in
       Complete cut
@@ -579,20 +470,32 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
     | c when is_coval c ->
       let cut = { p = producer; c = Negative c } in
       Complete cut
-    | Copair (Negative a, b) when not (is_coval a) ->
-      let new_consumer = Negative a in
-      let new_producer =
-        let copair = Copair (Name (Bound (0, None)), b) in
-        Positive (Mu ({ p = producer; c = Negative copair }, None))
+    | Cotuple xs ->
+      (* find the element and position of the non-covalue in xs, create a continuation that feeds the non-covalue into that position *)
+      let rec find_non_covalue lst index =
+        match lst with
+        | [] -> None
+        | Name _ :: xs -> find_non_covalue xs (index + 1)
+        | Positive _ :: xs -> find_non_covalue xs (index + 1)
+        | Negative x :: xs ->
+          if not (is_coval x) then Some (x, index) else find_non_covalue xs (index + 1)
       in
-      Incomplete { p = new_producer; c = new_consumer }
-    | Copair (a, Negative b) when not (is_coval b) ->
-      let new_consumer = Negative b in
-      let new_producer =
-        let copair = Copair (a, Name (Bound (0, None))) in
-        Positive (Mu ({ p = producer; c = Negative copair }, None))
-      in
-      Incomplete { p = new_producer; c = new_consumer }
+      (match find_non_covalue xs 0 with
+       | None ->
+         Error (Failure "internal error: expected a non-covalue in cotuple focusing")
+       | Some (non_coval, pos) ->
+         let new_consumer = Negative non_coval in
+         let new_producer =
+           (* map over the original list, but replace the non-covalue with a bound variable *)
+           let new_elems =
+             List.mapi (fun i x -> if i = pos then Name (Bound (0, None)) else x) xs
+           in
+           let cotuple = Cotuple new_elems in
+           (* this is done in order to cut the non-covalue with a continuation, substituting that
+           * non-covalue right there! (it will be evaluated at that point) *)
+           Positive (Mu ({ c = Negative cotuple; p = producer }, None))
+         in
+         Incomplete { p = new_producer; c = new_consumer })
     | c ->
       let cut = { p = producer; c = Negative c } in
       Complete cut

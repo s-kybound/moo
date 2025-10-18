@@ -6,16 +6,19 @@
     let keywords : (string * Parser.token) list = [
       ("letcc",   LETC);
       ("let",     LETP);
-      ("pair",    PAIR);
       ("split",   SPLIT);
-      ("copair",  COPAIR);
       ("cosplit", COSPLIT);
       ("in",      IN);
       ("defp",    DEFP);
       ("defc",    DEFC);
       ("type",    TYPE);
-      ("do",      DO);
-      ("codo",    CODO);
+    (*
+      For when we get
+      full pattern matching
+      
+      ("match",   MATCH);
+      ("dispatch",COMATCH);
+    *)
     ] in
     keywords
     |> List.to_seq
@@ -42,8 +45,6 @@ rule token = parse
   | newline        { Lexing.new_line lexbuf; token lexbuf }
   | "{*"           { skip_comment 1 lexbuf; token lexbuf }
   | "*}"           { raisef lexbuf "Unmatched *}. Was a comment erased incorrectly?" }
-  | "()"           { UNIT }
-  | "'()"          { COUNIT }
   | "->"           { LTRARROW }
   | "<-"           { RTLARROW }
   | '='            { EQUALS }
@@ -52,7 +53,9 @@ rule token = parse
   | '['            { LBRACK }
   | ']'            { RBRACK }
   | '('            { LPAREN }
+  | "\'("          { TICKLPAREN }
   | ')'            { RPAREN }
+  | ','            { COMMA }
   | '*'            { STAR }
   | '&'            { AMPERSAND }
   | '+'            { PLUS }

@@ -13,8 +13,8 @@ module Surface = struct
 
     type type_expr =
       | Name of string
-      | PosProd of type_use * type_use
-      | NegProd of type_use * type_use
+      | PosProd of type_use list
+      | NegProd of type_use list
       | KindInstantiation of string * type_use list
 
     and type_use =
@@ -41,10 +41,12 @@ module Surface = struct
       let rec show_type_expr te =
         match te with
         | Name s -> s
-        | PosProd (tu1, tu2) ->
-          Printf.sprintf "(* %s %s)" (show_type_use tu1) (show_type_use tu2)
-        | NegProd (tu1, tu2) ->
-          Printf.sprintf "(& %s %s)" (show_type_use tu1) (show_type_use tu2)
+        | PosProd tus ->
+          let tuple_string = tus |> List.map show_type_use |> String.concat " * " in
+          Printf.sprintf "(%s)" tuple_string
+        | NegProd tus ->
+          let cotuple_string = tus |> List.map show_type_use |> String.concat " & " in
+          Printf.sprintf "(%s)" cotuple_string
         | KindInstantiation (k, args) ->
           Printf.sprintf "(%s %s)" k (String.concat " " (List.map show_type_use args))
 
@@ -68,17 +70,13 @@ module Surface = struct
 
   type producer =
     | Mu of name * cut
-    | Pair of neutral * neutral
-    | Cosplit of name * name * cut
-    | Unit
-    | Codo of cut
+    | Tuple of neutral list
+    | Cosplit of name list * cut
 
   and consumer =
     | MuTilde of name * cut
-    | Split of name * name * cut
-    | Copair of neutral * neutral
-    | Counit
-    | Do of cut
+    | Split of name list * cut
+    | Cotuple of neutral list
 
   and cut =
     { p : neutral
@@ -113,22 +111,24 @@ module Surface = struct
     let rec show_producer p =
       match p with
       | Mu (coname, cut) ->
-        Printf.sprintf "(letcc %s %s)" (show_name coname) (show_cut cut)
-      | Pair (a, b) -> Printf.sprintf "(pair %s %s)" (show_neutral a) (show_neutral b)
-      | Cosplit (a, b, cut) ->
-        Printf.sprintf "(cosplit %s %s %s)" (show_name a) (show_name b) (show_cut cut)
-      | Unit -> "()"
-      | Codo cut -> Printf.sprintf "(codo %s)" (show_cut cut)
+        Printf.sprintf "(letcc %s -> %s)" (show_name coname) (show_cut cut)
+      | Tuple xs ->
+        let tuple_string = xs |> List.map show_neutral |> String.concat ", " in
+        Printf.sprintf "(%s)" tuple_string
+      | Cosplit (xs, cut) ->
+        let names_string = xs |> List.map show_name |> String.concat ", " in
+        Printf.sprintf "(cosplit '(%s) -> %s)" names_string (show_cut cut)
 
     and show_consumer c =
       match c with
       | MuTilde (name, cut) ->
-        Printf.sprintf "(let %s %s)" (show_name name) (show_cut cut)
-      | Split (a, b, cut) ->
-        Printf.sprintf "(split %s %s %s)" (show_name a) (show_name b) (show_cut cut)
-      | Copair (a, b) -> Printf.sprintf "(copair %s %s)" (show_neutral a) (show_neutral b)
-      | Counit -> "'()"
-      | Do cut -> Printf.sprintf "(do %s)" (show_cut cut)
+        Printf.sprintf "(let %s -> %s)" (show_name name) (show_cut cut)
+      | Split (xs, cut) ->
+        let names_string = xs |> List.map show_name |> String.concat ", " in
+        Printf.sprintf "(split (%s) -> %s)" names_string (show_cut cut)
+      | Cotuple xs ->
+        let cotuple_string = xs |> List.map show_neutral |> String.concat ", " in
+        Printf.sprintf "'(%s)" cotuple_string
 
     and show_cut (cut : cut) =
       Printf.sprintf "[%s %s]" (show_neutral cut.p) (show_neutral cut.c)
@@ -162,18 +162,14 @@ module Surface = struct
 
   module Producer = struct
     let mu coname cut = Mu (coname, cut)
-    let pair a b = Pair (a, b)
-    let cosplit a b cut = Cosplit (a, b, cut)
-    let unit = Unit
-    let codo cut = Codo cut
+    let tuple xs = Tuple xs
+    let cosplit xs cut = Cosplit (xs, cut)
   end
 
   module Consumer = struct
     let mutilde name cut = MuTilde (name, cut)
-    let split a b cut = Split (a, b, cut)
-    let copair a b = Copair (a, b)
-    let counit = Counit
-    let do_ cut = Do cut
+    let split xs cut = Split (xs, cut)
+    let cotuple xs = Cotuple xs
   end
 
   module Neutral = struct
@@ -211,8 +207,8 @@ module Core = struct
 
     type type_expr =
       | Name of string
-      | PosProd of type_use * type_use
-      | NegProd of type_use * type_use
+      | PosProd of type_use list
+      | NegProd of type_use list
       | KindInstantiation of string * type_use list
 
     and type_use =
@@ -241,10 +237,12 @@ module Core = struct
       let rec show_type_expr te =
         match te with
         | Name s -> s
-        | PosProd (tu1, tu2) ->
-          Printf.sprintf "(* %s %s)" (show_type_use tu1) (show_type_use tu2)
-        | NegProd (tu1, tu2) ->
-          Printf.sprintf "(& %s %s)" (show_type_use tu1) (show_type_use tu2)
+        | PosProd tus ->
+          let tuple_string = tus |> List.map show_type_use |> String.concat " * " in
+          Printf.sprintf "(%s)" tuple_string
+        | NegProd tus ->
+          let cotuple_string = tus |> List.map show_type_use |> String.concat " & " in
+          Printf.sprintf "(%s)" cotuple_string
         | KindInstantiation (k, args) ->
           Printf.sprintf "(%s %s)" k (String.concat " " (List.map show_type_use args))
 
@@ -269,17 +267,13 @@ module Core = struct
    * so we leave them in the producer and consumer *)
   type producer =
     | Mu of cut * Type.type_use option
-    | Pair of neutral * neutral
-    | Cosplit of cut * Type.type_use option * Type.type_use option
-    | Unit
-    | Codo of cut
+    | Tuple of neutral list
+    | Cosplit of cut * Type.type_use option list
 
   and consumer =
     | MuTilde of cut * Type.type_use option
-    | Split of cut * Type.type_use option * Type.type_use option
-    | Copair of neutral * neutral
-    | Counit
-    | Do of cut
+    | Split of cut * Type.type_use option list
+    | Cotuple of neutral list
 
   and cut =
     { p : neutral
@@ -314,18 +308,26 @@ module Core = struct
     let rec show_producer p =
       match p with
       | Mu (cut, _) -> Printf.sprintf "(μ.%s)" (show_cut cut)
-      | Pair (a, b) -> Printf.sprintf "(%s * %s)" (show_neutral a) (show_neutral b)
-      | Cosplit (cut, _, _) -> Printf.sprintf "((0 & 1).%s)" (show_cut cut)
-      | Unit -> "()"
-      | Codo cut -> Printf.sprintf "(codo %s)" (show_cut cut)
+      | Tuple xs ->
+        let tuple_string = xs |> List.map show_neutral |> String.concat ", " in
+        Printf.sprintf "(%s)" tuple_string
+      | Cosplit (cut, typs) ->
+        let typ_string =
+          typs |> List.length |> fun n -> List.init n string_of_int |> String.concat ", "
+        in
+        Printf.sprintf "('(%s).%s)" typ_string (show_cut cut)
 
     and show_consumer c =
       match c with
       | MuTilde (cut, _) -> Printf.sprintf "(μ̃.%s)" (show_cut cut)
-      | Split (cut, _, _) -> Printf.sprintf "((0 * 1).%s)" (show_cut cut)
-      | Copair (a, b) -> Printf.sprintf "(%s & %s)" (show_neutral a) (show_neutral b)
-      | Counit -> "'()"
-      | Do cut -> Printf.sprintf "(do %s)" (show_cut cut)
+      | Split (cut, typs) ->
+        let typ_string =
+          typs |> List.length |> fun n -> List.init n string_of_int |> String.concat ", "
+        in
+        Printf.sprintf "((%s).%s)" typ_string (show_cut cut)
+      | Cotuple xs ->
+        let cotuple_string = xs |> List.map show_neutral |> String.concat ", " in
+        Printf.sprintf "'(%s)" cotuple_string
 
     and show_cut (cut : cut) =
       Printf.sprintf "<%s|%s>" (show_neutral cut.p) (show_neutral cut.c)
@@ -397,14 +399,12 @@ module Core = struct
       and convert_type_expr (abstract_type_env : abstract_type_env) type_expr =
         match type_expr with
         | ST.Name s -> T.Name s
-        | ST.PosProd (tu1, tu2) ->
-          let tu1 = convert_type_use abstract_type_env tu1 in
-          let tu2 = convert_type_use abstract_type_env tu2 in
-          T.PosProd (tu1, tu2)
-        | ST.NegProd (tu1, tu2) ->
-          let tu1 = convert_type_use abstract_type_env tu1 in
-          let tu2 = convert_type_use abstract_type_env tu2 in
-          T.NegProd (tu1, tu2)
+        | ST.PosProd tus ->
+          let tus' = List.map (convert_type_use abstract_type_env) tus in
+          T.PosProd tus'
+        | ST.NegProd tus ->
+          let tus' = List.map (convert_type_use abstract_type_env) tus in
+          T.NegProd tus'
         | ST.KindInstantiation (k, args) ->
           T.KindInstantiation (k, List.map (convert_type_use abstract_type_env) args)
 
@@ -446,36 +446,38 @@ module Core = struct
       List.map (fun (s : S.name) -> s.name, convert_binder_type s) vs @ env
     ;;
 
+    let binders_are_unique xs =
+      let uniques = List.sort_uniq compare xs in
+      List.length xs = List.length uniques
+    ;;
+
     let rec convert_producer (term_env : term_env) p : producer =
       match p with
       | S.Mu (k, cut) ->
         Mu (convert_cut (push_names [ k ] term_env) cut, convert_binder_type k)
-      | S.Pair (a, b) -> Pair (convert_neutral term_env a, convert_neutral term_env b)
-      | S.Cosplit (x, y, cut) ->
-        if name_match x.name y.name
+      | S.Tuple xs ->
+        let xs' = List.map (convert_neutral term_env) xs in
+        Tuple xs'
+      | S.Cosplit (names, cut) ->
+        if not (binders_are_unique names)
         then raise (Failure "Cosplit: name conflict in parameters")
         else (
-          (* it is x first, then y, so that
-           * x will be the first to be looked up (0)
-           * then y (1) *)
-          let term_env' = push_names [ x; y ] term_env in
-          Cosplit (convert_cut term_env' cut, convert_binder_type x, convert_binder_type y))
-      | S.Unit -> Unit
-      | S.Codo cut -> Codo (convert_cut term_env cut)
+          let term_env' = push_names names term_env in
+          Cosplit (convert_cut term_env' cut, List.map convert_binder_type names))
 
     and convert_consumer (term_env : term_env) c : consumer =
       match c with
       | S.MuTilde (v, cut) ->
         MuTilde (convert_cut (push_names [ v ] term_env) cut, convert_binder_type v)
-      | S.Split (x, y, cut) ->
-        if name_match x.name y.name
+      | S.Split (names, cut) ->
+        if not (binders_are_unique names)
         then raise (Failure "Split: name conflict in parameters")
         else (
-          let term_env' = push_names [ x; y ] term_env in
-          Split (convert_cut term_env' cut, convert_binder_type x, convert_binder_type y))
-      | S.Copair (a, b) -> Copair (convert_neutral term_env a, convert_neutral term_env b)
-      | S.Counit -> Counit
-      | S.Do cut -> Do (convert_cut term_env cut)
+          let term_env' = push_names names term_env in
+          Split (convert_cut term_env' cut, List.map convert_binder_type names))
+      | S.Cotuple xs ->
+        let xs' = List.map (convert_neutral term_env) xs in
+        Cotuple xs'
 
     and convert_cut (term_env : term_env) cut : cut =
       { p = convert_neutral term_env cut.p; c = convert_neutral term_env cut.c }
@@ -504,32 +506,5 @@ module Core = struct
     { definitions = List.map Converter.convert_definition t.definitions
     ; main = Converter.convert_cut Converter.empty_term_env t.main
     }
-  ;;
-
-  let rec aequiv_producer (a : producer) (b : producer) =
-    match a, b with
-    | Mu (cut, _), Mu (cut', _) -> aequiv_cut cut cut'
-    | Pair (a, b), Pair (c, d) -> aequiv_neutral a c && aequiv_neutral b d
-    | Cosplit (cut, _, _), Cosplit (cut', _, _) -> aequiv_cut cut cut'
-    | Unit, Unit -> true
-    | Codo cut, Codo cut' -> aequiv_cut cut cut'
-    | _, _ -> false
-
-  and aequiv_consumer (a : consumer) (b : consumer) =
-    match a, b with
-    | MuTilde (cut, _), MuTilde (cut', _) -> aequiv_cut cut cut'
-    | Split (cut, _, _), Split (cut', _, _) -> aequiv_cut cut cut'
-    | Copair (a, b), Copair (c, d) -> aequiv_neutral a c && aequiv_neutral b d
-    | Counit, Counit -> true
-    | Do cut, Do cut' -> aequiv_cut cut cut'
-    | _, _ -> false
-
-  and aequiv_cut (a : cut) (b : cut) = aequiv_neutral a.p b.p && aequiv_neutral a.c b.c
-
-  and aequiv_neutral (a : neutral) (b : neutral) =
-    match a, b with
-    | Positive a, Positive b -> aequiv_producer a b
-    | Negative a, Negative b -> aequiv_consumer a b
-    | _, _ -> false
   ;;
 end

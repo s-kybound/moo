@@ -31,8 +31,8 @@ module TypeSubstituter = struct
     in
     match kind_body with
     | Name n -> Name n
-    | PosProd (t1, t2) -> PosProd (substitute_type_use t1, substitute_type_use t2)
-    | NegProd (t1, t2) -> NegProd (substitute_type_use t1, substitute_type_use t2)
+    | PosProd typs -> PosProd (List.map substitute_type_use typs)
+    | NegProd typs -> NegProd (List.map substitute_type_use typs)
     | KindInstantiation (t, args) ->
       let substituted_args = List.map substitute_type_use args in
       KindInstantiation (t, substituted_args)
@@ -58,8 +58,8 @@ module TypeSubstituter = struct
              | Base _ -> simplify_type_expr body
              | Kind _ -> failwith "Cannot instantiate kind type without arguments"))
         else failwith ("Type " ^ n ^ " not found in environment")
-      | PosProd (t1, t2) -> PosProd (simplify_type_use env t1, simplify_type_use env t2)
-      | NegProd (t1, t2) -> NegProd (simplify_type_use env t1, simplify_type_use env t2)
+      | PosProd ts -> PosProd (List.map (simplify_type_use env) ts)
+      | NegProd ts -> NegProd (List.map (simplify_type_use env) ts)
       | KindInstantiation (t, args) ->
         let simplified_args = List.map (simplify_type_use env) args in
         (* lookup the kind, instantiate it, and simplify *)

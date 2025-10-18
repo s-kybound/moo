@@ -10,11 +10,11 @@
 
 %token <string> IDENT
 %token LBRACK RBRACK LPAREN RPAREN
+%token TICKLPAREN
+%token COMMA (* the above are also for tuple, cotuple construction *)
 %token LETC LETP (* mu, mu-tilde abstactions *)
-%token PAIR SPLIT (* pair producer and its split consumer *)
-%token COSPLIT COPAIR (* cosplit producer and its copair consumer *)
-%token UNIT DO (* unit producer and its do consumer *)
-%token COUNIT CODO (* counit consumer and its codo producer *)
+%token SPLIT (* tuple consumer *)
+%token COSPLIT (* cotuple producer *)
 %token LTRARROW RTLARROW IN (* statement syntax *)
 %token DEFC DEFP (* top-level definitions *)
 %token EQUALS DELIMITER (* top-level definitions *)
@@ -58,6 +58,13 @@ top_level_definition:
   | type_definition                     { $1 }
 
 (* Nested statements *)
+
+list_of(elem, joiner):
+  |                                     { [] }
+  | elem                                { [$1] }
+  | xs=list_of(elem, joiner) 
+    joiner x=elem                       { xs @ [x] } 
+
 statement:
   | LETP v=var_intro 
     RTLARROW p=either IN m=statement    { cut
@@ -69,39 +76,23 @@ statement:
                                             (Positive (Producer.mu cv m))
                                             c
                                         }
-  | SPLIT    a=var_intro 
-             b=var_intro        
+  | SPLIT    LPAREN xs=list_of(var_intro, COMMA) RPAREN    
     RTLARROW p=either IN m=statement    { cut
                                             p
-                                            (Negative (Consumer.split a b m))
+                                            (Negative (Consumer.split xs m))
                                         }
-  | COSPLIT  a=var_intro 
-             b=var_intro       
+  | COSPLIT  TICKLPAREN xs=list_of(var_intro, COMMA) RPAREN       
     RTLARROW c=either IN m=statement    { cut
-                                            (Positive (Producer.cosplit a b m))
-                                            c
-                                        }
-  | DO RTLARROW p=either 
-    IN m=statement                      { cut
-                                            p
-                                            (Negative (Consumer.do_ m))
-                                        }
-  | CODO RTLARROW c=either 
-    IN m=statement                      { cut
-                                            (Positive (Producer.codo m))
+                                            (Positive (Producer.cosplit xs m))
                                             c
                                         }
   | cut                                 { $1 }
 
 cut_body:
   | p=either c=either                   { cut p c }
-  | either error                        { raisef $startpos($1) $endpos($1) "incomplete cut: expected consumer after producer in [%s ...]" (Show.show_neutral $1) }
 
 cut: 
   | LBRACK c=cut_body RBRACK            { c }
-  | LBRACK cut_body error               { raisef $startpos($1) $endpos($2) "unclosed cut: expected ']' to close cut started here" }
-  | LBRACK error                        { raisef $startpos($1) $endpos($1) "empty cut: expected [producer consumer] after '['" }
-  | RBRACK                              { raisef $startpos($1) $endpos($1) "unmatched ']': no corresponding '[' found" }
 
 var_intro:
   | typed_var                           { $1 }
@@ -111,7 +102,7 @@ tyvar:
   | IDENT                               { $1 }
 
 type_schema:
-  | v=tyvar                             { Type.Base v } (* basic type * *)
+  | v=tyvar                             { Type.Base v }           (* basic type * *)
   | LPAREN name=tyvar abs=tyvar+ RPAREN { Type.Kind (name, abs) } (* a kind * -> * *)
 
 abstract_type:
@@ -123,7 +114,6 @@ abstract_type:
                                           | Type.Var _ -> Type.Neg v
                                           | Type.Neg v -> v
                                         }
-
 (* usage of a type, only allowed within 
  * the body of another polar type *)
 type_use:
@@ -132,17 +122,19 @@ type_use:
 
 type_invocation_body:
   | kind=tyvar vars=type_use+           { Type.KindInstantiation (kind, vars) }
-  | tyvar error                         { raisef $startpos($1) $endpos($1) "we do not allow nullary kinds, that's what the base kinds is for!" }
+  | tyvar error                         { raisef $startpos($1) $endpos($1) "we do not allow nullary kinds, that's what base kinds are for!" }
 
 positive_product_body:
-  | STAR a=type_use b=type_use          { Type.PosProd (a, b) }
-  | STAR type_use type_use error        { raisef $startpos($1) $endpos($1) "* expects ONLY two types!" }
-  | STAR type_use error                 { raisef $startpos($1) $endpos($1) "* expects two types! please supply another type" }
+  | STAR                                { Type.PosProd [] }
+  | STAR type_use                       { Type.PosProd [$2]}
+  | x=type_use STAR xs=list_of(type_use, STAR)        
+                                        { Type.PosProd (x::xs) }
 
 negative_product_body:
-  | AMPERSAND a=type_use b=type_use     { Type.NegProd (a, b) }
-  | AMPERSAND type_use type_use error   { raisef $startpos($1) $endpos($1) "& expects ONLY two types!" }
-  | AMPERSAND type_use error            { raisef $startpos($1) $endpos($1) "& expects two types! please supply another type" }
+  | AMPERSAND                           { Type.NegProd [] }
+  | AMPERSAND type_use                  { Type.NegProd [$2]}
+  | x=type_use AMPERSAND xs=list_of(type_use, AMPERSAND)        
+                                        { Type.NegProd (x::xs) }
 
 (* base_types, only used in definitions. 
  * should be unpolarized. *)
@@ -199,43 +191,24 @@ letc:
   | LPAREN letc_body error              { raisef $startpos($1) $endpos($2) "unclosed letcc: expected ')' to close expression started here" }
 
 product_body:
-  | PAIR a=either b=either              { Producer.pair a b }
-  | PAIR either error                   { raisef $startpos($1) $endpos($2) "incomplete pair: expected second element after first element" } 
-  | PAIR error                          { raisef $startpos($1) $endpos($1) "incomplete pair: expected two elements like (pair x y)" } 
+  | list_of(either, COMMA)              { Producer.tuple $1 }
 
 product:
   | LPAREN p=product_body RPAREN        { p }
-  | LPAREN product_body error           { raisef $startpos($1) $endpos($2) "unclosed pair: expected ')' to close pair started here" }
+  | LPAREN product_body error           { raisef $startpos($1) $endpos($2) "unclosed tuple: expected ')' to close tuple started here" }
 
 cosplit_body:
-  | COSPLIT  a=var_intro 
-             b=var_intro 
-    LTRARROW s=statement                { Producer.cosplit a b s }
-  | COSPLIT var_intro 
-            var_intro error             { raisef $startpos($1) $endpos($3) "incomplete cosplit: expected cut after variables" }
-  | COSPLIT var_intro error             { raisef $startpos($1) $endpos($2) "incomplete cosplit: expected second variable and cut" }
-  | COSPLIT error                       { raisef $startpos($1) $endpos($1) "incomplete cosplit: expected (cosplit var1 var2 cut)" }
+  | COSPLIT  TICKLPAREN xs=list_of(var_intro, COMMA) RPAREN       
+    LTRARROW s=statement                { Producer.cosplit xs s }
 
 cosplit:
   | LPAREN c=cosplit_body RPAREN        { c }
   | LPAREN cosplit_body error           { raisef $startpos($1) $endpos($2) "unclosed cosplit: expected ')' to close expression started here" }
 
-unit:
-  | UNIT                                { Unit }
-
-codo_body:
-  | CODO LTRARROW s=statement           { Producer.codo s }
-
-codo:
-  | LPAREN c=codo_body RPAREN           { c }
-  | LPAREN codo_body error              { raisef $startpos($1) $endpos($2) "unclosed codo: expected ')' to close expression started here" }
-
 producer:
   | letc                                { $1 }
   | product                             { $1 }
   | cosplit                             { $1 }
-  | unit                                { $1 }
-  | codo                                { $1 }
 
 letp_body:
   | LETP v=var_intro 
@@ -248,41 +221,22 @@ letp:
   | LPAREN letp_body error              { raisef $startpos($1) $endpos($2) "unclosed let: expected ')' to close expression started here" }
 
 split_body:
-  | SPLIT    a=var_intro 
-             b=var_intro 
-    LTRARROW s=statement                { Consumer.split a b s }
-  | SPLIT var_intro 
-          var_intro error               { raisef $startpos($1) $endpos($3) "incomplete split: expected cut after variables" }
-  | SPLIT var_intro error               { raisef $startpos($1) $endpos($2) "incomplete split: expected second variable and cut" }
-  | SPLIT error                         { raisef $startpos($1) $endpos($1) "incomplete split: expected (split var1 var2 cut)" }
+  | SPLIT    LPAREN xs=list_of(var_intro, COMMA) RPAREN    
+    LTRARROW s=statement                { Consumer.split xs s }
 
 split:
   | LPAREN s=split_body RPAREN          { s }
   | LPAREN split_body error             { raisef $startpos($1) $endpos($2) "unclosed split: expected ')' to close expression started here" }
 
 coproduct_body:
-  | COPAIR a=either b=either            { Consumer.copair a b }
-  | COPAIR either error                 { raisef $startpos($1) $endpos($2) "incomplete copair: expected second element after first element" } 
-  | COPAIR error                        { raisef $startpos($1) $endpos($1) "incomplete copair: expected two elements like (copair x y)" } 
+  | list_of(either, COMMA)              { Consumer.cotuple $1 }
 
 coproduct:
-  | LPAREN c=coproduct_body RPAREN      { c }
-  | LPAREN coproduct_body error         { raisef $startpos($1) $endpos($2) "unclosed copair: expected ')' to close expression started here" }
-
-counit:
-  | COUNIT                              { Counit }
-
-do_body:
-  | DO LTRARROW s=statement             { Consumer.do_ s }
-
-do_:
-  | LPAREN d=do_body RPAREN             { d }
-  | LPAREN do_body error                { raisef $startpos($1) $endpos($2) "unclosed do: expected ')' to close expression started here" }
+  | TICKLPAREN c=coproduct_body RPAREN  { c }
+  | TICKLPAREN coproduct_body error     { raisef $startpos($1) $endpos($2) "unclosed cotuple: expected ')' to close expression started here" }
 
 consumer: 
   | letp                                { $1 }
   | split                               { $1 }
   | coproduct                           { $1 }
-  | counit                              { $1 }
-  | do_                                 { $1 }
 

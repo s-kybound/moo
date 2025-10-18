@@ -9,23 +9,23 @@ need some logical connective (other than implication) to restore a full logical 
 - disjunction (sums)
 
 We choose to go with these as they are simpler than a lambda abstraction as a primitive data type. As disjunction in a dual
-calculus has been more well studied through case and cocase, we opt to explore conjunction by introducing a pair, and
-demonstrate how just having the pair and its consumer split enables us to restore full expressiveness. We also introduce 
-the polar duals of pairs and splits, the cosplit and copair.
+calculus has been more well studied through case and cocase, we opt to explore conjunction by introducing a tuple, and
+demonstrate how just having the tuple and its consumer split enables us to restore full expressiveness. We also introduce 
+the polar duals of pairs and splits, the cosplit and cotuple.
 
-# what is the polar dual of pair and split?
+# what is the polar dual of tuple and split?
 
-We introduce the pair data type, which represents a product of 2 values. We also introduce the split consumer which allows
-us to access the two values in the pair. In code:
+We introduce the tuple data type, which represents a product of 2 values. We also introduce the split consumer which allows
+us to access the two values in the tuple. In code:
 
 ```
-<(pair x y) | (split a b M)> -> M[x/a, y/b]
+<(tuple x y) | (split a b M)> -> M[x/a, y/b]
 ```
 
 We see that this expression will beta-reduce to the statement M, with x and y substituted for a and b. We see that split
 is a consumer that tells us what to do next.
 
-Our derivation of cosplit and copair comes from analysis of case and its polar dual cocase, in similar systems that introduce 
+Our derivation of cosplit and cotuple comes from analysis of case and its polar dual cocase, in similar systems that introduce 
 disjunction. While sum + case tells us: "what do I do after figuring that this sum value is this case?", with sum producers 
 and a single case destructor, cocase + sum destructors tells us: "this cocase value knows what to do, if it gets this 
 specific destructor.". In this case, cocase is the PRODUCER, and the sum comes in the form of its CONSUMERS.
@@ -44,23 +44,23 @@ We see that the difference between sum/case and cocase/sum destructors is that t
 consumer, in the form of case, to the producer, in the form of cocase.
 
 Hence, in similar fashion, we flip this notion to the producer in the cosplit COdata type, having the cosplit dictate what to do next, 
-and have the product be transferred over to the consumer side, in the form of the copair!
+and have the product be transferred over to the consumer side, in the form of the cotuple!
 
 In pseudocode:
 ```
-<(cosplit 'x 'y M) | (copair 'a 'b)> -> M['a/'x, 'b/'y]
+<(cosplit 'x 'y M) | (cotuple 'a 'b)> -> M['a/'x, 'b/'y]
 ```
 
 With cosplit, we actually are able to restore the function/implication data type as a form of codata! Like so:
 ```
 {* a is the input value, 'k is the exit continuation *}
-<(cosplit a 'b M) | (copair x 'k)> -> M[x/a, 'k/'b]
+<(cosplit a 'b M) | (cotuple x 'k)> -> M[x/a, 'k/'b]
 ```
 
 We also have the negative function abstraction:
 ```
 {* a is the input value, 'k is the exit continuation *}
-<(pair x 'k) | (split a 'b M)> -> M[x/a, 'k/'b]
+<(tuple x 'k) | (split a 'b M)> -> M[x/a, 'k/'b]
 ```
 
 In this case, the consumer tells us what to do!
