@@ -12,12 +12,21 @@
       ("defp",    DEFP);
       ("defc",    DEFC);
       ("type",    TYPE);
+      (* universal and existential types *)
+      ("gen",     GEN);
+      ("inst",    INST);
+      ("pack",    PACK);
+      ("unpack",  UNPACK);
     (*
       For when we get
       full pattern matching
       
       ("match",   MATCH);
       ("dispatch",COMATCH);
+      (* these are ambiguity delimiters for
+       * the ocaml match syntax *)
+      ("begin", BEGIN);
+      ("end", END);
     *)
     ] in
     keywords
