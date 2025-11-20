@@ -15,6 +15,7 @@
 %token LETC LETP (* mu, mu-tilde abstactions *)
 %token SPLIT (* tuple consumer *)
 %token COSPLIT (* cotuple producer *)
+%token DONE CODONE (* end unit consumer, end counit expression *)
 %token LTRARROW RTLARROW IN (* statement syntax *)
 %token DEFC DEFP (* top-level definitions *)
 %token EQUALS DELIMITER (* top-level definitions *)
@@ -22,6 +23,9 @@
 %token AMPERSAND STAR PLUS MINUS NEG (* type operations: negative/positive products,
                                       * positive/negative polarity,
                                       * polarity negation *)
+%token GEN INST (* universal types *)
+%token UNPACK PACK (* existential types *)
+%token FORALL EXISTS (* type quantifiers *)
 %token TYPE (* type definition *)
 %token EOF
 %start <t> entrypoint
