@@ -80,12 +80,12 @@ statement:
                                             (Positive (Producer.mu cv m))
                                             c
                                         }
-  | SPLIT    LPAREN xs=list_of(var_intro, COMMA) RPAREN    
+  | SPLIT xs=list_of(var_intro, COMMA)   
     RTLARROW p=either IN m=statement    { cut
                                             p
                                             (Negative (Consumer.split xs m))
                                         }
-  | COSPLIT  TICKLPAREN xs=list_of(var_intro, COMMA) RPAREN       
+  | COSPLIT xs=list_of(var_intro, COMMA)       
     RTLARROW c=either IN m=statement    { cut
                                             (Positive (Producer.cosplit xs m))
                                             c
@@ -202,7 +202,7 @@ product:
   | LPAREN product_body error           { raisef $startpos($1) $endpos($2) "unclosed tuple: expected ')' to close tuple started here" }
 
 cosplit_body:
-  | COSPLIT  TICKLPAREN xs=list_of(var_intro, COMMA) RPAREN       
+  | COSPLIT xs=list_of(var_intro, COMMA)       
     LTRARROW s=statement                { Producer.cosplit xs s }
 
 cosplit:
@@ -225,7 +225,7 @@ letp:
   | LPAREN letp_body error              { raisef $startpos($1) $endpos($2) "unclosed let: expected ')' to close expression started here" }
 
 split_body:
-  | SPLIT    LPAREN xs=list_of(var_intro, COMMA) RPAREN    
+  | SPLIT xs=list_of(var_intro, COMMA)    
     LTRARROW s=statement                { Consumer.split xs s }
 
 split:
