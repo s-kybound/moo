@@ -153,6 +153,16 @@ base_type:
   | LPAREN 
     nprod=negative_product_body
     RPAREN                              { nprod }
+  | LPAREN 
+      FORALL 
+        v=tyvar 
+        body=type_use 
+    RPAREN                              { Type.Forall (v, body) }
+  | LPAREN 
+      EXISTS 
+        v=tyvar 
+        body=type_use 
+    RPAREN                              { Type.Exists (v, body) }
 
 polar_type:
   | b=base_type PLUS                    { 
@@ -209,10 +219,39 @@ cosplit:
   | LPAREN c=cosplit_body RPAREN        { c }
   | LPAREN cosplit_body error           { raisef $startpos($1) $endpos($2) "unclosed cosplit: expected ')' to close expression started here" }
 
+gen:
+  | LPAREN 
+      GEN
+        at=tyvar
+        LTRARROW
+        p=either
+    RPAREN                              { Producer.gen at p }
+  | LPAREN
+      GEN
+        at=tyvar
+        LTRARROW
+        p=either
+    error                               { raisef $startpos($1) $endpos($2) "unclosed gen: expected ')' to close expression started here" }
+
+pack:
+  | LPAREN 
+      PACK
+        at=type_use
+        p=either
+    RPAREN                              { Producer.pack at p }
+  | LPAREN
+      PACK
+        at=type_use
+        p=either
+    error                               { raisef $startpos($1) $endpos($2) "unclosed pack: expected ')' to close expression started here" }
+
 producer:
   | letc                                { $1 }
   | product                             { $1 }
   | cosplit                             { $1 }
+  | DONE                                { Producer.done_ }
+  | gen                                 { $1 }
+  | pack                                { $1 }
 
 letp_body:
   | LETP v=var_intro 
@@ -243,4 +282,32 @@ consumer:
   | letp                                { $1 }
   | split                               { $1 }
   | coproduct                           { $1 }
+  | CODONE                              { Consumer.done_ }
+  | inst                                { $1 }
+  | unpack                              { $1 }
 
+inst:
+  | LPAREN 
+      INST
+        at=type_use
+        c=either
+    RPAREN                              { Consumer.inst at c }
+  | LPAREN
+      INST
+        at=type_use
+        c=either
+    error                               { raisef $startpos($1) $endpos($2) "unclosed inst: expected ')' to close expression started here" }
+
+unpack:
+  | LPAREN 
+      UNPACK
+        at=tyvar
+        LTRARROW
+        c=either
+    RPAREN                              { Consumer.unpack at c }
+  | LPAREN
+      UNPACK
+        at=tyvar
+        LTRARROW
+        c=either
+    error                               { raisef $startpos($1) $endpos($2) "unclosed unpack: expected ')' to close expression started here" }

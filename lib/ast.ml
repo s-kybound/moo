@@ -113,7 +113,7 @@ module Surface = struct
 
   (* Surface's show should look exactly like the code.
    * but Core will look closer to product-mu-mu calculus.
-  *)
+   *)
   module Show = struct
     let show_name n =
       match n.typ with
@@ -187,12 +187,18 @@ module Surface = struct
     let mu coname cut = Mu (coname, cut)
     let tuple xs = Tuple xs
     let cosplit xs cut = Cosplit (xs, cut)
+    let codone = Codone
+    let gen at p = Gen (at, p)
+    let pack at p = Pack (at, p)
   end
 
   module Consumer = struct
     let mutilde name cut = MuTilde (name, cut)
     let split xs cut = Split (xs, cut)
     let cotuple xs = Cotuple xs
+    let done_ = Done
+    let inst at c = Inst (at, c)
+    let unpack at c = Unpack (at, c)
   end
 
   module Neutral = struct
@@ -233,8 +239,8 @@ module Core = struct
       | PosProd of type_use list
       | NegProd of type_use list
       | KindInstantiation of string * type_use list
-      | Forall of type_use (* both of these introduce 1 abstract type usage, should be aware *)
-      | Exists of type_use
+      | Forall of int * type_use (* both of these introduce 1 abstract type usage, should be aware *)
+      | Exists of int * type_use
 
     and type_use =
       | Abstract of abstract_type
@@ -270,10 +276,10 @@ module Core = struct
           Printf.sprintf "(%s)" cotuple_string
         | KindInstantiation (k, args) ->
           Printf.sprintf "(%s %s)" k (String.concat " " (List.map show_type_use args))
-        | Forall at ->
-          Printf.sprintf "(forall 0. %s)" (show_type_use at)
-        | Exists at ->
-          Printf.sprintf "(exists 0. %s)" (show_type_use at)
+        | Forall (ivar, t) ->
+          Printf.sprintf "(forall %d . %s)" ivar (show_type_use t)
+        | Exists (ivar, t) ->
+          Printf.sprintf "(exists %d . %s)" ivar (show_type_use t)
 
       and show_type_use tu =
         match tu with
@@ -409,16 +415,35 @@ module Core = struct
       module ST = S.Type
       module T = Type
 
-      type abstract_type_env = (string, T.abstract_type) Hashtbl.t
+      (* the set of type variables. *)
+      type abstract_type_env = string list
 
-      let empty_abstract_type_env () : abstract_type_env = Hashtbl.create 10
+      let empty_abstract_type_env () : abstract_type_env = []
+
+      let add_type (ty_env : abstract_type_env) name : abstract_type_env =
+        name :: ty_env
+      ;;
+
+      let get_type (ty_env : abstract_type_env) name =
+        let index = List.length ty_env - 1 in
+        let rec aux lst name current_index =
+          match lst with
+          | [] -> failwith (Printf.sprintf "unbound abstract type: %s" name)
+          | hd :: tl ->
+            if String.equal hd name
+            then current_index
+            else aux tl name (current_index - 1)
+        in
+        aux ty_env name index
+      ;;
 
       let abstract_type_env_of_kind (kind_shape : ST.type_schema) : abstract_type_env =
         match kind_shape with
         | ST.Kind (_, abstract_types) ->
-          let env = empty_abstract_type_env () in
-          List.iteri (fun i at -> Hashtbl.add env at (T.Var i)) abstract_types;
-          env
+          (* we get to do this because schemas can only be defined at top-level.
+           * at top-level, we don't expect any available abstract types, that
+           * are introduced from ie forall or exists. *)
+          List.fold_left (fun acc at_name -> add_type acc at_name) (empty_abstract_type_env ()) abstract_types
         | ST.Base _ -> empty_abstract_type_env ()
       ;;
 
@@ -430,15 +455,7 @@ module Core = struct
 
       let rec convert_abstract_type (abstract_type_env : abstract_type_env) abstract_type =
         match abstract_type with
-        | ST.Var s ->
-          (* if the abstract type is not in the environment,
-           * it is a free variable, so we add it to the environment *)
-          if Hashtbl.mem abstract_type_env s
-          then Hashtbl.find abstract_type_env s
-          else (
-            let next_num = Hashtbl.length abstract_type_env in
-            Hashtbl.add abstract_type_env s (T.Var next_num);
-            T.Var next_num)
+        | ST.Var s -> T.Var (get_type abstract_type_env s)
         | ST.Neg at -> T.Neg (convert_abstract_type abstract_type_env at)
 
       and convert_type_expr (abstract_type_env : abstract_type_env) type_expr =
@@ -453,14 +470,13 @@ module Core = struct
         | ST.KindInstantiation (k, args) ->
           T.KindInstantiation (k, List.map (convert_type_use abstract_type_env) args)
         | ST.Forall (at, tu) ->
-          let next_num = Hashtbl.length abstract_type_env in
-          Hashtbl.add abstract_type_env at (T.Var next_num);
-          T.Forall (convert_type_use abstract_type_env tu)
+          let abstract_type_env' = add_type abstract_type_env at in
+          let next_num = get_type abstract_type_env' at in
+          T.Forall (next_num, convert_type_use abstract_type_env' tu)
         | ST.Exists (at, tu) ->
-          let next_num = Hashtbl.length abstract_type_env in
-          Hashtbl.add abstract_type_env at (T.Var next_num);
-          T.Exists (convert_type_use abstract_type_env tu)
-
+          let abstract_type_env' = add_type abstract_type_env at in
+          let next_num = get_type abstract_type_env' at in
+          T.Exists (next_num, convert_type_use abstract_type_env' tu)
       and convert_type_use (abstract_type_env : abstract_type_env) use =
         match use with
         | ST.Abstract at -> T.Abstract (convert_abstract_type abstract_type_env at)
@@ -474,11 +490,12 @@ module Core = struct
     end
 
     type term_env = (string * Type.type_use option) list
-    (* represents the list of types introduced at run time *)
-    type typ_env = string list
+    (* represents the list of abstract types introduced at run time *)
+    type type_env = TypeConverter.abstract_type_env
 
     let name_match = String.equal
-    let empty_term_env : term_env = []
+    let empty_term_env () : term_env = []
+    let empty_type_env = TypeConverter.empty_abstract_type_env
 
     let lookup_identifier env n =
       let rec aux stack n depth =
@@ -506,55 +523,63 @@ module Core = struct
       List.length xs = List.length uniques
     ;;
 
-    let rec convert_producer (term_env : term_env) p : producer =
+    let rec convert_producer (term_env : term_env) (type_env : type_env) p : producer =
       match p with
       | S.Mu (k, cut) ->
-        Mu (convert_cut (push_names [ k ] term_env) cut, convert_binder_type k)
+        Mu (convert_cut (push_names [ k ] term_env) type_env cut, convert_binder_type k)
       | S.Tuple xs ->
-        let xs' = List.map (convert_neutral term_env) xs in
+        let xs' = List.map (convert_neutral term_env type_env) xs in
         Tuple xs'
       | S.Cosplit (names, cut) ->
         if not (binders_are_unique names)
         then raise (Failure "Cosplit: name conflict in parameters")
         else (
           let term_env' = push_names names term_env in
-          Cosplit (convert_cut term_env' cut, List.map convert_binder_type names))
+          Cosplit (convert_cut term_env' type_env cut, List.map convert_binder_type names))
       | S.Codone -> Codone
-      | S.Gen (at, p) -> Gen (at, convert_neutral term_env p)
-      | S.Pack (at, p) -> failwith "TODO"
+      | S.Gen (at, p) -> 
+        let type_env' = TypeConverter.add_type type_env at in
+        Gen (at, convert_neutral term_env type_env' p)
+      | S.Pack (at, p) -> 
+        let at' = TypeConverter.convert_type_use type_env at in
+        Pack (at', convert_neutral term_env type_env p)
 
-    and convert_consumer (term_env : term_env) c : consumer =
+    and convert_consumer (term_env : term_env) (type_env : type_env) c : consumer =
       match c with
       | S.MuTilde (v, cut) ->
-        MuTilde (convert_cut (push_names [ v ] term_env) cut, convert_binder_type v)
+        MuTilde (convert_cut (push_names [ v ] term_env) type_env cut, convert_binder_type v)
       | S.Split (names, cut) ->
         if not (binders_are_unique names)
         then raise (Failure "Split: name conflict in parameters")
         else (
           let term_env' = push_names names term_env in
-          Split (convert_cut term_env' cut, List.map convert_binder_type names))
+          Split (convert_cut term_env' type_env cut, List.map convert_binder_type names))
       | S.Cotuple xs ->
-        let xs' = List.map (convert_neutral term_env) xs in
+        let xs' = List.map (convert_neutral term_env type_env) xs in
         Cotuple xs'
       | S.Done -> Done
-      | S.Inst (at, c) -> failwith "TODO"
-      | S.Unpack (at, c) -> Unpack (at, convert_neutral term_env c)
+      | S.Inst (at, c) -> 
+        let at' = TypeConverter.convert_type_use type_env at in
+        Inst (at', convert_neutral term_env type_env c)
+      | S.Unpack (at, c) -> 
+        let type_env' = TypeConverter.add_type type_env at in
+        Unpack (at, convert_neutral term_env type_env' c)
 
-    and convert_cut (term_env : term_env) cut : cut =
-      { p = convert_neutral term_env cut.p; c = convert_neutral term_env cut.c }
+    and convert_cut (term_env : term_env) (type_env : type_env) cut : cut =
+      { p = convert_neutral term_env type_env cut.p; c = convert_neutral term_env type_env cut.c }
 
-    and convert_neutral (term_env : term_env) neutral : neutral =
+    and convert_neutral (term_env : term_env) (type_env : type_env) neutral : neutral =
       match neutral with
       | S.Name n -> Name (lookup_identifier term_env n)
-      | S.Positive p -> Positive (convert_producer term_env p)
-      | S.Negative c -> Negative (convert_consumer term_env c)
+      | S.Positive p -> Positive (convert_producer term_env type_env p)
+      | S.Negative c -> Negative (convert_consumer term_env type_env c)
     ;;
 
     (* definitions are evaluated without environment *)
     let convert_definition definition : definition =
       match definition with
-      | S.Producer (n, p) -> Producer (n.name, convert_producer empty_term_env p)
-      | S.Consumer (cn, c) -> Consumer (cn.name, convert_consumer empty_term_env c)
+      | S.Producer (n, p) -> Producer (n.name, convert_producer (empty_term_env ()) (empty_type_env ()) p)
+      | S.Consumer (cn, c) -> Consumer (cn.name, convert_consumer (empty_term_env ()) (empty_type_env ()) c)
       | S.TypeDef (schema, expr) ->
         let type_env = TypeConverter.abstract_type_env_of_kind schema in
         let schema = TypeConverter.convert_schema schema in
@@ -565,7 +590,7 @@ module Core = struct
 
   let convert (t : Surface.t) : t =
     { definitions = List.map Converter.convert_definition t.definitions
-    ; main = Converter.convert_cut Converter.empty_term_env t.main
+    ; main = Converter.convert_cut (Converter.empty_term_env ()) (Converter.empty_type_env ()) t.main
     }
   ;;
 end
