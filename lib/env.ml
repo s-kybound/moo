@@ -23,12 +23,18 @@ module Substituter = struct
     | Mu (cut, typ) -> Mu (substitute_cut env cut, typ)
     | Tuple xs -> Tuple (List.map (substitute_neutral env) xs)
     | Cosplit (cut, typs) -> Cosplit (substitute_cut env cut, typs)
+    | Codone -> Codone
+    | Gen (at, p) -> Gen (at, substitute_neutral env p)
+    | Pack (at, p) -> Pack (at, substitute_neutral env p)
 
   and substitute_consumer env c =
     match c with
     | MuTilde (cut, typ) -> MuTilde (substitute_cut env cut, typ)
     | Cotuple xs -> Cotuple (List.map (substitute_neutral env) xs)
     | Split (cut, typs) -> Split (substitute_cut env cut, typs)
+    | Done -> Done
+    | Inst (at, c) -> Inst (at, substitute_neutral env c)
+    | Unpack (at, c) -> Unpack (at, substitute_neutral env c)
 
   and substitute_cut env cut =
     { p = substitute_neutral env cut.p; c = substitute_neutral env cut.c }
