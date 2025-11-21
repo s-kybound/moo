@@ -228,9 +228,9 @@ gen:
     RPAREN                              { Producer.gen at p }
   | LPAREN
       GEN
-        at=tyvar
+        tyvar
         LTRARROW
-        p=either
+        either
     error                               { raisef $startpos($1) $endpos($2) "unclosed gen: expected ')' to close expression started here" }
 
 pack:
@@ -241,15 +241,15 @@ pack:
     RPAREN                              { Producer.pack at p }
   | LPAREN
       PACK
-        at=type_use
-        p=either
+        type_use
+        either
     error                               { raisef $startpos($1) $endpos($2) "unclosed pack: expected ')' to close expression started here" }
 
 producer:
   | letc                                { $1 }
   | product                             { $1 }
   | cosplit                             { $1 }
-  | DONE                                { Producer.done_ }
+  | CODONE                              { Producer.codone }
   | gen                                 { $1 }
   | pack                                { $1 }
 
@@ -282,7 +282,7 @@ consumer:
   | letp                                { $1 }
   | split                               { $1 }
   | coproduct                           { $1 }
-  | CODONE                              { Consumer.done_ }
+  | DONE                              { Consumer.done_ }
   | inst                                { $1 }
   | unpack                              { $1 }
 
@@ -294,8 +294,8 @@ inst:
     RPAREN                              { Consumer.inst at c }
   | LPAREN
       INST
-        at=type_use
-        c=either
+        type_use
+        either
     error                               { raisef $startpos($1) $endpos($2) "unclosed inst: expected ')' to close expression started here" }
 
 unpack:
@@ -307,7 +307,7 @@ unpack:
     RPAREN                              { Consumer.unpack at c }
   | LPAREN
       UNPACK
-        at=tyvar
+        tyvar
         LTRARROW
-        c=either
+        either
     error                               { raisef $startpos($1) $endpos($2) "unclosed unpack: expected ')' to close expression started here" }
