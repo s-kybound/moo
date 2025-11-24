@@ -40,6 +40,39 @@ module TypeSubstituter = struct
     | Exists (i, body) -> Exists (i, substitute_type_use body)
   ;;
 
+  let substitute_abstract_with (body : type_use) (i : int) (replacement : type_use)
+    : type_use
+    =
+    let rec substitute_in_abstract (a : abstract_type) : type_use =
+      match a with
+      | Var j -> if i = j then replacement else Abstract (Var j)
+      | Neg a' ->
+        (match substitute_in_abstract a' with
+         | Instantiated (Plus t) -> Instantiated (Minus t)
+         | Instantiated (Minus t) -> Instantiated (Plus t)
+         | Abstract a'' -> Abstract (Neg a''))
+    and substitute_in_type_use (t : type_use) : type_use =
+      match t with
+      | Abstract a -> substitute_in_abstract a
+      | Instantiated p -> Instantiated (substitute_in_polar_type p)
+    and substitute_in_polar_type (p : polar_type) : polar_type =
+      match p with
+      | Plus t -> Plus (substitute_in_type_expr t)
+      | Minus t -> Minus (substitute_in_type_expr t)
+    and substitute_in_type_expr (t : type_expr) : type_expr =
+      match t with
+      | Name n -> Name n
+      | PosProd typs -> PosProd (List.map substitute_in_type_use typs)
+      | NegProd typs -> NegProd (List.map substitute_in_type_use typs)
+      | KindInstantiation (t, args) ->
+        let substituted_args = List.map substitute_in_type_use args in
+        KindInstantiation (t, substituted_args)
+      | Forall (j, body) -> Forall (j, substitute_in_type_use body)
+      | Exists (j, body) -> Exists (j, substitute_in_type_use body)
+    in
+    substitute_in_type_use body
+  ;;
+
   let rec simplify_type_use (env : Env.t) (t : type_use) : type_use =
     let rec simplify_polar_type (p : polar_type) : polar_type =
       match p with
@@ -93,15 +126,16 @@ module TypeSubstituter = struct
 end
 
 module type TYPECHECKER = sig
-  val typecheck : Core.t -> (Core.t, exn) result
+  (* do all the substitution before typechecking for now *)
+  val typecheck : Env.t -> Core.t -> (Core.t, exn) result
 end
 
 module Untyped : TYPECHECKER = struct
-  let typecheck ast = Ok ast
+  let typecheck _env ast = Ok ast
 end
 
 module SystemF : TYPECHECKER = struct
-  (* a reference for binders. *)
+  (* a reference for abstract binders. *)
   type type_env = type_use list
   (* TODO: a top level environment *)
 
@@ -134,10 +168,12 @@ module SystemF : TYPECHECKER = struct
       t1 = t2
       && List.length args1 = List.length args2
       && List.for_all2 (fun a b -> type_use_equivalent a b) args1 args2
-    | Forall (_i1, _body1), Forall (_i2, _body2)
-    | Exists (_i1, _body1), Exists (_i2, _body2) ->
+    | Forall (i1, body1), Forall (i2, body2) | Exists (i1, body1), Exists (i2, body2) ->
       (* replace i2 with i1 in body2, then compare type_use *)
-      failwith "Not implemented"
+      let body2' =
+        TypeSubstituter.substitute_abstract_with body2 i2 (Abstract (Var i1))
+      in
+      type_use_equivalent body1 body2'
     | _ -> false
   ;;
 
@@ -147,53 +183,120 @@ module SystemF : TYPECHECKER = struct
     | Instantiated (Minus t) -> Instantiated (Plus t)
     | Abstract (Neg a) -> Abstract a
     | Abstract a -> Abstract (Neg a)
+  ;;
 
-  let rec typecheck_producer (typ_env : type_env) (p : Core.producer) : Core.Type.type_use =
+  let verify_type_use (typ_env : type_env) (typ : Core.Type.type_use) : Core.Type.type_use
+    =
+    let rec verify_abstract (a : Core.Type.abstract_type) : unit =
+      match a with
+      | Var i ->
+        (* check if it is in typ_env*)
+        if not (List.mem (Abstract a) typ_env)
+        then failwith ("Unbound type variable: " ^ string_of_int i)
+      | Neg a' -> verify_abstract a'
+    and verify_type_use_inner (t : Core.Type.type_use) : unit =
+      match t with
+      | Abstract a -> verify_abstract a
+      | Instantiated p -> verify_polar_type p
+    and verify_polar_type (p : Core.Type.polar_type) : unit =
+      match p with
+      | Plus t -> verify_type_expr t
+      | Minus t -> verify_type_expr t
+    and verify_type_expr (t : Core.Type.type_expr) : unit =
+      match t with
+      | Name _ -> ()
+      | PosProd typs | NegProd typs -> List.iter verify_type_use_inner typs
+      | KindInstantiation (_, args) -> List.iter verify_type_use_inner args
+      | Forall (_, body) | Exists (_, body) -> verify_type_use_inner body
+    in
+    verify_type_use_inner typ;
+    typ
+  ;;
+
+  let rec typecheck_producer (typ_env : type_env) (p : Core.producer) : Core.Type.type_use
+    =
     match p with
-    | Mu (cut, Some typ) -> 
+    | Mu (cut, Some typ) ->
       (* if the typ is instantiated, ensure that it is positive *)
-      begin match typ with
-      | Instantiated (Minus _) -> failwith "Producer cannot have negative type"
-      | _ -> typecheck_cut (typ :: typ_env) cut; invert typ
-      end
+      (match typ with
+       | Instantiated (Plus _) -> failwith "Producer cannot bind positive type"
+       | _ ->
+         typecheck_cut (typ :: typ_env) cut;
+         invert (verify_type_use typ_env typ))
     | Mu (_, None) -> failwith "System F requires type annotations on mu"
     | Tuple [] -> Instantiated (Plus (PosProd []))
     | Tuple xs -> Instantiated (Plus (PosProd (List.map (typecheck_neutral typ_env) xs)))
-    | Cosplit (cut, typs) -> 
-      let typs' = List.map (fun t -> match t with Some typ -> typ | None -> failwith "Type annotation required in cosplit") typs in
-      typecheck_cut (typs' @ typ_env) cut; Instantiated (Plus (NegProd typs'))
+    | Cosplit (cut, typs) ->
+      let typs' =
+        List.map
+          (fun t ->
+            match t with
+            | Some typ -> verify_type_use typ_env typ
+            | None -> failwith "Type annotation required in cosplit")
+          typs
+      in
+      typecheck_cut (typs' @ typ_env) cut;
+      Instantiated (Plus (NegProd typs'))
     | Codone -> Instantiated (Plus (NegProd []))
-    | Gen (_at, _p) -> failwith "Not implemented"
-    | Pack (_at, _p) -> failwith "Not implemented"
+    | Gen (at, p) ->
+      let abs_type = Abstract (Var at) in
+      let body_type = typecheck_neutral (abs_type :: typ_env) p in
+      Instantiated (Plus (Forall (at, body_type)))
+    | Pack (bt, at, p) ->
+      (match bt with
+       | Forall (i, body) ->
+         let instantiated_body = TypeSubstituter.substitute_abstract_with body i at in
+         let body_type = typecheck_neutral typ_env p in
+         if not (type_use_equivalent instantiated_body body_type)
+         then failwith "Type mismatch in packing"
+         else Instantiated (Plus bt)
+       | _ -> failwith "Cannot pack non-polymorphic type")
 
   and typecheck_consumer (typ_env : type_env) (c : Core.consumer) : Core.Type.type_use =
     match c with
-    | MuTilde (cut, Some typ) -> 
+    | MuTilde (cut, Some typ) ->
       (* if the typ is instantiated, ensure that it is negative *)
-      begin match typ with
-      | Instantiated (Plus _) -> failwith "Consumer cannot have positive type"
-      | _ -> typecheck_cut (typ :: typ_env) cut; invert typ
-      end
+      (match typ with
+       | Instantiated (Minus _) -> failwith "Consumer cannot bind negative type"
+       | _ ->
+         typecheck_cut (typ :: typ_env) cut;
+         invert (verify_type_use typ_env typ))
     | MuTilde (_, None) -> failwith "System F requires type annotations on mu-tilde"
     | Cotuple [] -> Instantiated (Minus (NegProd []))
     | Cotuple xs ->
       Instantiated (Minus (NegProd (List.map (typecheck_neutral typ_env) xs)))
-    | Split (cut, typs) -> 
-      let typs' = List.map (fun t -> match t with Some typ -> typ | None -> failwith "Type annotation required in split") typs in
-      typecheck_cut (typs' @ typ_env) cut; Instantiated (Minus (PosProd typs'))
+    | Split (cut, typs) ->
+      let typs' =
+        List.map
+          (fun t ->
+             match t with
+             | Some typ -> verify_type_use typ_env typ
+             | None -> failwith "Type annotation required in split")
+          typs
+      in
+      typecheck_cut (typs' @ typ_env) cut;
+      Instantiated (Minus (PosProd typs'))
     | Done -> Instantiated (Minus (PosProd []))
-    | Inst (_at, _c) -> failwith "Not implemented"
-    | Unpack (_at, _c) -> failwith "Not implemented"
+    | Inst (bt, at, c) ->
+      (match bt with
+       | Forall (i, body) ->
+         let instantiated_body = TypeSubstituter.substitute_abstract_with body i at in
+         let body_type = typecheck_neutral typ_env c in
+         if not (type_use_equivalent instantiated_body body_type)
+         then failwith "Type mismatch in instantiation"
+         else Instantiated (Minus bt)
+       | _ -> failwith "Cannot instantiate non-polymorphic type")
+    | Unpack (at, c) ->
+      let abs_type = Abstract (Var at) in
+      let body_type = typecheck_neutral (abs_type :: typ_env) c in
+      Instantiated (Minus (Exists (at, body_type)))
 
   and typecheck_neutral (typ_env : type_env) (n : Core.neutral) : Core.Type.type_use =
     match n with
-    | Name (Core.Free _) -> assert false
-    | Name (Core.Bound (i, Some typ)) -> begin
-      match List.nth_opt typ_env i with
-      | None -> failwith "Bound variable index out of range"
-      | Some bound_typ -> type_use_equivalent bound_typ typ |> ignore; typ
-    end
-    | Name (Core.Bound (_, None)) -> failwith "Unannotated bound names are not supported in System F"
+    | Name (Core.Free _) -> failwith "No free names are allowed!"
+    | Name (Core.Bound (_, Some typ)) -> verify_type_use typ_env typ
+    | Name (Core.Bound (_, None)) ->
+      failwith "Unannotated bound names are not supported in System F"
     | Positive p -> typecheck_producer typ_env p
     | Negative c -> typecheck_consumer typ_env c
 
@@ -221,8 +324,11 @@ module SystemF : TYPECHECKER = struct
     | _ -> failwith "Type mismatch in cut"
   ;;
 
-  let typecheck (ast : Core.t) (env : Env.t) = 
-    
-
+  let typecheck (_env : Env.t) (ast : Core.t) =
+    try
+      typecheck_cut [] ast.main;
+      Ok ast
+    with
+    | exn -> Error exn
   ;;
 end

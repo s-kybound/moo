@@ -19,13 +19,13 @@ let run eval_strat val_strat typechecker filename =
   let (module Typechecker : TYPECHECKER) =
     match typechecker with
     | `Untyped -> (module Typechecker.Untyped)
-    | `Simply_typed -> (module Typechecker.SimplyTyped)
     | `System_f -> (module Typechecker.SystemF)
-    | `Hindley_milner -> (module Typechecker.HindleyMilner)
   in
+  let env = Env.empty_env () in
   filename
   |> get_ast
-  |> Typechecker.typecheck
+  |> (fun ast -> Env.load_definitions ast env; ast)
+  |> Typechecker.typecheck env
   |> Result.fold
        ~ok:(fun typed_ast ->
          typed_ast

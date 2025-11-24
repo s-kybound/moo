@@ -308,7 +308,7 @@ module Core = struct
     | Tuple of neutral list
     | Cosplit of cut * Type.type_use option list
     | Codone
-    | Gen of string * neutral
+    | Gen of int * neutral
     | Pack of Type.type_expr * Type.type_use * neutral
 
   and consumer =
@@ -317,7 +317,7 @@ module Core = struct
     | Cotuple of neutral list
     | Done
     | Inst of Type.type_expr * Type.type_use * neutral
-    | Unpack of string * neutral
+    | Unpack of int * neutral
 
   and cut =
     { p : neutral
@@ -361,7 +361,7 @@ module Core = struct
         in
         Printf.sprintf "('(%s).%s)" typ_string (show_cut cut)
       | Codone -> "codone"
-      | Gen (at, p) -> Printf.sprintf "(gen %s. %s)" at (show_neutral p)
+      | Gen (at, p) -> Printf.sprintf "(gen %d. %s)" at (show_neutral p)
       | Pack (pt, at, p) ->
         Printf.sprintf
           "(pack [%s] %s. %s)"
@@ -387,7 +387,7 @@ module Core = struct
           (Type.Show.show_type_expr pt)
           (Type.Show.show_type_use at)
           (show_neutral c)
-      | Unpack (at, c) -> Printf.sprintf "(unpack %s. %s)" at (show_neutral c)
+      | Unpack (at, c) -> Printf.sprintf "(unpack %d. %s)" at (show_neutral c)
 
     and show_cut (cut : cut) =
       Printf.sprintf "<%s|%s>" (show_neutral cut.p) (show_neutral cut.c)
@@ -516,15 +516,14 @@ module Core = struct
       aux env n 0
     ;;
 
-    let convert_binder_type (binder : S.name) =
-      let abstract_type_env = TypeConverter.empty_abstract_type_env () in
+    let convert_binder_type type_env (binder : S.name) =
       Option.map
-        (fun typ -> TypeConverter.convert_type_use abstract_type_env typ)
+        (fun typ -> TypeConverter.convert_type_use type_env typ)
         binder.typ
     ;;
 
-    let push_names (vs : S.name list) (env : term_env) =
-      List.map (fun (s : S.name) -> s.name, convert_binder_type s) vs @ env
+    let push_names (vs : S.name list) (env : term_env) type_env=
+      List.map (fun (s : S.name) -> s.name, convert_binder_type type_env s) vs @ env
     ;;
 
     let binders_are_unique xs =
@@ -535,7 +534,7 @@ module Core = struct
     let rec convert_producer (term_env : term_env) (type_env : type_env) p : producer =
       match p with
       | S.Mu (k, cut) ->
-        Mu (convert_cut (push_names [ k ] term_env) type_env cut, convert_binder_type k)
+        Mu (convert_cut (push_names [ k ] term_env type_env) type_env cut, convert_binder_type type_env k)
       | S.Tuple xs ->
         let xs' = List.map (convert_neutral term_env type_env) xs in
         Tuple xs'
@@ -543,12 +542,13 @@ module Core = struct
         if not (binders_are_unique names)
         then raise (Failure "Cosplit: name conflict in parameters")
         else (
-          let term_env' = push_names names term_env in
-          Cosplit (convert_cut term_env' type_env cut, List.map convert_binder_type names))
+          let term_env' = push_names names term_env type_env in
+          Cosplit (convert_cut term_env' type_env cut, List.map (convert_binder_type type_env) names))
       | S.Codone -> Codone
       | S.Gen (at, p) ->
         let type_env' = TypeConverter.add_type type_env at in
-        Gen (at, convert_neutral term_env type_env' p)
+        let type_num = TypeConverter.get_type type_env' at in
+        Gen (type_num, convert_neutral term_env type_env' p)
       | S.Pack (pt, at, p) ->
         let pt' = TypeConverter.convert_type_expr type_env pt in
         let at' = TypeConverter.convert_type_use type_env at in
@@ -558,13 +558,13 @@ module Core = struct
       match c with
       | S.MuTilde (v, cut) ->
         MuTilde
-          (convert_cut (push_names [ v ] term_env) type_env cut, convert_binder_type v)
+          (convert_cut (push_names [ v ] term_env type_env) type_env cut, convert_binder_type type_env v)
       | S.Split (names, cut) ->
         if not (binders_are_unique names)
         then raise (Failure "Split: name conflict in parameters")
         else (
-          let term_env' = push_names names term_env in
-          Split (convert_cut term_env' type_env cut, List.map convert_binder_type names))
+          let term_env' = push_names names term_env type_env in
+          Split (convert_cut term_env' type_env cut, List.map (convert_binder_type type_env) names))
       | S.Cotuple xs ->
         let xs' = List.map (convert_neutral term_env type_env) xs in
         Cotuple xs'
@@ -575,7 +575,8 @@ module Core = struct
         Inst (pt', at', convert_neutral term_env type_env c)
       | S.Unpack (at, c) ->
         let type_env' = TypeConverter.add_type type_env at in
-        Unpack (at, convert_neutral term_env type_env' c)
+        let type_num = TypeConverter.get_type type_env' at in
+        Unpack (type_num, convert_neutral term_env type_env' c)
 
     and convert_cut (term_env : term_env) (type_env : type_env) cut : cut =
       { p = convert_neutral term_env type_env cut.p

@@ -64,7 +64,7 @@ module State = struct
   let current_eval_strat : [ `CBN | `CBV ] ref = ref `CBV
 
   let current_typecheck_strat
-    : [ `Untyped | `Simply_typed | `System_f | `Hindley_milner ] ref
+    : [ `Untyped | `System_f ] ref
     =
     ref `Untyped
   ;;
@@ -78,9 +78,7 @@ module State = struct
     let (module Typechecker : TYPECHECKER) =
       match typecheck_strat with
       | `Untyped -> (module Typechecker.Untyped)
-      | `Simply_typed -> (module Typechecker.SimplyTyped)
       | `System_f -> (module Typechecker.SystemF)
-      | `Hindley_milner -> (module Typechecker.HindleyMilner)
     in
     current_typechecker := Some (module Typechecker);
     let (module J : JUDGEMENTS) =
@@ -128,7 +126,7 @@ let parse_and_eval input =
   let (module Typechecker : TYPECHECKER) = State.get_typechecker () in
   try
     let core_ast = get_ast input in
-    match Typechecker.typecheck core_ast with
+    match Typechecker.typecheck !State.current_environment core_ast with
     | Error exn -> raise exn
     | Ok core_ast ->
       let result = Strategy.eval !State.current_environment core_ast in
