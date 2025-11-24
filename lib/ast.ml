@@ -51,10 +51,8 @@ module Surface = struct
           Printf.sprintf "(%s)" cotuple_string
         | KindInstantiation (k, args) ->
           Printf.sprintf "(%s %s)" k (String.concat " " (List.map show_type_use args))
-        | Forall (at, tu) ->
-          Printf.sprintf "(forall %s. %s)" at (show_type_use tu)
-        | Exists (at, tu) ->
-          Printf.sprintf "(exists %s. %s)" at (show_type_use tu)
+        | Forall (at, tu) -> Printf.sprintf "(forall %s. %s)" at (show_type_use tu)
+        | Exists (at, tu) -> Printf.sprintf "(exists %s. %s)" at (show_type_use tu)
 
       and show_type_use tu =
         match tu with
@@ -80,15 +78,14 @@ module Surface = struct
     | Codone
     | Cosplit of name list * cut
     | Gen of string * neutral
-    | Pack of Type.type_use * neutral
-
+    | Pack of Type.type_expr * Type.type_use * neutral
 
   and consumer =
     | MuTilde of name * cut
     | Split of name list * cut
     | Cotuple of neutral list
     | Done
-    | Inst of Type.type_use * neutral
+    | Inst of Type.type_expr * Type.type_use * neutral
     | Unpack of string * neutral
 
   and cut =
@@ -132,10 +129,13 @@ module Surface = struct
         let names_string = xs |> List.map show_name |> String.concat ", " in
         Printf.sprintf "(cosplit '(%s) -> %s)" names_string (show_cut cut)
       | Codone -> "codone"
-      | Gen (at, p) ->
-        Printf.sprintf "(gen %s. %s)" at (show_neutral p)
-      | Pack (at, p) ->
-        Printf.sprintf "(pack %s. %s)" (Type.Show.show_type_use at) (show_neutral p)
+      | Gen (at, p) -> Printf.sprintf "(gen %s. %s)" at (show_neutral p)
+      | Pack (pt, at, p) ->
+        Printf.sprintf
+          "(pack [%s] %s. %s)"
+          (Type.Show.show_type_expr pt)
+          (Type.Show.show_type_use at)
+          (show_neutral p)
 
     and show_consumer c =
       match c with
@@ -148,10 +148,13 @@ module Surface = struct
         let cotuple_string = xs |> List.map show_neutral |> String.concat ", " in
         Printf.sprintf "'(%s)" cotuple_string
       | Done -> "done"
-      | Inst (at, c) ->
-        Printf.sprintf "(inst %s. %s)" (Type.Show.show_type_use at) (show_neutral c)
-      | Unpack (at, c) ->
-        Printf.sprintf "(unpack %s. %s)" at (show_neutral c)
+      | Inst (pt, at, c) ->
+        Printf.sprintf
+          "(inst [%s] %s. %s)"
+          (Type.Show.show_type_expr pt)
+          (Type.Show.show_type_use at)
+          (show_neutral c)
+      | Unpack (at, c) -> Printf.sprintf "(unpack %s. %s)" at (show_neutral c)
 
     and show_cut (cut : cut) =
       Printf.sprintf "[%s %s]" (show_neutral cut.p) (show_neutral cut.c)
@@ -189,7 +192,7 @@ module Surface = struct
     let cosplit xs cut = Cosplit (xs, cut)
     let codone = Codone
     let gen at p = Gen (at, p)
-    let pack at p = Pack (at, p)
+    let pack pt at p = Pack (pt, at, p)
   end
 
   module Consumer = struct
@@ -197,7 +200,7 @@ module Surface = struct
     let split xs cut = Split (xs, cut)
     let cotuple xs = Cotuple xs
     let done_ = Done
-    let inst at c = Inst (at, c)
+    let inst pt at c = Inst (pt, at, c)
     let unpack at c = Unpack (at, c)
   end
 
@@ -239,7 +242,9 @@ module Core = struct
       | PosProd of type_use list
       | NegProd of type_use list
       | KindInstantiation of string * type_use list
-      | Forall of int * type_use (* both of these introduce 1 abstract type usage, should be aware *)
+      | Forall of
+          int
+          * type_use (* both of these introduce 1 abstract type usage, should be aware *)
       | Exists of int * type_use
 
     and type_use =
@@ -276,10 +281,8 @@ module Core = struct
           Printf.sprintf "(%s)" cotuple_string
         | KindInstantiation (k, args) ->
           Printf.sprintf "(%s %s)" k (String.concat " " (List.map show_type_use args))
-        | Forall (ivar, t) ->
-          Printf.sprintf "(forall %d . %s)" ivar (show_type_use t)
-        | Exists (ivar, t) ->
-          Printf.sprintf "(exists %d . %s)" ivar (show_type_use t)
+        | Forall (ivar, t) -> Printf.sprintf "(forall %d . %s)" ivar (show_type_use t)
+        | Exists (ivar, t) -> Printf.sprintf "(exists %d . %s)" ivar (show_type_use t)
 
       and show_type_use tu =
         match tu with
@@ -306,14 +309,14 @@ module Core = struct
     | Cosplit of cut * Type.type_use option list
     | Codone
     | Gen of string * neutral
-    | Pack of Type.type_use * neutral
+    | Pack of Type.type_expr * Type.type_use * neutral
 
   and consumer =
     | MuTilde of cut * Type.type_use option
     | Split of cut * Type.type_use option list
     | Cotuple of neutral list
     | Done
-    | Inst of Type.type_use * neutral
+    | Inst of Type.type_expr * Type.type_use * neutral
     | Unpack of string * neutral
 
   and cut =
@@ -358,10 +361,13 @@ module Core = struct
         in
         Printf.sprintf "('(%s).%s)" typ_string (show_cut cut)
       | Codone -> "codone"
-      | Gen (at, p) ->
-        Printf.sprintf "(gen %s. %s)" at (show_neutral p)
-      | Pack (at, p) ->
-        Printf.sprintf "(pack %s. %s)" (Type.Show.show_type_use at) (show_neutral p)
+      | Gen (at, p) -> Printf.sprintf "(gen %s. %s)" at (show_neutral p)
+      | Pack (pt, at, p) ->
+        Printf.sprintf
+          "(pack [%s] %s. %s)"
+          (Type.Show.show_type_expr pt)
+          (Type.Show.show_type_use at)
+          (show_neutral p)
 
     and show_consumer c =
       match c with
@@ -375,10 +381,13 @@ module Core = struct
         let cotuple_string = xs |> List.map show_neutral |> String.concat ", " in
         Printf.sprintf "'(%s)" cotuple_string
       | Done -> "done"
-      | Inst (at, c) ->
-        Printf.sprintf "(inst %s. %s)" (Type.Show.show_type_use at) (show_neutral c)
-      | Unpack (at, c) ->
-        Printf.sprintf "(unpack %s. %s)" at (show_neutral c)
+      | Inst (pt, at, c) ->
+        Printf.sprintf
+          "(inst [%s] %s. %s)"
+          (Type.Show.show_type_expr pt)
+          (Type.Show.show_type_use at)
+          (show_neutral c)
+      | Unpack (at, c) -> Printf.sprintf "(unpack %s. %s)" at (show_neutral c)
 
     and show_cut (cut : cut) =
       Printf.sprintf "<%s|%s>" (show_neutral cut.p) (show_neutral cut.c)
@@ -419,10 +428,7 @@ module Core = struct
       type abstract_type_env = string list
 
       let empty_abstract_type_env () : abstract_type_env = []
-
-      let add_type (ty_env : abstract_type_env) name : abstract_type_env =
-        name :: ty_env
-      ;;
+      let add_type (ty_env : abstract_type_env) name : abstract_type_env = name :: ty_env
 
       let get_type (ty_env : abstract_type_env) name =
         let index = List.length ty_env - 1 in
@@ -430,9 +436,7 @@ module Core = struct
           match lst with
           | [] -> failwith (Printf.sprintf "unbound abstract type: %s" name)
           | hd :: tl ->
-            if String.equal hd name
-            then current_index
-            else aux tl name (current_index - 1)
+            if String.equal hd name then current_index else aux tl name (current_index - 1)
         in
         aux ty_env name index
       ;;
@@ -443,7 +447,10 @@ module Core = struct
           (* we get to do this because schemas can only be defined at top-level.
            * at top-level, we don't expect any available abstract types, that
            * are introduced from ie forall or exists. *)
-          List.fold_left (fun acc at_name -> add_type acc at_name) (empty_abstract_type_env ()) abstract_types
+          List.fold_left
+            (fun acc at_name -> add_type acc at_name)
+            (empty_abstract_type_env ())
+            abstract_types
         | ST.Base _ -> empty_abstract_type_env ()
       ;;
 
@@ -477,6 +484,7 @@ module Core = struct
           let abstract_type_env' = add_type abstract_type_env at in
           let next_num = get_type abstract_type_env' at in
           T.Exists (next_num, convert_type_use abstract_type_env' tu)
+
       and convert_type_use (abstract_type_env : abstract_type_env) use =
         match use with
         | ST.Abstract at -> T.Abstract (convert_abstract_type abstract_type_env at)
@@ -490,6 +498,7 @@ module Core = struct
     end
 
     type term_env = (string * Type.type_use option) list
+
     (* represents the list of abstract types introduced at run time *)
     type type_env = TypeConverter.abstract_type_env
 
@@ -537,17 +546,19 @@ module Core = struct
           let term_env' = push_names names term_env in
           Cosplit (convert_cut term_env' type_env cut, List.map convert_binder_type names))
       | S.Codone -> Codone
-      | S.Gen (at, p) -> 
+      | S.Gen (at, p) ->
         let type_env' = TypeConverter.add_type type_env at in
         Gen (at, convert_neutral term_env type_env' p)
-      | S.Pack (at, p) -> 
+      | S.Pack (pt, at, p) ->
+        let pt' = TypeConverter.convert_type_expr type_env pt in
         let at' = TypeConverter.convert_type_use type_env at in
-        Pack (at', convert_neutral term_env type_env p)
+        Pack (pt', at', convert_neutral term_env type_env p)
 
     and convert_consumer (term_env : term_env) (type_env : type_env) c : consumer =
       match c with
       | S.MuTilde (v, cut) ->
-        MuTilde (convert_cut (push_names [ v ] term_env) type_env cut, convert_binder_type v)
+        MuTilde
+          (convert_cut (push_names [ v ] term_env) type_env cut, convert_binder_type v)
       | S.Split (names, cut) ->
         if not (binders_are_unique names)
         then raise (Failure "Split: name conflict in parameters")
@@ -558,15 +569,18 @@ module Core = struct
         let xs' = List.map (convert_neutral term_env type_env) xs in
         Cotuple xs'
       | S.Done -> Done
-      | S.Inst (at, c) -> 
+      | S.Inst (pt, at, c) ->
+        let pt' = TypeConverter.convert_type_expr type_env pt in
         let at' = TypeConverter.convert_type_use type_env at in
-        Inst (at', convert_neutral term_env type_env c)
-      | S.Unpack (at, c) -> 
+        Inst (pt', at', convert_neutral term_env type_env c)
+      | S.Unpack (at, c) ->
         let type_env' = TypeConverter.add_type type_env at in
         Unpack (at, convert_neutral term_env type_env' c)
 
     and convert_cut (term_env : term_env) (type_env : type_env) cut : cut =
-      { p = convert_neutral term_env type_env cut.p; c = convert_neutral term_env type_env cut.c }
+      { p = convert_neutral term_env type_env cut.p
+      ; c = convert_neutral term_env type_env cut.c
+      }
 
     and convert_neutral (term_env : term_env) (type_env : type_env) neutral : neutral =
       match neutral with
@@ -578,8 +592,10 @@ module Core = struct
     (* definitions are evaluated without environment *)
     let convert_definition definition : definition =
       match definition with
-      | S.Producer (n, p) -> Producer (n.name, convert_producer (empty_term_env ()) (empty_type_env ()) p)
-      | S.Consumer (cn, c) -> Consumer (cn.name, convert_consumer (empty_term_env ()) (empty_type_env ()) c)
+      | S.Producer (n, p) ->
+        Producer (n.name, convert_producer (empty_term_env ()) (empty_type_env ()) p)
+      | S.Consumer (cn, c) ->
+        Consumer (cn.name, convert_consumer (empty_term_env ()) (empty_type_env ()) c)
       | S.TypeDef (schema, expr) ->
         let type_env = TypeConverter.abstract_type_env_of_kind schema in
         let schema = TypeConverter.convert_schema schema in
@@ -590,7 +606,11 @@ module Core = struct
 
   let convert (t : Surface.t) : t =
     { definitions = List.map Converter.convert_definition t.definitions
-    ; main = Converter.convert_cut (Converter.empty_term_env ()) (Converter.empty_type_env ()) t.main
+    ; main =
+        Converter.convert_cut
+          (Converter.empty_term_env ())
+          (Converter.empty_type_env ())
+          t.main
     }
   ;;
 end

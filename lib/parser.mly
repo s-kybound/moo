@@ -236,9 +236,12 @@ gen:
 pack:
   | LPAREN 
       PACK
+        LBRACK
+        pt=base_type
+        RBRACK
         at=type_use
         p=either
-    RPAREN                              { Producer.pack at p }
+    RPAREN                              { Producer.pack pt at p }
   | LPAREN
       PACK
         type_use
@@ -289,9 +292,12 @@ consumer:
 inst:
   | LPAREN 
       INST
+        LBRACK
+        pt=base_type
+        RBRACK
         at=type_use
         c=either
-    RPAREN                              { Consumer.inst at c }
+    RPAREN                              { Consumer.inst pt at c }
   | LPAREN
       INST
         type_use

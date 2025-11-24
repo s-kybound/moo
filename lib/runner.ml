@@ -52,7 +52,7 @@ end = struct
     | Cosplit (cut, typs) -> Cosplit (subst_neutral_in_cut new_index term cut, typs)
     | Codone -> Codone
     | Gen (at, p) -> Gen (at, subst_neutral_in_neutral index term p)
-    | Pack (at, p) -> Pack (at, subst_neutral_in_neutral index term p)
+    | Pack (bt, at, p) -> Pack (bt, at, subst_neutral_in_neutral index term p)
 
   and subst_neutral_in_consumer (index : int) (term : neutral) (target : consumer)
     : consumer
@@ -63,7 +63,7 @@ end = struct
     | Split (cut, typs) -> Split (subst_neutral_in_cut new_index term cut, typs)
     | Cotuple xs -> Cotuple (List.map (subst_neutral_in_neutral index term) xs)
     | Done -> Done
-    | Inst (at, c) -> Inst (at, subst_neutral_in_neutral index term c)
+    | Inst (bt, at, c) -> Inst (bt, at, subst_neutral_in_neutral index term c)
     | Unpack (at, c) -> Unpack (at, subst_neutral_in_neutral index term c)
 
   and subst_neutral_in_cut (index : int) (term : neutral) (target : cut) : cut =
@@ -277,7 +277,7 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
            in
            let tuple = Tuple new_elems in
            (* this is done in order to cut the non-value with a continuation, substituting that
-           * non-value right there! (it will be evaluated at that point) *)
+            * non-value right there! (it will be evaluated at that point) *)
            Negative (MuTilde ({ p = Positive tuple; c = Negative cons }, None))
          in
          Incomplete { p = new_producer; c = new_consumer })
@@ -335,11 +335,11 @@ module Make_CBV (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
            Negative (MuTilde ({ p = Positive prod; c = Negative cotuple }, None))
          in
          Incomplete { p = new_producer; c = new_consumer })
-    | Gen (_, p), Inst (_, c) ->
+    | Gen (_, p), Inst (_, _, c) ->
       (* assume it was already typechecked *)
       let cut = { p; c } in
       Incomplete cut
-    | Pack (_, p), Unpack (_, c) ->
+    | Pack (_, _, p), Unpack (_, c) ->
       (* assume it was already typechecked *)
       let cut = { p; c } in
       Incomplete cut
@@ -478,7 +478,7 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
            in
            let cotuple = Cotuple new_elems in
            (* this is done in order to cut the non-covalue with a continuation, substituting that
-           * non-covalue right there! (it will be evaluated at that point) *)
+            * non-covalue right there! (it will be evaluated at that point) *)
            Positive (Mu ({ c = Negative cotuple; p = Positive prod }, None))
          in
          Incomplete { p = new_producer; c = new_consumer })
@@ -535,15 +535,15 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
            in
            let tuple = Tuple new_elems in
            (* this is done in order to cut the non-covalue with a continuation, substituting that
-           * non-covalue right there! (it will be evaluated at that point) *)
+            * non-covalue right there! (it will be evaluated at that point) *)
            Positive (Mu ({ c = Negative cons; p = Positive tuple }, None))
          in
          Incomplete { p = new_producer; c = new_consumer })
-    | Gen (_, p), Inst (_, c) ->
+    | Gen (_, p), Inst (_, _, c) ->
       (* assume it was already typechecked *)
       let cut = { p; c } in
       Incomplete cut
-    | Pack (_, p), Unpack (_, c) ->
+    | Pack (_, _, p), Unpack (_, c) ->
       (* assume it was already typechecked *)
       let cut = { p; c } in
       Incomplete cut
@@ -595,7 +595,7 @@ module Make_CBN (J : JUDGEMENTS) : EVALUATION_STRATEGY = struct
            in
            let cotuple = Cotuple new_elems in
            (* this is done in order to cut the non-covalue with a continuation, substituting that
-           * non-covalue right there! (it will be evaluated at that point) *)
+            * non-covalue right there! (it will be evaluated at that point) *)
            Positive (Mu ({ c = Negative cotuple; p = producer }, None))
          in
          Incomplete { p = new_producer; c = new_consumer })

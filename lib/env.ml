@@ -25,7 +25,7 @@ module Substituter = struct
     | Cosplit (cut, typs) -> Cosplit (substitute_cut env cut, typs)
     | Codone -> Codone
     | Gen (at, p) -> Gen (at, substitute_neutral env p)
-    | Pack (at, p) -> Pack (at, substitute_neutral env p)
+    | Pack (bt, at, p) -> Pack (bt, at, substitute_neutral env p)
 
   and substitute_consumer env c =
     match c with
@@ -33,7 +33,7 @@ module Substituter = struct
     | Cotuple xs -> Cotuple (List.map (substitute_neutral env) xs)
     | Split (cut, typs) -> Split (substitute_cut env cut, typs)
     | Done -> Done
-    | Inst (at, c) -> Inst (at, substitute_neutral env c)
+    | Inst (bt, at, c) -> Inst (bt, at, substitute_neutral env c)
     | Unpack (at, c) -> Unpack (at, substitute_neutral env c)
 
   and substitute_cut env cut =
@@ -85,7 +85,7 @@ let load_definitions program t =
          add_term t cn (Negative c)
        | TypeDef (schema, expr) ->
          (* there's no need to substitute other definitions within
-            * the type expr, we leave that work to our typechecker. *)
+          * the type expr, we leave that work to our typechecker. *)
          add_type t schema expr)
     program.definitions
 ;;
