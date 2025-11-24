@@ -17,14 +17,14 @@ let value_strategy =
 ;;
 
 let typechecker_strategy =
-  let doc = "Use untyped typechecker (default)" in
+  let doc = "Use untyped typechecker" in
   let untyped_flag = Arg.info [ "untyped" ] ~doc in
-  let doc = "Use system-f typechecker" in
+  let doc = "Use system-f typechecker (default)" in
   let system_f_flag = Arg.info [ "sf"; "system-f" ] ~doc in
   Arg.(
     value
     & vflag
-        `Untyped
+        `System_f
         [ `Untyped, untyped_flag
         ; `System_f, system_f_flag
         ])
@@ -58,16 +58,9 @@ let repl_cmd =
     Term.(const Repl.start_repl $ eval_strategy $ value_strategy $ typechecker_strategy)
 ;;
 
-let moo_cmd =
-  let doc = "moos for you" in
-  let info = Cmd.info "moo" ~doc in
-  let mooer () = print_endline "moo" in
-  Cmd.v info Term.(const mooer $ const ())
-;;
-
 let cmd =
   let doc = "Interpreter for the moo language" in
   let man = [ `S Manpage.s_bugs; `P "Report bugs to <github.com/s-kybound/moo>" ] in
   let info = Cmd.info "moo" ~version:Utils.version ~doc ~man ~exits:Cmd.Exit.defaults in
-  Cmd.group ~default:runner_body info [ repl_cmd; runner_cmd; moo_cmd ]
+  Cmd.group ~default:runner_body info [ repl_cmd; runner_cmd ]
 ;;
