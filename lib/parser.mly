@@ -26,6 +26,7 @@
 %token GEN INST (* universal types *)
 %token UNPACK PACK (* existential types *)
 %token FORALL EXISTS (* type quantifiers *)
+%token UNIT COUNIT (* unit and counit types *)
 %token TYPE (* type definition *)
 %token EOF
 %start <t> entrypoint
@@ -129,13 +130,11 @@ type_invocation_body:
   | tyvar error                         { raisef $startpos($1) $endpos($1) "we do not allow nullary kinds, that's what base kinds are for!" }
 
 positive_product_body:
-  | STAR                                { Type.PosProd [] }
   | STAR type_use                       { Type.PosProd [$2]}
   | x=type_use STAR xs=list_of(type_use, STAR)        
                                         { Type.PosProd (x::xs) }
 
 negative_product_body:
-  | AMPERSAND                           { Type.NegProd [] }
   | AMPERSAND type_use                  { Type.NegProd [$2]}
   | x=type_use AMPERSAND xs=list_of(type_use, AMPERSAND)        
                                         { Type.NegProd (x::xs) }
@@ -144,9 +143,8 @@ negative_product_body:
  * should be unpolarized. *)
 base_type:
   | v=tyvar                             { Type.Name v }
-  | LPAREN 
-    app=type_invocation_body  
-    RPAREN                              { app }
+  | UNIT                                { Type.PosProd [] }
+  | COUNIT                              { Type.NegProd [] }
   | LPAREN 
     pprod=positive_product_body 
     RPAREN                              { pprod }
@@ -163,6 +161,9 @@ base_type:
         v=tyvar 
         body=type_use 
     RPAREN                              { Type.Exists (v, body) }
+  | LPAREN 
+    app=type_invocation_body  
+    RPAREN                              { app }
 
 polar_type:
   | b=base_type PLUS                    { 

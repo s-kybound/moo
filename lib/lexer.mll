@@ -20,6 +20,8 @@
       ("inst",    INST);
       ("forall",  FORALL);
       ("exists",  EXISTS);
+      ("unit",    UNIT);
+      ("counit",  COUNIT);
     ] in
     keywords
     |> List.to_seq
