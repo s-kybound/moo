@@ -9,5 +9,7 @@ val get_type
   -> string
   -> (Ast.Core.Type.type_schema * Ast.Core.Type.type_expr, exn) result
 
+val get_neutral : string -> t -> Ast.Core.neutral
+
 val load_definitions : Ast.Core.t -> t -> unit
 val substitute_definitions : Ast.Core.cut -> t -> Ast.Core.cut

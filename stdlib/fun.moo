@@ -7,7 +7,7 @@ let [id : identity+] <-
    [v k]))
 in
 letcc [id_gen : identity-] <- 
-  (inst [(forall v (fun v unit+)+)] unit+
+  (inst [(forall v (fun v v)+)] unit+
     (let [new_id : (fun unit+ unit+)+] -> 
       [new_id '((), done)]))
 in

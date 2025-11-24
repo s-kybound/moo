@@ -78,7 +78,7 @@ cocase <- sum in
 and the more generic comatch/match
 syntax matches more with the cocase/case syntax
 
-{* immediately invoked cut syntax *}
+{* immediately invoked command syntax *}
 co/match <- sum in
 | A b c d ->
 | E f g ->

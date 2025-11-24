@@ -123,6 +123,11 @@ module TypeSubstituter = struct
     | Abstract a -> Abstract a (* polymorphic types, leave them alone *)
     | Instantiated p -> Instantiated (simplify_polar_type p)
   ;;
+
+  let simplify_type_expr env t = 
+    match simplify_type_use env (Instantiated (Plus t)) with
+    | Instantiated (Plus t') -> t'
+    | _ -> assert false
 end
 
 module type TYPECHECKER = sig
@@ -137,7 +142,39 @@ end
 module SystemF : TYPECHECKER = struct
   (* a reference for abstract binders. *)
   type type_env = type_use list
-  (* TODO: a top level environment *)
+  type abstract_type_env = abstract_type list
+
+(* ensures that all abstract type usages are well scoped (they have been introduced before) *)
+  let verify_type_use (abstract_type_env : abstract_type_env) tenv (typ : Core.Type.type_use) : Core.Type.type_use
+    =
+    let rec subst_abstract abstract_type_env (a : Core.Type.abstract_type) : Core.Type.abstract_type =
+      match a with
+      | Var i ->
+        (* check if it is in type_env *)
+        if not (List.mem a abstract_type_env)
+        then begin
+          failwith ("Unbound type variable: " ^ string_of_int i) end
+        else a
+      | Neg a' -> Neg (subst_abstract abstract_type_env a')
+    and subst_type_use_inner abstract_type_env (t : Core.Type.type_use) : Core.Type.type_use =
+      match t with
+      | Abstract a -> Abstract (subst_abstract abstract_type_env a)
+      | Instantiated p -> Instantiated (subst_polar_type abstract_type_env p)
+    and subst_polar_type abstract_type_env (p : Core.Type.polar_type) : Core.Type.polar_type =
+      match p with
+      | Plus t -> Plus (subst_type_expr abstract_type_env t)
+      | Minus t -> Minus (subst_type_expr abstract_type_env t)
+    and subst_type_expr abstract_type_env (t : Core.Type.type_expr) : Core.Type.type_expr =
+      match t with
+      | Name _ -> assert false (* names should have been substituted by now *) 
+      | PosProd typs -> PosProd (List.map (subst_type_use_inner abstract_type_env) typs)
+      | NegProd typs -> NegProd (List.map (subst_type_use_inner abstract_type_env) typs)
+      | KindInstantiation _ -> assert false
+      | Forall (i, body) -> Forall (i, subst_type_use_inner ((Var i)::abstract_type_env) body)
+      | Exists (i, body) -> Exists (i, subst_type_use_inner ((Var i)::abstract_type_env) body)
+    in
+    subst_type_use_inner abstract_type_env (TypeSubstituter.simplify_type_use tenv typ)
+  ;;
 
   let rec type_use_equivalent t1 t2 =
     match t1, t2 with
@@ -185,69 +222,23 @@ module SystemF : TYPECHECKER = struct
     | Abstract a -> Abstract (Neg a)
   ;;
 
-  (* ensures that all abstract type usages are well scoped (they have been introduced before) *)
-  let verify_type_use (abstract_type_env : type_env) tenv (typ : Core.Type.type_use) : Core.Type.type_use
-    =
-    let rec subst_abstract (a : Core.Type.abstract_type) : Core.Type.abstract_type =
-      match a with
-      | Var i ->
-        (* check if it is in abstract_type_env*)
-        if not (List.mem (Abstract a) abstract_type_env)
-        then failwith ("Unbound type variable: " ^ string_of_int i)
-        else Var i
-      | Neg a' -> Neg (subst_abstract a')
-    and subst_type_use_inner (t : Core.Type.type_use) : Core.Type.type_use =
-      match t with
-      | Abstract a -> Abstract (subst_abstract a)
-      | Instantiated p -> Instantiated (subst_polar_type p)
-    and subst_polar_type (p : Core.Type.polar_type) : Core.Type.polar_type =
-      match p with
-      | Plus t -> Plus (subst_type_expr t)
-      | Minus t -> Minus (subst_type_expr t)
-    and subst_type_expr (t : Core.Type.type_expr) : Core.Type.type_expr =
-      match t with
-      | Name n -> 
-        begin match Env.get_type tenv n with
-          | Ok (Kind _, _) -> failwith ("Kind type " ^ n ^ " cannot be used as a base type") 
-          | Ok (Base _, p) ->
-            if p = subst_type_expr p
-              then p
-              else subst_type_expr p       
-          | Error _ -> failwith ("Unbound type name: " ^ n)
-        end
-      | PosProd typs -> PosProd (List.map subst_type_use_inner typs)
-      | NegProd typs -> NegProd (List.map subst_type_use_inner typs)
-      | KindInstantiation (name, args) ->
-        begin match Env.get_type tenv name with
-          | Ok (Base _, _) -> failwith ("Base type " ^ name ^ " cannot be instantiated with constructors ") 
-          | Ok (Kind (_, param_count), p) ->
-            let args' = List.map subst_type_use_inner args in
-            if List.length args' <> param_count
-            then failwith ("Kind " ^ name ^ " expects " ^ string_of_int param_count ^ " arguments, but got " ^ string_of_int (List.length args'))
-            else
-            subst_type_expr (TypeSubstituter.substitute_type_expr ~kind_params:args' ~kind_body:p)
-          | Error _ -> failwith ("Unbound type name: " ^ name)
-        end
-      | Forall (i, body) -> Forall (i, subst_type_use_inner body)
-      | Exists (i, body) -> Exists (i, subst_type_use_inner body)
-    in
-    subst_type_use_inner typ
-  ;;
+  
 
-  let rec typecheck_producer (abstract_type_env : type_env) tenv (p : Core.producer) : Core.Type.type_use
+  let rec typecheck_producer abstract_type_env (type_env : type_env) tenv (p : Core.producer) : Core.Type.type_use
     =
     match p with
-    | Mu (cut, Some typ) ->
+    | Mu (command, Some typ) ->
       (* if the typ is instantiated, ensure that it is positive *)
       (match typ with
-       | Instantiated (Plus _) -> failwith "Producer cannot bind positive type"
+       | Instantiated (Plus _) -> failwith 
+       (Printf.sprintf "Type mismatch in mu-abstraction: expects negative type, got %s" (Core.Type.Show.show_type_use typ))
        | _ ->
-         typecheck_cut (typ :: abstract_type_env) tenv cut;
+         typecheck_cut abstract_type_env (typ :: type_env) tenv command;
          invert (verify_type_use abstract_type_env tenv typ))
     | Mu (_, None) -> failwith "System F requires type annotations on mu"
     | Tuple [] -> Instantiated (Plus (PosProd []))
-    | Tuple xs -> Instantiated (Plus (PosProd (List.map (typecheck_neutral abstract_type_env tenv) xs)))
-    | Cosplit (cut, typs) ->
+    | Tuple xs -> Instantiated (Plus (PosProd (List.map (typecheck_neutral abstract_type_env type_env tenv) xs)))
+    | Cosplit (command, typs) ->
       let typs' =
         List.map
           (fun t ->
@@ -256,37 +247,41 @@ module SystemF : TYPECHECKER = struct
             | None -> failwith "Type annotation required in cosplit")
           typs
       in
-      typecheck_cut (typs' @ abstract_type_env) tenv cut;
+      typecheck_cut abstract_type_env(typs' @ type_env) tenv command;
       Instantiated (Plus (NegProd typs'))
     | Codone -> Instantiated (Plus (NegProd []))
     | Gen (at, p) ->
-      let abs_type = Abstract (Var at) in
-      let body_type = typecheck_neutral (abs_type :: abstract_type_env) tenv p in
+      let abs_type = Var at in
+      let body_type = typecheck_neutral (abs_type :: abstract_type_env) type_env tenv p in
       Instantiated (Plus (Forall (at, body_type)))
     | Pack (bt, at, p) ->
-      (match bt with
-       | Forall (i, body) ->
+      let bt' = TypeSubstituter.simplify_type_expr tenv bt in
+      (match bt' with
+       | Exists (i, body) ->
          let instantiated_body = TypeSubstituter.substitute_abstract_with body i at in
-         let body_type = typecheck_neutral abstract_type_env tenv p in
+         let body_type = typecheck_neutral abstract_type_env type_env tenv p in
          if not (type_use_equivalent instantiated_body body_type)
-         then failwith "Type mismatch in packing"
-         else Instantiated (Plus bt)
-       | _ -> failwith "Cannot pack non-polymorphic type")
+         then failwith (Printf.sprintf "Type mismatch in pack body: expected %s but got %s"
+                          (Core.Type.Show.show_type_use instantiated_body)
+                          (Core.Type.Show.show_type_use body_type))
+         else Instantiated (Plus bt')
+       | _ -> failwith (Printf.sprintf "Type mismatch in pack: cannot pack non-existential base type %s"
+                          (Core.Type.Show.show_type_expr bt')))
 
-  and typecheck_consumer (abstract_type_env : type_env) tenv (c : Core.consumer) : Core.Type.type_use =
+  and typecheck_consumer abstract_type_env (type_env : type_env) tenv (c : Core.consumer) : Core.Type.type_use =
     match c with
-    | MuTilde (cut, Some typ) ->
+    | MuTilde (command, Some typ) ->
       (* if the typ is instantiated, ensure that it is negative *)
       (match typ with
-       | Instantiated (Minus _) -> failwith "Consumer cannot bind negative type"
+       | Instantiated (Minus _) -> failwith (Printf.sprintf "Type mismatch in mu-tilde-abstraction: expects positive type, got %s" (Core.Type.Show.show_type_use typ))
        | _ ->
-         typecheck_cut (typ :: abstract_type_env) tenv cut;
+         typecheck_cut abstract_type_env (typ :: type_env) tenv command;
          invert (verify_type_use abstract_type_env tenv typ))
     | MuTilde (_, None) -> failwith "System F requires type annotations on mu-tilde"
     | Cotuple [] -> Instantiated (Minus (NegProd []))
     | Cotuple xs ->
-      Instantiated (Minus (NegProd (List.map (typecheck_neutral abstract_type_env tenv) xs)))
-    | Split (cut, typs) ->
+      Instantiated (Minus (NegProd (List.map (typecheck_neutral abstract_type_env type_env tenv) xs)))
+    | Split (command, typs) ->
       let typs' =
         List.map
           (fun t ->
@@ -295,40 +290,66 @@ module SystemF : TYPECHECKER = struct
              | None -> failwith "Type annotation required in split")
           typs
       in
-      typecheck_cut (typs' @ abstract_type_env) tenv cut;
+      typecheck_cut abstract_type_env (typs' @ type_env) tenv command;
       Instantiated (Minus (PosProd typs'))
     | Done -> Instantiated (Minus (PosProd []))
     | Inst (bt, at, c) ->
-      (match bt with
+      let bt' = TypeSubstituter.simplify_type_expr tenv bt in
+      (match bt' with
        | Forall (i, body) ->
          let instantiated_body = TypeSubstituter.substitute_abstract_with body i at in
-         let body_type = typecheck_neutral abstract_type_env tenv c in
-         if not (type_use_equivalent instantiated_body body_type)
-         then failwith "Type mismatch in instantiation"
-         else Instantiated (Minus bt)
-       | _ -> failwith "Cannot instantiate non-polymorphic type")
+         let body_type = typecheck_neutral abstract_type_env type_env tenv c in
+         if not (type_use_equivalent instantiated_body (invert body_type))
+         then failwith (Printf.sprintf "Type mismatch in inst body: expected %s but got %s"
+                          (Core.Type.Show.show_type_use instantiated_body)
+                          (Core.Type.Show.show_type_use body_type))
+         else Instantiated (Minus bt')
+        | _ -> failwith (Printf.sprintf "Type mismatch in inst: cannot instantiate non-universal base type %s"
+                           (Core.Type.Show.show_type_expr bt')))
     | Unpack (at, c) ->
-      let abs_type = Abstract (Var at) in
-      let body_type = typecheck_neutral (abs_type :: abstract_type_env) tenv c in
-      Instantiated (Minus (Exists (at, body_type)))
+      let abs_type = Var at in
+      let body_type = typecheck_neutral (abs_type :: abstract_type_env) type_env tenv c in
+      Instantiated (Minus (Exists (at, invert body_type)))
 
-  and typecheck_neutral (abstract_type_env : type_env) tenv (n : Core.neutral) : Core.Type.type_use =
+  and typecheck_neutral abstract_type_env (type_env : type_env) tenv (n : Core.neutral) : Core.Type.type_use =
     match n with
-    | Name (Core.Free _) -> failwith "No free names are allowed!"
-    | Name (Core.Bound (_, Some typ)) -> verify_type_use abstract_type_env tenv typ
+    | Name (Core.Free n) ->
+      if not (Env.has_term tenv n)
+      then failwith ("Unbound name: " ^ n)
+      else
+        let neutral = Env.get_neutral n tenv in
+        typecheck_neutral abstract_type_env type_env tenv neutral 
+    | Name (Core.Bound (i, Some typ)) -> 
+      (* get the type from the type environment *)
+      let typ' = 
+        verify_type_use abstract_type_env tenv (List.nth type_env i)
+      in
+      let typ = verify_type_use abstract_type_env tenv typ in
+      if not (type_use_equivalent typ typ')
+      then failwith (Printf.sprintf "Type mismatch in bound name: expected %s but got %s"
+                       (Core.Type.Show.show_type_use typ')
+                       (Core.Type.Show.show_type_use typ))
+      else verify_type_use abstract_type_env tenv typ
     | Name (Core.Bound (_, None)) ->
       failwith "Unannotated bound names are not supported in System F"
-    | Positive p -> typecheck_producer abstract_type_env tenv p
-    | Negative c -> typecheck_consumer abstract_type_env tenv c
-  and typecheck_cut (abstract_type_env : type_env) tenv (cut : Core.cut) : unit =
-    let p_type = typecheck_neutral abstract_type_env tenv cut.p in
-    let c_type = typecheck_neutral abstract_type_env tenv cut.c in
+    | Positive p -> typecheck_producer abstract_type_env type_env tenv p
+    | Negative c -> typecheck_consumer abstract_type_env type_env tenv c
+  and typecheck_cut abstract_type_env (type_env : type_env) tenv (command : Core.cut) : unit =
+    let p_type = typecheck_neutral abstract_type_env type_env tenv command.p in
+    let c_type = typecheck_neutral abstract_type_env type_env tenv command.c in
     (* check that p_type and c_type are duals *)
     match p_type, c_type with
     | Instantiated (Plus p_base), Instantiated (Minus c_base)
     | Instantiated (Minus p_base), Instantiated (Plus c_base) ->
-      if not (type_equivalent p_base c_base) then failwith "Type mismatch in cut"
-    | Instantiated _, Instantiated _ -> failwith "Type mismatch in cut"
+      if not (type_equivalent p_base c_base) then failwith (Printf.sprintf "Type mismatch in command: attempt to pair %s with %s"
+                                                             (Core.Type.Show.show_type_expr p_base)
+                                                             (Core.Type.Show.show_type_expr c_base))
+    | Instantiated (Plus _), Instantiated _ -> failwith (Printf.sprintf "Type mismatch in command: both sides positive: %s vs %s"
+                                                          (Core.Type.Show.show_type_use p_type)
+                                                         (Core.Type.Show.show_type_use c_type))
+    | Instantiated (Minus _), Instantiated _ -> failwith (Printf.sprintf "Type mismatch in command: both sides negative: %s vs %s"
+                                                           (Core.Type.Show.show_type_use p_type)
+                                                          (Core.Type.Show.show_type_use c_type))
     | Abstract p_base, Abstract c_base ->
       let rec get_index_polarity base : int * bool =
         match base with
@@ -339,14 +360,21 @@ module SystemF : TYPECHECKER = struct
       in
       let p_index, p_polarity = get_index_polarity p_base in
       let c_index, c_polarity = get_index_polarity c_base in
-      if p_index <> c_index || p_polarity = c_polarity
-      then failwith "Type mismatch in cut"
-    | _ -> failwith "Type mismatch in cut"
+      if p_index <> c_index
+      then failwith (Printf.sprintf "Type mismatch in command: attempt to pair type variables %d and %d"
+                       p_index
+                       c_index)
+      else if p_polarity = c_polarity
+      then failwith (Printf.sprintf "Type mismatch in command: both sides have same polarity for type variable %d"
+                       p_index)
+    | _ -> failwith (Printf.sprintf "Type mismatch in command: cannot pair %s with %s"
+                       (Core.Type.Show.show_type_use p_type)
+                       (Core.Type.Show.show_type_use c_type))
   ;;
 
   let typecheck (env : Env.t) (ast : Core.t) =
     try
-      typecheck_cut [] env ast.main;
+      typecheck_cut [] [] env ast.main;
       Ok ast
     with
     | exn -> Error exn
