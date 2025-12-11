@@ -1,33 +1,42 @@
 %{
   open Ast.Surface
   open Parser_error.Parser
-  let require_adjacent prev_end curr_start error_msg =
-    if prev_end.Lexing.pos_cnum < curr_start.Lexing.pos_cnum then
-      raisef curr_start curr_start error_msg
-    else
-      ()
 %}
 
 %token <string> IDENT
-%token LBRACK RBRACK LPAREN RPAREN
-%token TICKLPAREN
-%token COMMA (* the above are also for tuple, cotuple construction *)
-%token LETC LETP (* mu, mu-tilde abstactions *)
-%token SPLIT (* tuple consumer *)
-%token COSPLIT (* cotuple producer *)
-%token DONE CODONE (* end unit consumer, end counit expression *)
-%token LTRARROW RTLARROW IN (* statement syntax *)
-%token DEFC DEFP (* top-level definitions *)
-%token EQUALS DELIMITER (* top-level definitions *)
-%token COLON (* type binder annotation *)
-%token AMPERSAND STAR PLUS MINUS NEG (* type operations: negative/positive products,
-                                      * positive/negative polarity,
-                                      * polarity negation *)
-%token GEN INST (* universal types *)
-%token UNPACK PACK (* existential types *)
-%token FORALL EXISTS (* type quantifiers *)
-%token UNIT COUNIT (* unit and counit types *)
-%token TYPE (* type definition *)
+%token <string> CONSTRUCTOR_IDENT
+%token UNDERSCORE
+
+%token LBRACK RBRACK LPAREN RPAREN 
+%token LBRACE RBRACE LANGLE RANGLE
+%token LTRARROW RTLARROW
+%token EQUALS
+
+%token DOUBLECOLON
+
+(* definitions *)
+%token LET IN
+%token REC AND
+%token PROC
+%token DELIMITER
+
+%token MATCH
+
+%token TYPE
+%token COLON
+%token DATA CODATA
+%token CBV CBN
+%token PLUS MINUS NEG
+%token BAR
+
+(* base datatypes, along with tuples and the rest *)
+%token RAW8 RAW64
+%token <int> NUMBER
+
+%token DOT
+%token COMMA
+
+%token DONE 
 %token EOF
 %start <t> entrypoint
 %%
@@ -35,34 +44,33 @@
 entrypoint: p=program                   { p }
 
 program: 
-  | definitions=top_level_definition* 
-    main=statement EOF                  { program definitions main }
-  | definitions=top_level_definition* 
+  | definitions=list_of(top_level_definition, DELIMITER?) 
     EOF                                 { program
                                           definitions
                                           (cut 
                                             (Name "no_main")
                                             (Name "'halt"))
                                         }
-  | LPAREN error                        { raisef $startpos($1) $endpos($1) "unexpected '(' - missing closing ')' or malformed expression" }
-  | RPAREN error                        { raisef $startpos($1) $endpos($1) "unexpected ')' - no matching '(' found" }
-
-producer_definition:
-  | DEFP   name=var_intro 
-           input=var_intro 
-    EQUALS body=statement DELIMITER?    { defp name input body }
-
-consumer_definition:
-  | DEFC   coname=var_intro 
-           input=var_intro 
-    EQUALS body=statement DELIMITER?    { defc coname input body }
 
 top_level_definition:
-  | producer_definition                 { $1 }
-  | consumer_definition                 { $1 }
+  | term_definition                     { $1 }
+  | signature_definition                { $1 }
   | type_definition                     { $1 }
 
-(* Nested statements *)
+term_definition:
+  | LET REC b=binder 
+    EQUALS t=term                       { term_definition_rec b t }
+  | LET b=binder 
+    EQUALS t=term                       { term_definition b t }
+  | PROC b=proc_binder
+    LPAREN ps=list_of(binder, COMMA) 
+    RPAREN
+    LBRACE s=statement 
+    RBRACE                              { proc_definition b ps s }
+    
+signature_definition:
+  | LET b=binder 
+    COLON t=polarised_type              { signature_definition b t }
 
 list_of(elem, joiner):
   |                                     { [] }
@@ -71,250 +79,157 @@ list_of(elem, joiner):
     joiner x=elem                       { xs @ [x] } 
 
 statement:
-  | LETP v=var_intro 
-    RTLARROW p=either IN m=statement    { cut
-                                            p
-                                            (Negative (Consumer.mutilde v m))
-                                        }
-  | LETC cv=var_intro 
-    RTLARROW c=either IN m=statement    { cut
-                                            (Positive (Producer.mu cv m))
-                                            c
-                                        }
-  | SPLIT xs=list_of(var_intro, COMMA)   
-    RTLARROW p=either IN m=statement    { cut
-                                            p
-                                            (Negative (Consumer.split xs m))
-                                        }
-  | COSPLIT xs=list_of(var_intro, COMMA)       
-    RTLARROW c=either IN m=statement    { cut
-                                            (Positive (Producer.cosplit xs m))
-                                            c
-                                        }
-  | cut                                 { $1 }
+  | cutlet                              { $1 }
+  | command                             { $1 }
+  | LPAREN s=statement RPAREN           { $2 }
 
-cut_body:
-  | p=either c=either                   { cut p c }
+cutlet:
+  | MATCH t=term match_body             { }
+  | LET b=binder 
+    RTLARROW t=term 
+    IN s=statement                      { }
 
-cut: 
-  | LBRACK c=cut_body RBRACK            { c }
+command:
+  | p=term c=term                       { command p c }
 
-var_intro:
-  | typed_var                           { $1 }
-  | untyped_var                         { $1 }
+binder:
+  | typed_name                          { $1 }
+  | untyped_name                        { $1 }
 
-tyvar:
-  | IDENT                               { $1 }
+typed_name:
+  | n=untyped_name COLON t=type_use  { n }
 
-type_schema:
-  | v=tyvar                             { Type.Base v }           (* basic type * *)
-  | LPAREN name=tyvar abs=tyvar+ RPAREN { Type.Kind (name, abs) } (* a kind * -> * *)
+either_ident:
+  | n=IDENT                             { n }
+  | c=CONSTRUCTOR_IDENT                 { c }
 
-abstract_type:
-  | v=tyvar                             { Type.Var v }
-  | NEG v=abstract_type                 { 
-                                          require_adjacent $endpos($1) $startpos(v) "'~' must immediately precede the type (no spaces)";
-                                          (* this will flip the negation of the nested abstract type *)
-                                          match v with
-                                          | Type.Var _ -> Type.Neg v
-                                          | Type.Neg v -> v
-                                        }
-(* usage of a type, only allowed within 
- * the body of another polar type *)
-type_use:
-  | p=polar_type                        { Type.Instantiated p }
-  | a=abstract_type                     { Type.Abstract a }
+untyped_name:
+  | n=IDENT                             { n }
+  | namespace=either_ident DOUBLECOLON 
+    n=untyped_name                    { Namespaced_name (namespace, n) } 
 
-type_invocation_body:
-  | kind=tyvar vars=type_use+           { Type.KindInstantiation (kind, vars) }
-  | tyvar error                         { raisef $startpos($1) $endpos($1) "we do not allow nullary kinds, that's what base kinds are for!" }
+term:
+  | var_term                            { $1 }
+  | mu_term                             { $1 }
+  | match_term                          { $1 }
+  | cons_term                           { $1 }
+  | tuple_term                          { $1 }
+  | DONE                                { term_done }
+  | LPAREN t=term RPAREN                { $2 }
 
-positive_product_body:
-  | STAR type_use                       { Type.PosProd [$2]}
-  | x=type_use STAR xs=list_of(type_use, STAR)        
-                                        { Type.PosProd (x::xs) }
+var_term:
+  | n=untyped_name                      { term_var n }
 
-negative_product_body:
-  | AMPERSAND type_use                  { Type.NegProd [$2]}
-  | x=type_use AMPERSAND xs=list_of(type_use, AMPERSAND)        
-                                        { Type.NegProd (x::xs) }
+mu_term:
+  | LBRACE b=binder 
+    LTRARROW t=statement 
+    RBRACE                              { term_mu b t }
 
-(* base_types, only used in definitions. 
- * should be unpolarized. *)
-base_type:
-  | v=tyvar                             { Type.Name v }
-  | UNIT                                { Type.PosProd [] }
-  | COUNIT                              { Type.NegProd [] }
-  | LPAREN 
-    pprod=positive_product_body 
-    RPAREN                              { pprod }
-  | LPAREN 
-    nprod=negative_product_body
-    RPAREN                              { nprod }
-  | LPAREN 
-      FORALL 
-        v=tyvar 
-        body=type_use 
-    RPAREN                              { Type.Forall (v, body) }
-  | LPAREN 
-      EXISTS 
-        v=tyvar 
-        body=type_use 
-    RPAREN                              { Type.Exists (v, body) }
-  | LPAREN 
-    app=type_invocation_body  
-    RPAREN                              { app }
+match_term:
+  | MATCH b=match_body                  { b }
 
-polar_type:
-  | b=base_type PLUS                    { 
-                                          require_adjacent $endpos(b) $startpos($2) "'+' must immediately follow the type (no spaces)"; 
-                                          Type.Plus b
-                                        }
-  | b=base_type MINUS                   { 
-                                          require_adjacent $endpos(b) $startpos($2) "'-' must immediately follow the type (no spaces)"; 
-                                          Type.Minus b
-                                        }
+match_body:
+  | LBRACE
+    matches=list_of(match_case, DELIMITER?)
+    RBRACE                              { term_match matches }
 
-typed_var_body:
-  | v=IDENT COLON t=type_use            { make_name v (Some t) }
+match_case:
+  | p=pattern 
+    LTRARROW t=statement                { (p, t) }
+
+pattern:
+  | binder                              { pattern_var $1 }
+(* TODO: allow matching on constant values *)
+  | UNDERSCORE                          { pattern_wildcard }
+  | LPAREN ps=list_of(pattern, COMMA) 
+    RPAREN                              { pattern_tuple ps }
+  | CONSTRUCTOR_IDENT                   { pattern_cons ($1, []) }
+  | c=CONSTRUCTOR_IDENT 
+    LPAREN ps=list_of(pattern, COMMA) 
+    RPAREN                              { pattern_cons (c, ps) }
+
+cons_term:
+  | c=CONSTRUCTOR_IDENT                 { term_cons (c, []) }
+  | c=CONSTRUCTOR_IDENT 
+    LPAREN ts=list_of(term, COMMA) 
+    RPAREN                              { term_cons (c, ts) }
+
+tuple_term:
+  | LPAREN ts=list_of(term, COMMA) 
+    RPAREN                              { term_tuple ts }
+
+(* TYPES *)
 
 type_definition:
-  | TYPE shape=type_schema
-    EQUALS expr=base_type
-    DELIMITER?                          { TypeDef (shape, expr) }
+  | DATA n=type_shape EQUALS base_type  {}
+  | CODATA n=type_shape EQUALS base_type{}
+  | TYPE n=type_shape EQUALS type_expr  {}
 
-typed_var:
-  | LBRACK t=typed_var_body RBRACK      { t }
+type_use:
+  | polarised_type              { $1 }
+  | abstract_type              { $1 }
 
-untyped_var:
-  | v=IDENT                             { make_name v None }
+abstract_type:
+  | n=abstract_name                     { type_abstract n } 
+  | NEG t=abstract_type                 { type_neg t }
 
-(* either a usage of a value, or a name usage *)
-either:
-  | n=IDENT                             { Name n }
-  | p=producer                          { Positive p }
-  | c=consumer                          { Negative c }
+abstract_name:
+  | CONSTRUCTOR_IDENT                   { $1 }
 
-letc_body:
-  | LETC cv=var_intro 
-    LTRARROW s=statement                { Producer.mu cv s }
-  | LETC cv=var_intro error             { raisef $startpos($1) $endpos(cv) "incomplete letcc: expected cut after covariable '%s'" cv.name }
-  | LETC error                          { raisef $startpos($1) $endpos($1) "incomplete letcc: expected covariable after 'letcc'" }
+polar_type:
+  | PLUS t=type_expr                    { polar_type_plus t }
+  | t=type_expr                         { polar_type_plus t } (* sugar: unannotated is expression
+                                                               * by default *)
+  | MINUS t=type_expr                   { polar_type_minus t }
 
-letc:
-  | LPAREN l=letc_body RPAREN           { l }
-  | LPAREN letc_body error              { raisef $startpos($1) $endpos($2) "unclosed letcc: expected ')' to close expression started here" }
+type_expr:
+  | named_type_use                      { $1 }
+  | data_type(base_type)                { $1 }
+  | codata_type(base_type)              { $1 }
+  | LPAREN t=type_expr RPAREN           { $2 }
 
-product_body:
-  | list_of(either, COMMA)              { Producer.tuple $1 }
+named_type_use:
+  | n=type_name                         { type_named n }
+  | n=type_name 
+    LANGLE ts=list_of(type_use, COMMA) 
+    RANGLE                              { type_app (n, ts) }
 
-product:
-  | LPAREN p=product_body RPAREN        { p }
-  | LPAREN product_body error           { raisef $startpos($1) $endpos($2) "unclosed tuple: expected ')' to close tuple started here" }
+type_name:
+  | untyped_name                        { $1 }
 
-cosplit_body:
-  | COSPLIT xs=list_of(var_intro, COMMA)       
-    LTRARROW s=statement                { Producer.cosplit xs s }
+data_type(t: base_type):
+  | DATA t=base_type                    { type_data t }
+  | cbv_annotation DATA t=base_type     { type_data_cbv (t) }
+  | cbn_annotation DATA t=base_type     { type_data_cbn (t) }
 
-cosplit:
-  | LPAREN c=cosplit_body RPAREN        { c }
-  | LPAREN cosplit_body error           { raisef $startpos($1) $endpos($2) "unclosed cosplit: expected ')' to close expression started here" }
+codata_type(t: base_type):
+  | CODATA t=base_type                  { type_codata t }
+  | cbv_annotation CODATA t=base_type   { type_codata_cbv (t) }
+  | cbn_annotation CODATA t=base_type   { type_codata_cbn (t) }
 
-gen:
-  | LPAREN 
-      GEN
-        at=tyvar
-        LTRARROW
-        p=either
-    RPAREN                              { Producer.gen at p }
-  | LPAREN
-      GEN
-        tyvar
-        LTRARROW
-        either
-    error                               { raisef $startpos($1) $endpos($2) "unclosed gen: expected ')' to close expression started here" }
+cbv_annotation:
+  | LBRACK CBV RBRACK                  { () }
 
-pack:
-  | LPAREN 
-      PACK
-        LBRACK
-        pt=base_type
-        RBRACK
-        at=type_use
-        p=either
-    RPAREN                              { Producer.pack pt at p }
-  | LPAREN
-      PACK
-        type_use
-        either
-    error                               { raisef $startpos($1) $endpos($2) "unclosed pack: expected ')' to close expression started here" }
+cbn_annotation:
+  | LBRACK CBN RBRACK                  { () }
 
-producer:
-  | letc                                { $1 }
-  | product                             { $1 }
-  | cosplit                             { $1 }
-  | CODONE                              { Producer.codone }
-  | gen                                 { $1 }
-  | pack                                { $1 }
+base_type:
+  | BAR? list_of(enum_form, BAR){ type_sum $2 }
+  | tuple_type                          { $1 }
+  | array_type                          { $1 }
+  | RAW64                               { type_raw64 }
+  | RAW8                                { type_raw8 }
 
-letp_body:
-  | LETP v=var_intro 
-    LTRARROW s=statement                { Consumer.mutilde v s }
-  | LETP v=var_intro error              { raisef $startpos($1) $endpos(v) "incomplete let: expected cut after variable '%s'" v.name }
-  | LETP error                          { raisef $startpos($1) $endpos($1) "incomplete let: expected variable after 'let'" }
+enum_form:
+  | n=CONSTRUCTOR_IDENT                 { type_enum_case (n, []) }
+  | n=CONSTRUCTOR_IDENT 
+    LPAREN ts=list_of(type_use, COMMA) 
+    RPAREN                              { type_enum_case_params (n, ts) }
 
-letp:
-  | LPAREN l=letp_body RPAREN           { l }
-  | LPAREN letp_body error              { raisef $startpos($1) $endpos($2) "unclosed let: expected ')' to close expression started here" }
+tuple_type:
+  | LPAREN ts=list_of(type_use, COMMA)
+    RPAREN                              { type_tuple ts }
 
-split_body:
-  | SPLIT xs=list_of(var_intro, COMMA)    
-    LTRARROW s=statement                { Consumer.split xs s }
-
-split:
-  | LPAREN s=split_body RPAREN          { s }
-  | LPAREN split_body error             { raisef $startpos($1) $endpos($2) "unclosed split: expected ')' to close expression started here" }
-
-coproduct_body:
-  | list_of(either, COMMA)              { Consumer.cotuple $1 }
-
-coproduct:
-  | TICKLPAREN c=coproduct_body RPAREN  { c }
-  | TICKLPAREN coproduct_body error     { raisef $startpos($1) $endpos($2) "unclosed cotuple: expected ')' to close expression started here" }
-
-consumer: 
-  | letp                                { $1 }
-  | split                               { $1 }
-  | coproduct                           { $1 }
-  | DONE                              { Consumer.done_ }
-  | inst                                { $1 }
-  | unpack                              { $1 }
-
-inst:
-  | LPAREN 
-      INST
-        LBRACK
-        pt=base_type
-        RBRACK
-        at=type_use
-        c=either
-    RPAREN                              { Consumer.inst pt at c }
-  | LPAREN
-      INST
-        type_use
-        either
-    error                               { raisef $startpos($1) $endpos($2) "unclosed inst: expected ')' to close expression started here" }
-
-unpack:
-  | LPAREN 
-      UNPACK
-        at=tyvar
-        LTRARROW
-        c=either
-    RPAREN                              { Consumer.unpack at c }
-  | LPAREN
-      UNPACK
-        tyvar
-        LTRARROW
-        either
-    error                               { raisef $startpos($1) $endpos($2) "unclosed unpack: expected ')' to close expression started here" }
+array_type:
+  | LBRACK t=type_use DELIMITER NUMBER
+    RBRACK                              { type_array t }

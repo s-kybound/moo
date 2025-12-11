@@ -4,24 +4,28 @@
 
   let keywords : (string, Parser.token) Hashtbl.t =
     let keywords : (string * Parser.token) list = [
-      ("letcc",   LETC);
-      ("let",     LETP);
-      ("split",   SPLIT);
-      ("cosplit", COSPLIT);
-      ("done",    DONE);
-      ("codone",  CODONE);
+      ("let",     LET);
       ("in",      IN);
-      ("defp",    DEFP);
-      ("defc",    DEFC);
+      ("rec",     REC);
+      ("and",     AND); 
+      ("match",   MATCH);
+      ("data",    DATA);
+      ("codata",  CODATA);
+      ("done",    DONE);
+      ("proc",    PROC); 
+      ("cbv",     CBV);
+      ("cbn",     CBN);   
       ("type",    TYPE);
+      ("unit",    UNIT);
+      ("raw8",    RAW8);
+      ("raw64",   RAW64);
+      ("_",       UNDERSCORE);
+      (* ("unpack",  UNPACK);
       ("pack",    PACK);
-      ("unpack",  UNPACK);
       ("gen",     GEN);
       ("inst",    INST);
       ("forall",  FORALL);
-      ("exists",  EXISTS);
-      ("unit",    UNIT);
-      ("counit",  COUNIT);
+      ("exists",  EXISTS); *)
     ] in
     keywords
     |> List.to_seq
@@ -36,43 +40,60 @@
 let hspace             = [' ' '\t' '\r']+
 let newline            = '\n'
 let digit              = ['0'-'9']
-let letter             = ['A'-'Z' 'a'-'z']
-let special_initial    = ['_' '\'']
+let capital            = ['A'-'Z']
+let lowercase          = ['a'-'z']
+let letter             = capital | lowercase
+let special_initial    = ['_']
 let initial            = letter | special_initial
 let subsequent         = initial | digit
 
+let number = '-'? digit+
+
 let ident = initial subsequent*
+let constructor_ident = capital subsequent*
 
 rule token = parse
-  | hspace         { token lexbuf }
-  | newline        { Lexing.new_line lexbuf; token lexbuf }
-  | "{*"           { skip_comment 1 lexbuf; token lexbuf }
-  | "*}"           { raisef lexbuf "Unmatched *}. Was a comment erased incorrectly?" }
-  | "->"           { LTRARROW }
-  | "<-"           { RTLARROW }
-  | '='            { EQUALS }
-  | ':'            { COLON }
-  | ";;"           { DELIMITER }
-  | '['            { LBRACK }
-  | ']'            { RBRACK }
-  | '('            { LPAREN }
-  | "\'("          { TICKLPAREN }
-  | ')'            { RPAREN }
-  | ','            { COMMA }
-  | '*'            { STAR }
-  | '&'            { AMPERSAND }
-  | '+'            { PLUS }
-  | '-'            { MINUS }
-  | '~'            { NEG }
-  | '\\'           { token lexbuf } (* skip a line just like C *)
-  | ident as id    { verify_ident lexbuf id }
-  | eof            { EOF }
-  | _ as ch        { raisef lexbuf "Unexpected char while parsing: %C" ch }
+  | hspace+                   { token lexbuf }
+  | newline+                  { Lexing.new_line lexbuf; token lexbuf }
+  | "/*"                      { skip_comment 1 lexbuf; token lexbuf }
+  | "*/"                      { raisef lexbuf "Unmatched */. Was a comment erased incorrectly?" }
+  | "//"                      { skip_line lexbuf; token lexbuf }
+  | "->"                      { LTRARROW }
+  | "<-"                      { RTLARROW }
+  | '='                       { EQUALS }
+  | "::"                      { DOUBLECOLON }
+  | ':'                       { COLON }
+  | ";"                       { DELIMITER }
+  | '['                       { LBRACK }
+  | ']'                       { RBRACK }
+  | '('                       { LPAREN }
+  | ')'                       { RPAREN }
+  | '{'                       { LBRACE }
+  | '}'                       { RBRACE }
+  | '<'                       { LANGLE }
+  | '>'                       { RANGLE }
+  | '.'                       { DOT }
+  | ','                       { COMMA }
+  | '|'                       { BAR }
+  | '+'                       { PLUS }
+  | '-'                       { MINUS }
+  | '~'                       { NEG }
+  | '\\'                      { token lexbuf } (* skip a line just like C *)
+  | number as num             { NUMBER (int_of_string num) }
+  | constructor_ident as cid  { CONSTRUCTOR_IDENT cid }
+  | ident as id               { verify_ident lexbuf id }
+  | eof                       { EOF }
+  | _ as ch                   { raisef lexbuf "Unexpected char while parsing: %C" ch }
 
 and skip_comment depth = parse
   | hspace         { skip_comment depth lexbuf }
   | newline        { Lexing.new_line lexbuf; skip_comment depth lexbuf }
-  | "{*"           { skip_comment (depth + 1) lexbuf }
-  | "*}"           { if depth = 1 then () else skip_comment (depth - 1) lexbuf }
-  | eof            { raisef lexbuf "Unterminated {*...*} comment" }
+  | "/*"           { skip_comment (depth + 1) lexbuf }
+  | "*/"           { if depth = 1 then () else skip_comment (depth - 1) lexbuf }
+  | eof            { raisef lexbuf "Unterminated /*...*/ comment" }
   | _              { skip_comment depth lexbuf }
+
+and skip_line = parse
+  | newline        { Lexing.new_line lexbuf }
+  | eof            { () }
+  | _              { skip_line lexbuf }
