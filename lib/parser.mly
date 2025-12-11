@@ -129,8 +129,8 @@ match_term:
   | MATCH b=match_body                  { b }
 
 match_body:
-  | LBRACE
-    matches=list_of(match_case, DELIMITER?)
+  | LBRACE BAR?
+    matches=list_of(match_case, BAR?)
     RBRACE                              { term_match matches }
 
 match_case:

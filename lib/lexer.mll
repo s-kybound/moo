@@ -17,7 +17,6 @@
       ("cbn",     CBN);   
       ("type",    TYPE);
       ("unit",    UNIT);
-      ("raw8",    RAW8);
       ("raw64",   RAW64);
       ("_",       UNDERSCORE);
       (* ("unpack",  UNPACK);
