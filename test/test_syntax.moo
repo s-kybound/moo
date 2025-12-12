@@ -35,6 +35,17 @@ let rec ones : stream<i64> =
     }
 
 /*
+desugared:
+let ones =
+   fix[ones] {
+       match {
+	   Head(k: -i64) -> 1 . k
+	   Tail(k: -stream<i64>) -> ones . k
+       }
+   }
+*/
+
+/*
 procedure sugar follows what we have learned from minimu.
 proc id(x, k) { k . x }
 
