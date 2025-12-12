@@ -25,6 +25,8 @@
       ("type",    TYPE);
       ("unit",    UNIT);
       ("raw64",   RAW64);
+      ("open",    OPEN);
+      ("module",  MODULE);
       ("_",       UNDERSCORE);
       (* ("unpack",  UNPACK);
       ("pack",    PACK);
@@ -57,6 +59,9 @@ let number = '-'? digit+
 
 let ident = initial subsequent*
 let constructor_ident = capital subsequent*
+let any_ident = ident | constructor_ident
+
+let namespace_sep     = "::"
 
 rule token = parse
   | hspace+                   { token lexbuf }
@@ -67,7 +72,6 @@ rule token = parse
   | "->"                      { LTRARROW }
   | "<-"                      { RTLARROW }
   | '='                       { EQUALS }
-  | "::"                      { DOUBLECOLON }
   | ':'                       { COLON }
   | ";"                       { DELIMITER }
   | '['                       { LBRACK }
@@ -86,7 +90,9 @@ rule token = parse
   | '~'                       { NEG }
   | '\\'                      { token lexbuf } (* skip a line just like C *)
   | number as num             { NUMBER (Int64.of_string num) }
-  (* TODO: find a nicer way to handle parser conflicts than this *)
+  (* TODO: find a nicer way to handle parser conflicts than these few rules *)
+  | any_ident as ns_id namespace_sep  
+                              { NAMESPACE_IDENT ns_id }
   | constructor_ident as cid '('  
                               { CONSTRUCTOR_LPAREN cid }
   | constructor_ident as cid  { CONSTRUCTOR_IDENT cid }

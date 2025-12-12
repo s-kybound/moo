@@ -42,6 +42,7 @@
 %}
 
 %token <string> IDENT
+%token <string> NAMESPACE_IDENT
 %token <string> CONSTRUCTOR_IDENT
 %token <string> CONSTRUCTOR_LPAREN
 %token UNDERSCORE
@@ -51,7 +52,7 @@
 %token LTRARROW RTLARROW
 %token EQUALS
 
-%token DOUBLECOLON
+%token OPEN MODULE
 
 (* definitions *)
 %token LET IN
@@ -114,21 +115,34 @@ kind_binder:
 %inline abstract_binder:
   | CONSTRUCTOR_IDENT                                   { $1 }
 
+any_ident:
+  | IDENT                                               { $1 }
+  | CONSTRUCTOR_IDENT                                   { $1 }
+
 namespaced(name):
   | name                                                { Base $1 }
-  | namespace=IDENT DOUBLECOLON
+  | namespace=NAMESPACE_IDENT
     inner=namespaced(name)                              { Namespaced {namespace; inner} }
 
 (* -- PROGRAM STRUCTURE -- *)
-entrypoint: p=program                                   { p }
+entrypoint: p=program EOF                               { p }
 
 program:
-  | definitions=list_of(top_level_definition, DELIMITER?) EOF
-      { { definitions } }
+  | opens=list_of(open_statement, DELIMITER?) 
+    definitions=list_of(top_level_definition, DELIMITER?)
+      { { opens; definitions } }
+
+open_statement:
+  | OPEN n=namespaced(any_ident)                        { Open n }  
 
 top_level_definition:
+  | module_definition                                   { $1 }
   | term_definition                                     { $1 }
   | type_definition                                     { $1 }
+
+module_definition:
+  | MODULE name=any_ident LBRACE program=program RBRACE
+      { ModuleDef { name; program } }
 
 term_definition:
   | let_definition                                      { $1 }

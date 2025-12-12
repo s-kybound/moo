@@ -106,11 +106,22 @@ and arith_command =
       ; out_term : term
       }
 
+type module_open = Open of name
+
 type definition =
   | TermDef of binder * term
   | TypeDef of kind_binder * ty
+  | ModuleDef of module_def
 
-type t = { definitions : definition list }
+and module_def =
+  { name : string
+  ; program : t
+  }
+
+and t =
+  { opens : module_open list
+  ; definitions : definition list
+  }
 
 (* prints the program exactly as is *)
 module Show_program = struct
@@ -261,15 +272,22 @@ module Show_program = struct
         (show_term out_term)
   ;;
 
-  let show_definition def =
+  let rec show_definition def =
     match def with
     | TermDef (binder, term) ->
       Printf.sprintf "let %s = %s" (show_binder binder) (show_term term)
     | TypeDef (kind_binder, ty) ->
       Printf.sprintf "type %s = %s" (show_kind_binder kind_binder) (show_ty ty)
-  ;;
+    | ModuleDef { name; program } ->
+      Printf.sprintf "module %s {\n%s\n}" name (show_program program)
 
-  let show_program prog =
-    prog.definitions |> List.map show_definition |> String.concat ";\n"
+  and show_open mo =
+    match mo with
+    | Open name -> Printf.sprintf "open %s" (show_name name)
+
+  and show_program prog =
+    let opens_str = prog.opens |> List.map show_open |> String.concat ";\n" in
+    let defs_str = prog.definitions |> List.map show_definition |> String.concat ";\n" in
+    Printf.sprintf "%s\n%s" opens_str defs_str
   ;;
 end
