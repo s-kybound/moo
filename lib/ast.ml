@@ -91,6 +91,7 @@ and command =
       ; r_term : term
       }
   | Arith of arith_command
+  | Fork of command * command
 
 and arith_command =
   | Unop of
@@ -241,6 +242,8 @@ module Show_program = struct
 
   and show_command cmd =
     match cmd with
+    | Fork (cmd1, cmd2) ->
+      Printf.sprintf "[%s | %s]" (show_command cmd1) (show_command cmd2)
     | Core { l_term; r_term } ->
       Printf.sprintf "%s . %s" (show_term l_term) (show_term r_term)
     | Arith arith_cmd -> show_arith_command arith_cmd

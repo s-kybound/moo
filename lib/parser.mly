@@ -153,9 +153,21 @@ proc_definition:
 
 (* any form of command *)
 statement:
+  | non_fork_statement                                  { $1 }
+  | fork_command                                        { $1 }
+
+non_fork_statement:
   | cutlet                                              { $1 }
   | command                                             { $1 }
   | LPAREN s=statement RPAREN                           { s }
+
+(* execute two commands concurrently
+ * for now, we are limiting the power of fork
+ * and preventing it from directly spawning
+ * > 2 commands at a time *)
+fork_command:
+  | LBRACK l_cmd=non_fork_statement BAR r_cmd=non_fork_statement RBRACK
+      { Fork (l_cmd, r_cmd) }
 
 (* sugared commands *)
 cutlet:
