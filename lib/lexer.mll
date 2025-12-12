@@ -1,13 +1,20 @@
 {
   open Parser
-  open Parser_error.Lexer
+
+  let raisef lexbuf fmt =
+    Printf.ksprintf
+      (fun msg ->
+         let pos = Lexing.lexeme_start_p lexbuf in
+         let line = pos.Lexing.pos_lnum in
+         let col = pos.Lexing.pos_cnum - pos.Lexing.pos_bol + 1 in
+         failwith (Printf.sprintf "Lexing error at line %d, column %d: %s" line col msg))
+      fmt
 
   let keywords : (string, Parser.token) Hashtbl.t =
     let keywords : (string * Parser.token) list = [
       ("let",     LET);
       ("in",      IN);
       ("rec",     REC);
-      ("and",     AND); 
       ("match",   MATCH);
       ("data",    DATA);
       ("codata",  CODATA);
@@ -78,7 +85,10 @@ rule token = parse
   | '-'                       { MINUS }
   | '~'                       { NEG }
   | '\\'                      { token lexbuf } (* skip a line just like C *)
-  | number as num             { NUMBER (int_of_string num) }
+  | number as num             { NUMBER (Int64.of_string num) }
+  (* TODO: find a nicer way to handle parser conflicts than this *)
+  | constructor_ident as cid '('  
+                              { CONSTRUCTOR_LPAREN cid }
   | constructor_ident as cid  { CONSTRUCTOR_IDENT cid }
   | ident as id               { verify_ident lexbuf id }
   | eof                       { EOF }

@@ -6,14 +6,13 @@ type bop =
   | Add
   | Sub
   | Mul
-  | Sdiv
+  | Div
   | Mod
   | And
   | Or
   | Xor
   | Shl
-  | Lshr
-  | Ashr
+  | Shr
 
 type name =
   | Base of string
@@ -27,65 +26,67 @@ type polarity =
   | Minus
 
 type mode =
-  | CBV
-  | CBN
+  | By_value
+  | By_name
 
 type shape =
   | Data
   | Codata
 
-type ty =
-  | Named of mode * kind_inst
-  | Raw of mode * core_ty
-
-and kind_inst = name * ty_use list
-and core_ty = shape * raw_ty
-
-and raw_ty =
-  | Raw64
-  | Unit
-  | Product of ty_use list
-  | ADT of variant list
-
-and variant = name * ty_use list
-
-and ty_use =
-  | Polarised of polarity * ty
+type ty_use =
+  | Polarised of polarity * moded_ty
   | Abstract of
       { negated : bool
       ; name : string
       }
 
-type kind_binder = name * string list
+and moded_ty = mode option * ty
+
+and ty =
+  | Named of name * ty_use list
+  | Raw of shape * raw_ty
+
+and raw_ty =
+  | Raw64
+  | Unit
+  | Product of ty_use list
+  | Array of ty_use
+  | ADT of variant list
+
+and variant = string * ty_use list
+
+type kind_binder = string * string list
 
 type binder =
-  { name : name
+  { name : string
   ; typ : ty_use option
   }
 
 type pattern =
-  | Wildcard
   | Var of binder
+  | Wildcard
+  | Tup of pattern list
   | Constr of
       { pat_name : name
       ; pat_args : pattern list
       }
 
 type term =
-  | Binder of binder * command (* mu and mu tilde *)
+  | Mu of binder * command (* mu and mu tilde *)
   | Variable of name
-  | Construction of construction
+  | Construction of
+      { cons_name : name
+      ; cons_args : term list
+      }
+  | Tuple of term list
   | Matcher of (pattern * command) list (* match and dispatch *)
   | Num of int64
+  | Rec of binder * term (* fixpoint term *)
+  | Arr of term list
   | Done
 
-and construction =
-  { cons_name : name
-  ; cons_args : term list
-  }
-
 and command =
-  | Base of
+  | Core of
       { l_term : term
       ; r_term : term
       }
@@ -104,190 +105,164 @@ and arith_command =
       ; out_term : term
       }
 
-(* to handle definitions with introduced types *)
-type definition_binder = binder * string list
-
 type definition =
-  | TermDef of
-      { recursive : bool
-      ; binder : definition_binder
-      ; term : term
-      }
+  | TermDef of binder * term
   | TypeDef of kind_binder * ty
 
 type t = { definitions : definition list }
 
 (* prints the program exactly as is *)
 module Show_program = struct
+  let rec show_name name =
+    match name with
+    | Namespaced { namespace; inner } ->
+      Printf.sprintf "%s::%s" namespace (show_name inner)
+    | Base s -> s
+  ;;
 
-    let rec show_name name =
-        match name with
-        | Namespaced { namespace; inner } ->
-            Printf.sprintf "%s::%s" namespace (show_name inner)
-        | Base s -> s
+  let show_unop op =
+    match op with
+    | Not -> "!"
+    | Neg -> "-"
+  ;;
 
-    let show_unop op =
-        match op with
-        | Not -> "!"
-        | Neg -> "-"
+  let show_bop op =
+    match op with
+    | Add -> "+"
+    | Sub -> "-"
+    | Mul -> "*"
+    | Div -> "/"
+    | Mod -> "%"
+    | And -> "&"
+    | Or -> "|"
+    | Xor -> "^"
+    | Shl -> "<<"
+    | Shr -> ">>"
+  ;;
 
-    let show_bop op =
-        match op with
-        | Add -> "+"
-        | Sub -> "-"
-        | Mul -> "*"
-        | Sdiv -> "/"
-        | Mod -> "%"
-        | And -> "&"
-        | Or -> "|"
-        | Xor -> "^"
-        | Shl -> "<<"
-        | Lshr -> ">>"
-        | Ashr -> ">>>"
+  let show_polarity p =
+    match p with
+    | Plus -> "+"
+    | Minus -> "-"
+  ;;
 
-    let show_polarity p =
-        match p with
-        | Plus -> "+"
-        | Minus -> "-"
+  let show_mode m =
+    match m with
+    | By_value -> "cbv"
+    | By_name -> "cbn"
+  ;;
 
-    let show_mode m =
-        match m with
-        | CBV -> "cbv"
-        | CBN -> "cbn"
+  let show_shape s =
+    match s with
+    | Data -> "data"
+    | Codata -> "codata"
+  ;;
 
-    let show_shape s =
-        match s with
-        | Data -> "data"
-        | Codata -> "codata"
+  let rec show_ty_use tyu =
+    match tyu with
+    | Polarised (pol, m) -> Printf.sprintf "%s%s" (show_polarity pol) (show_moded_ty m)
+    | Abstract { negated; name } -> if negated then Printf.sprintf "~%s" name else name
 
-    let rec show_ty ty =
-      match ty with
-      | Named (mode, inst) -> 
-        Printf.sprintf "[%s]%s" (show_mode mode) (show_kind_inst inst)
-      | Raw (mode, core) -> 
-        Printf.sprintf "[%s]%s" (show_mode mode) (show_core_ty core)
-      
-    and show_kind_inst (name, args) =
-      let args_str = 
-        args 
-        |> List.map show_ty_use
-        |> String.concat ", "
-      in
-      Printf.sprintf "%s<%s>" (show_name name) args_str
+  and show_moded_ty (mode_opt, ty) =
+    match mode_opt with
+    | Some m -> Printf.sprintf "[%s]%s" (show_mode m) (show_ty ty)
+    | None -> Printf.sprintf "[???]%s" (show_ty ty)
 
-    and show_core_ty (shape, raw) =
-      let raw_str =
-        match raw with
-        | Raw64 -> "raw64"
-        | Unit -> "unit"
-        | Product args ->
-          let args_str = 
-            args 
-            |> List.map show_ty_use
-            |> String.concat ", "
-          in
-          Printf.sprintf "(%s)" args_str
-        | ADT variants ->
-          let variant_to_str (vname, args) =
-            let args_str = 
-              args 
-              |> List.map show_ty_use
-              |> String.concat ", "
-            in
-            Printf.sprintf "%s(%s)" (show_name vname) args_str
-          in
-          let variants_str = 
-            variants 
-            |> List.map variant_to_str
-            |> String.concat " | "
-          in
-          Printf.sprintf "{ %s }" variants_str
-      in
-      Printf.sprintf "%s %s" (show_shape shape) raw_str
-
-    and show_ty_use tyu =
-      match tyu with
-      | Polarised (pol, ty) -> 
-        Printf.sprintf "%s%s" (show_polarity pol) (show_ty ty)
-      | Abstract { negated; name } -> 
-        let neg_str = if negated then "~" else "" in
-        Printf.sprintf "%s%s" neg_str name
-
-    let show_kind_binder (name, params) =
-      let params_str = String.concat ", " params in
+  and show_ty ty =
+    match ty with
+    | Named (name, params) ->
+      let params_str = params |> List.map show_ty_use |> String.concat ", " in
       Printf.sprintf "%s<%s>" (show_name name) params_str
+    | Raw (shape, raw) -> Printf.sprintf "%s %s" (show_shape shape) (show_raw_ty raw)
 
-    let show_binder binder =
-      match binder.typ with
-      | Some tyu ->
-        Printf.sprintf "%s: %s" (show_name binder.name) (show_ty_use tyu)
-      | None ->
-        show_name binder.name
+  and show_raw_ty raw =
+    match raw with
+    | Raw64 -> "raw64"
+    | Unit -> "unit"
+    | Product tys ->
+      let tys_str = tys |> List.map show_ty_use |> String.concat ", " in
+      Printf.sprintf "(%s)" tys_str
+    | ADT variants ->
+      let variants_str = variants |> List.map show_variant |> String.concat " | " in
+      Printf.sprintf "{ %s }" variants_str
+    | Array tyu -> Printf.sprintf "[%s]" (show_ty_use tyu)
 
-    let rec show_pattern pat =
-      match pat with
-      | Wildcard -> "_"
-      | Var binder -> show_binder binder
-      | Constr { pat_name; pat_args } ->
-        let args_str = 
-          pat_args 
-          |> List.map show_pattern
-          |> String.concat ", "
-        in
-        Printf.sprintf "%s(%s)" (show_name pat_name) args_str
+  and show_variant (name, params) =
+    let params_str = params |> List.map show_ty_use |> String.concat ", " in
+    Printf.sprintf "%s(%s)" name params_str
+  ;;
 
-    let rec show_term term =
-      match term with
-      | Binder (binder, cmd) ->
-        Printf.sprintf "{ %s -> %s }" (show_binder binder) (show_command cmd)
-      | Variable name ->
-        show_name name
-      | Construction { cons_name; cons_args } ->
-        let args_str = 
-          cons_args 
-          |> List.map show_term
-          |> String.concat ", "
-        in
-        Printf.sprintf "%s(%s)" (show_name cons_name) args_str 
-      | Matcher arms ->
-        let show_arm (pat, cmd) =
-          Printf.sprintf "%s -> %s" (show_pattern pat) (show_command cmd)
-        in
-        Printf.sprintf "match { %s }" 
-          (arms 
-          |> List.map show_arm 
-          |> String.concat "|")
-      | Num n ->
-        Int64.to_string n
-      | Done ->
-        "done"
-    and show_command cmd = 
-      match cmd with
-      | Base { l_term; r_term } ->
-        Printf.sprintf "%s . %s" (show_term l_term) (show_term r_term)
-      | Arith arith_cmd ->
-        show_arith_command arith_cmd
+  let show_kind_binder (name, params) =
+    let params_str = String.concat ", " params in
+    Printf.sprintf "%s<%s>" name params_str
+  ;;
 
-    and show_arith_command arith_cmd =
-      match arith_cmd with
-      | Unop { op; in_term; out_term } ->
-        Printf.sprintf "%s(%s, %s)" (show_unop op) (show_term in_term) (show_term out_term)
-      | Bop { op; l_term; r_term ; out_term } ->
-        Printf.sprintf "%s(%s, %s, %s)" (show_bop op) (show_term l_term) (show_term r_term) (show_term out_term)
-      
-    let show_definition def =
-      match def with
-      | TermDef { recursive; binder = (binder, type_params); term } ->
-        let rec_str = if recursive then "rec " else "" in
-        let type_params_str = 
-          if type_params = [] then ""
-          else 
-            let params_str = String.concat ", " type_params in
-            Printf.sprintf "<%s>" params_str
-        in
-        Printf.sprintf "%s%s%s = %s" rec_str (show_binder binder) type_params_str (show_term term)
-      | TypeDef (kind_binder, ty) ->
-        Printf.sprintf "type %s = %s" (show_kind_binder kind_binder) (show_ty ty)
-    
+  let show_binder binder =
+    match binder.typ with
+    | Some tyu -> Printf.sprintf "%s:%s" binder.name (show_ty_use tyu)
+    | None -> binder.name
+  ;;
+
+  let rec show_pattern pat =
+    match pat with
+    | Wildcard -> "_"
+    | Var binder -> show_binder binder
+    | Constr { pat_name; pat_args } ->
+      let args_str = pat_args |> List.map show_pattern |> String.concat ", " in
+      Printf.sprintf "%s(%s)" (show_name pat_name) args_str
+    | Tup pats ->
+      let pats_str = pats |> List.map show_pattern |> String.concat ", " in
+      Printf.sprintf "(%s)" pats_str
+  ;;
+
+  let rec show_term term =
+    match term with
+    | Mu (binder, cmd) ->
+      Printf.sprintf "{ %s -> %s }" (show_binder binder) (show_command cmd)
+    | Variable name -> show_name name
+    | Construction { cons_name; cons_args } ->
+      let args_str = cons_args |> List.map show_term |> String.concat ", " in
+      Printf.sprintf "%s(%s)" (show_name cons_name) args_str
+    | Tuple terms ->
+      let terms_str = terms |> List.map show_term |> String.concat ", " in
+      Printf.sprintf "(%s)" terms_str
+    | Matcher arms ->
+      let show_arm (pat, cmd) =
+        Printf.sprintf "%s -> %s" (show_pattern pat) (show_command cmd)
+      in
+      Printf.sprintf "match { %s }" (arms |> List.map show_arm |> String.concat "|")
+    | Num n -> Int64.to_string n
+    | Rec (binder, body) ->
+      Printf.sprintf "rec |%s| %s" (show_binder binder) (show_term body)
+    | Arr terms ->
+      let terms_str = terms |> List.map show_term |> String.concat ", " in
+      Printf.sprintf "[%s]" terms_str
+    | Done -> "done"
+
+  and show_command cmd =
+    match cmd with
+    | Core { l_term; r_term } ->
+      Printf.sprintf "%s . %s" (show_term l_term) (show_term r_term)
+    | Arith arith_cmd -> show_arith_command arith_cmd
+
+  and show_arith_command arith_cmd =
+    match arith_cmd with
+    | Unop { op; in_term; out_term } ->
+      Printf.sprintf "%s(%s, %s)" (show_unop op) (show_term in_term) (show_term out_term)
+    | Bop { op; l_term; r_term; out_term } ->
+      Printf.sprintf
+        "%s(%s, %s, %s)"
+        (show_bop op)
+        (show_term l_term)
+        (show_term r_term)
+        (show_term out_term)
+  ;;
+
+  let show_definition def =
+    match def with
+    | TermDef (binder, term) ->
+      Printf.sprintf "let %s = %s" (show_binder binder) (show_term term)
+    | TypeDef (kind_binder, ty) ->
+      Printf.sprintf "type %s = %s" (show_kind_binder kind_binder) (show_ty ty)
+  ;;
 end
-
