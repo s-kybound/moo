@@ -12,13 +12,13 @@
   end
 
   let term_binop op l_term r_term =
-    let name = Gensym.make "binop_out" in 
+    let name = Gensym.make "binop_out" in
     let arith_cmd = Bop { op; l_term; r_term; out_term = Variable (Base name) } in
     let out_binder = { name; typ = None } in
     Mu (out_binder, Arith arith_cmd)
- 
+
   let term_unop op in_term =
-    let name = Gensym.make "unop_out" in 
+    let name = Gensym.make "unop_out" in
     let arith_cmd = Unop { op; in_term; out_term = Variable (Base name) } in
     let out_binder = { name; typ = None } in
     Mu (out_binder, Arith arith_cmd)
@@ -33,7 +33,7 @@
     (* default inferences *)
     | None, Raw (Data, _) -> Some By_value, ty
     | None, Raw (Codata, _) -> Some By_name, ty
-  
+
   (* desugars procedures into pattern matchers *)
   let make_proc binders body =
     Matcher [
@@ -46,7 +46,7 @@
 %token <string> CONSTRUCTOR_LPAREN
 %token UNDERSCORE
 
-%token LBRACK RBRACK LPAREN RPAREN 
+%token LBRACK RBRACK LPAREN RPAREN
 %token LBRACE RBRACE LANGLE RANGLE
 %token LTRARROW RTLARROW
 %token EQUALS
@@ -75,7 +75,7 @@
 %token DOT
 %token COMMA
 
-%token DONE 
+%token DONE
 %token EOF
 
 (* token associativities and precedences *)
@@ -84,6 +84,7 @@
 %left LANGLE RANGLE *)
 %left PLUS MINUS
 %left STAR SLASH PERCENT
+%right UNARY
 
 %start <t> entrypoint
 %%
@@ -91,7 +92,7 @@
 list_of(elem, joiner):
   |                                                     { [] }
   | nonempty_list_of(elem, joiner)                      { $1 }
- 
+
 nonempty_list_of(elem, joiner):
   | x=elem xs=nonempty_list_of_2(elem, joiner)          { x :: xs }
 
@@ -105,9 +106,9 @@ binder:
   | name=IDENT                                          { { name; typ = None } }
 
 kind_binder:
-  | name=IDENT                           
+  | name=IDENT
       { (name, []) }
-  | name=IDENT LANGLE ts=list_of(CONSTRUCTOR_IDENT, COMMA) RANGLE                              
+  | name=IDENT LANGLE ts=list_of(CONSTRUCTOR_IDENT, COMMA) RANGLE
       { (name, ts) }
 
 %inline abstract_binder:
@@ -115,14 +116,14 @@ kind_binder:
 
 namespaced(name):
   | name                                                { Base $1 }
-  | namespace=IDENT DOUBLECOLON 
+  | namespace=IDENT DOUBLECOLON
     inner=namespaced(name)                              { Namespaced {namespace; inner} }
 
 (* -- PROGRAM STRUCTURE -- *)
 entrypoint: p=program                                   { p }
 
-program: 
-  | definitions=list_of(top_level_definition, DELIMITER?) EOF                                     
+program:
+  | definitions=list_of(top_level_definition, DELIMITER?) EOF
       { { definitions } }
 
 top_level_definition:
@@ -133,6 +134,10 @@ term_definition:
   | let_definition                                      { $1 }
   | proc_definition                                     { $1 }
 
+type_definition:
+  | s=shape n=kind_binder EQUALS t=raw_type             { TypeDef (n, Raw (s, t)) }
+  | TYPE n=kind_binder EQUALS t=type_expr               { TypeDef (n, t) }
+
 let_definition:
   | LET b=binder EQUALS t=term                          { TermDef (b, t) }
   | LET REC b=binder EQUALS t=term                      { TermDef (b, Rec (b, t)) }
@@ -141,9 +146,9 @@ let_definition:
  * they are useful enough to be granted
  * native representation *)
 proc_definition:
-  | PROC b=binder LPAREN ps=list_of(binder, COMMA) RPAREN LBRACE s=statement RBRACE 
+  | PROC b=binder LPAREN ps=list_of(binder, COMMA) RPAREN LBRACE s=statement RBRACE
       { TermDef (b, make_proc ps s) }
-  | PROC REC b=binder LPAREN ps=list_of(binder, COMMA) RPAREN LBRACE s=statement RBRACE                         
+  | PROC REC b=binder LPAREN ps=list_of(binder, COMMA) RPAREN LBRACE s=statement RBRACE
       { TermDef (b, Rec (b, make_proc ps s)) }
 
 (* any form of command *)
@@ -157,12 +162,12 @@ cutlet:
   | MATCH l_term=indirect_term r_term=match_body        { Core { l_term; r_term } }
   | LET b=binder RTLARROW l_term=term IN s=statement    { let r_term = Mu (b, s) in Core { l_term; r_term } }
   (* let rec... itself sugar over fixpoint terms *)
-  | LET REC b=binder RTLARROW t=term IN s=statement     { let l_term = Rec (b, t) in 
+  | LET REC b=binder RTLARROW t=term IN s=statement     { let l_term = Rec (b, t) in
                                                           let r_term = Mu (b, s) in
                                                           Core { l_term; r_term }
                                                         }
 
-(* core commands and arithmetic operations *)                                                                
+(* core commands and arithmetic operations *)
 command:
   | l_term=term DOT r_term=term                         { Core { l_term; r_term } }
   | arith_command                                       { Arith $1 }
@@ -171,9 +176,9 @@ command:
  * may be extended in the future to support other
  * base types *)
 arith_command:
-  | op=unop LPAREN in_term=term COMMA out_term=term RPAREN  
+  | op=unop LPAREN in_term=term BAR out_term=term RPAREN
       { Unop { op; in_term; out_term } }
-  | op=bop LPAREN l_term=term COMMA r_term=term COMMA out_term=term RPAREN 
+  | op=bop LPAREN l_term=term COMMA r_term=term BAR out_term=term RPAREN
       { Bop { op; l_term; r_term; out_term } }
 
 (* indirect terms are terms that are not
@@ -181,14 +186,15 @@ arith_command:
  * this is needed to avoid a grammar ambiguity *)
 term:
   | naked_mu_term                                       { $1 }
+  | active_number_term                                  { $1 }
   | indirect_term                                       { $1 }
 
 indirect_term:
   | namespaced(IDENT)                                   { Variable $1 }
   | MATCH match_body                                    { $2 }
-  | product_term                                        { $1 } 
+  | product_term                                        { $1 }
   | cons_term                                           { $1 }
-  | number_term                                         { $1 }
+  | simple_number_term                                  { $1 }
   | array_term                                          { $1 }
   | DONE                                                { Done }
   | LPAREN t=term RPAREN                                { t }
@@ -200,21 +206,27 @@ naked_mu_term:
   | LBRACE b=binder LTRARROW t=statement RBRACE         { Mu (b, t) }
 
 product_term:
-  | LPAREN RPAREN                                       { Tuple [] }
-  | LPAREN t=term COMMA RPAREN                          { Tuple [t] }
-  | LPAREN t=term COMMA ts=nonempty_list_of(term, COMMA) RPAREN                          
+  | LPAREN RPAREN
+      { Tuple [] }
+  | LPAREN t=term COMMA RPAREN
+      { Tuple [t] }
+  | LPAREN t=term COMMA ts=nonempty_list_of(term, COMMA) RPAREN
       { Tuple (t :: ts) }
 
-number_term:
+(* direct numbers *)
+simple_number_term:
   | NUMBER                                              { Num $1 }
-  (*
+
+(* computations of numbers. these are syntactic sugar for
+ * commands of numbers. For example,
+ * 1 + 1 => { k -> +(1, 1 | k) } *)
+active_number_term:
+  | op=unop t=term %prec UNARY                          { term_unop op t }
   | l=term op=bop r=term                                { term_binop op l r }
-  | op=unop t=term                                      { term_unop op t }
-  *)
 
 %inline unop:
   | MINUS                                               { Neg }
-  | NEG                                                 { Not } 
+  | NEG                                                 { Not }
 
 %inline bop:
   | PLUS                                                { Add }
@@ -227,48 +239,44 @@ number_term:
   | BAR BAR                                             { Or }
   | CARET                                               { Xor }
   | LANGLE LANGLE                                       { Shl }
-  | RANGLE RANGLE                                       { Shr } 
+  | RANGLE RANGLE                                       { Shr }
   *)
 
 match_body:
-  | LBRACE BAR? matches=nonempty_list_of(match_case, BAR?) RBRACE 
+  | LBRACE BAR? matches=nonempty_list_of(match_case, BAR?) RBRACE
       { Matcher matches }
 
 match_case:
   | p=pattern LTRARROW t=statement                      { (p, t) }
 
 pattern:
-  | binder                                              
+  | binder
       { Var $1 }
-  | UNDERSCORE                                          
+  | UNDERSCORE
       { Wildcard }
-  | tuple_pattern                                       
-      { $1 } 
-  | pat_name=namespaced(CONSTRUCTOR_IDENT)              
+  | tuple_pattern
+      { $1 }
+  | pat_name=namespaced(CONSTRUCTOR_IDENT)
       { Constr { pat_name; pat_args = [] } }
   | pat_name=namespaced(CONSTRUCTOR_LPAREN) pat_args=nonempty_list_of(pattern, COMMA) RPAREN
       { Constr { pat_name; pat_args } }
   (* TODO: allow matching on constant values *)
 
 tuple_pattern:
-  | LPAREN RPAREN                                       
+  | LPAREN RPAREN
       { Tup [] }
-  | LPAREN p=pattern COMMA RPAREN                       
+  | LPAREN p=pattern COMMA RPAREN
       { Tup [p] }
-  | LPAREN p=pattern COMMA ps=nonempty_list_of(pattern, COMMA) RPAREN                              
+  | LPAREN p=pattern COMMA ps=nonempty_list_of(pattern, COMMA) RPAREN
       { Tup (p :: ps) }
 
 cons_term:
-  | cons_name=namespaced(CONSTRUCTOR_IDENT)             
-      { Construction { cons_name; cons_args = [] } }          
+  | cons_name=namespaced(CONSTRUCTOR_IDENT)
+      { Construction { cons_name; cons_args = [] } }
   | cons_name=namespaced(CONSTRUCTOR_LPAREN) cons_args=nonempty_list_of(term, COMMA) RPAREN
       { Construction { cons_name; cons_args } }
 
 (* TYPES *)
-
-type_definition:
-  | s=shape n=kind_binder EQUALS t=raw_type             { TypeDef (n, Raw (s, t)) }
-  | TYPE n=kind_binder EQUALS t=type_expr               { TypeDef (n, t) }
 
 polarity:
   | PLUS                                                { Plus }
@@ -296,7 +304,7 @@ moded_type:
 
 type_expr:
   | named_type                                          { $1 }
-  | shape=shape raw=raw_type                            { Raw (shape, raw) } 
+  | shape=shape raw=raw_type                            { Raw (shape, raw) }
 
 maybe_mode:
   |                                                     { None }
@@ -304,34 +312,34 @@ maybe_mode:
   | LBRACK CBN RBRACK                                   { Some By_name }
 
 named_type:
-  | n=namespaced(IDENT)                                 
+  | n=namespaced(IDENT)
       { Named (n, []) }
-  | n=namespaced(IDENT) LANGLE ts=list_of(type_use, COMMA) RANGLE                              
+  | n=namespaced(IDENT) LANGLE ts=list_of(type_use, COMMA) RANGLE
       { Named (n, ts) }
 
 raw_type:
   | BAR? variants=nonempty_list_of(variant, BAR)        { ADT variants }
   | tuple_type                                          { $1 }
   | RAW64                                               { Raw64 }
-  | array_type                                          { $1 }      
+  | array_type                                          { $1 }
   (*
-  | RAW8                                                { type_raw8 } 
+  | RAW8                                                { type_raw8 }
   *)
 
 variant:
-  | n=CONSTRUCTOR_IDENT                 
+  | n=CONSTRUCTOR_IDENT
       { (n, []) }
   | n=CONSTRUCTOR_LPAREN ts=nonempty_list_of(type_use, COMMA) RPAREN
       { (n, ts) }
 
 tuple_type:
-  | UNIT                               
+  | UNIT
       { Unit }
-  | LPAREN RPAREN                       
+  | LPAREN RPAREN
       { Unit }
-  | LPAREN t=type_use COMMA RPAREN      
+  | LPAREN t=type_use COMMA RPAREN
       { Product [t] }
-  | LPAREN t=type_use COMMA ts=nonempty_list_of(type_use, COMMA) RPAREN 
+  | LPAREN t=type_use COMMA ts=nonempty_list_of(type_use, COMMA) RPAREN
       { Product (t :: ts) }
 
 array_type:

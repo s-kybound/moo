@@ -248,10 +248,10 @@ module Show_program = struct
   and show_arith_command arith_cmd =
     match arith_cmd with
     | Unop { op; in_term; out_term } ->
-      Printf.sprintf "%s(%s, %s)" (show_unop op) (show_term in_term) (show_term out_term)
+      Printf.sprintf "%s(%s | %s)" (show_unop op) (show_term in_term) (show_term out_term)
     | Bop { op; l_term; r_term; out_term } ->
       Printf.sprintf
-        "%s(%s, %s, %s)"
+        "%s(%s, %s | %s)"
         (show_bop op)
         (show_term l_term)
         (show_term r_term)
@@ -264,5 +264,9 @@ module Show_program = struct
       Printf.sprintf "let %s = %s" (show_binder binder) (show_term term)
     | TypeDef (kind_binder, ty) ->
       Printf.sprintf "type %s = %s" (show_kind_binder kind_binder) (show_ty ty)
+  ;;
+
+  let show_program prog =
+    prog.definitions |> List.map show_definition |> String.concat ";\n"
   ;;
 end
