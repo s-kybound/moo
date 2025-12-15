@@ -27,6 +27,8 @@
       ("raw64",   RAW64);
       ("open",    OPEN);
       ("module",  MODULE);
+      ("use",     USE);
+      ("as",      AS);
       ("_",       UNDERSCORE);
       (* ("unpack",  UNPACK);
       ("pack",    PACK);

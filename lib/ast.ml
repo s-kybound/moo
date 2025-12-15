@@ -106,7 +106,12 @@ and arith_command =
       ; out_term : term
       }
 
-type module_open = Open of name
+type module_open =
+  | Open of name
+  | Use of
+      { mod_name : name
+      ; use_name : string
+      }
 
 type definition =
   | TermDef of binder * term
@@ -121,6 +126,21 @@ and module_def =
 and t =
   { opens : module_open list
   ; definitions : definition list
+  }
+
+type sig_t =
+  { opens : module_open list
+  ; signatures : sig_definition list
+  }
+
+and sig_definition =
+  | TypeSigDef of kind_binder * shape * ty option
+  | TermSigDef of binder * ty_use
+  | ModuleSigDef of module_sig_def
+
+and module_sig_def =
+  { name : string
+  ; interface : sig_t
   }
 
 (* prints the program exactly as is *)
@@ -284,6 +304,8 @@ module Show_program = struct
   and show_open mo =
     match mo with
     | Open name -> Printf.sprintf "open %s" (show_name name)
+    | Use { mod_name; use_name } ->
+      Printf.sprintf "use %s as %s" (show_name mod_name) use_name
 
   and show_program prog =
     let opens_str = prog.opens |> List.map show_open |> String.concat ";\n" in

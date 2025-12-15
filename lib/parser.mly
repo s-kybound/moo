@@ -52,7 +52,7 @@
 %token LTRARROW RTLARROW
 %token EQUALS
 
-%token OPEN MODULE
+%token OPEN MODULE USE AS
 
 (* definitions *)
 %token LET IN
@@ -87,7 +87,8 @@
 %left STAR SLASH PERCENT
 %right UNARY
 
-%start <t> entrypoint
+%start <t> parse_program
+%start <sig_t> parse_signature
 %%
 (* -- auxillary helpers -- *)
 list_of(elem, joiner):
@@ -103,8 +104,12 @@ nonempty_list_of_2(elem, joiner):
 
 (* -- names -- *)
 binder:
-  | name=IDENT COLON ty=type_use                        { { name; typ = Some ty } }
-  | name=IDENT                                          { { name; typ = None } }
+  | typed_binder                                        { $1 }
+  | untyped_binder                                      { $1 }
+
+typed_binder: name=untyped_binder COLON ty=type_use     { { name with typ = Some ty } }
+
+untyped_binder: name=IDENT                              { { name; typ = None } }
 
 kind_binder:
   | name=IDENT
@@ -125,20 +130,35 @@ namespaced(name):
     inner=namespaced(name)                              { Namespaced {namespace; inner} }
 
 (* -- PROGRAM STRUCTURE -- *)
-entrypoint: p=program EOF                               { p }
+parse_program: program EOF                              { $1 }
+
+parse_signature: interface EOF                          { $1 }
 
 program:
   | opens=list_of(open_statement, DELIMITER?) 
     definitions=list_of(top_level_definition, DELIMITER?)
       { { opens; definitions } }
 
+interface:
+  | opens=list_of(open_statement, DELIMITER?) 
+    signatures=list_of(top_level_signature, DELIMITER?)
+      { { opens; signatures } }
+
 open_statement:
-  | OPEN n=namespaced(any_ident)                        { Open n }  
+  | OPEN n=namespaced(any_ident)
+      { Open n }
+  | USE mod_name=namespaced(any_ident) AS use_name=any_ident    
+      { Use { mod_name; use_name } }
 
 top_level_definition:
   | module_definition                                   { $1 }
   | term_definition                                     { $1 }
   | type_definition                                     { $1 }
+
+top_level_signature:
+  | module_signature                                    { $1 }
+  | term_signature                                      { $1 }
+  | type_signature                                      { $1 }
 
 module_definition:
   | MODULE name=any_ident LBRACE program=program RBRACE
@@ -152,6 +172,22 @@ type_definition:
   | s=shape n=kind_binder EQUALS t=raw_type             { TypeDef (n, Raw (s, t)) }
   | TYPE n=kind_binder EQUALS t=type_expr               { TypeDef (n, t) }
 
+
+module_signature:
+  | MODULE name=any_ident LBRACE interface=interface RBRACE
+      { ModuleSigDef { name; interface  } }
+
+term_signature:
+  | LET b=binder EQUALS t=type_use                      { TermSigDef (b, t) }
+
+(* type signatures should expose whether
+ * the type is data or codata.
+ * this will allow developers to still know the
+ * default evaluation strategy for any type. *)
+type_signature:
+  | s=shape n=kind_binder EQUALS t=raw_type             { TypeSigDef (n, s, Some (Raw (s, t))) }
+  | s=shape n=kind_binder                               { TypeSigDef (n, s, None) }
+
 let_definition:
   | LET b=binder EQUALS t=term                          { TermDef (b, t) }
   | LET REC b=binder EQUALS t=term                      { TermDef (b, Rec (b, t)) }
@@ -160,10 +196,18 @@ let_definition:
  * they are useful enough to be granted
  * native representation *)
 proc_definition:
-  | PROC b=binder LPAREN ps=list_of(binder, COMMA) RPAREN LBRACE s=statement RBRACE
-      { TermDef (b, make_proc ps s) }
-  | PROC REC b=binder LPAREN ps=list_of(binder, COMMA) RPAREN LBRACE s=statement RBRACE
-      { TermDef (b, Rec (b, make_proc ps s)) }
+  | PROC b=untyped_binder params=proc_binders body=proc_body
+      { TermDef (b, make_proc params body) }
+  | PROC REC b=untyped_binder params=proc_binders body=proc_body
+      { TermDef (b, Rec (b, make_proc params body)) }
+
+proc_binders:
+  | LPAREN list_of(binder, COMMA) RPAREN                { $2 }
+
+proc_body:
+  | LBRACE statement RBRACE                           { $2 }
+
+(* -- STATEMENTS AND TERMS -- *)
 
 (* any form of command *)
 statement:
