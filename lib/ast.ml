@@ -83,6 +83,7 @@ type term =
   | Num of int64
   | Rec of binder * term (* fixpoint term *)
   | Arr of term list
+  | Ann of term * ty_use
   | Done
 
 and command =
@@ -269,6 +270,8 @@ module Show_program = struct
     | Arr terms ->
       let terms_str = terms |> List.map show_term |> String.concat ", " in
       Printf.sprintf "[%s]" terms_str
+    | Ann (term, tyu) ->
+      Printf.sprintf "(%s : %s)" (show_term term) (show_ty_use tyu)
     | Done -> "done"
 
   and show_command cmd =

@@ -169,7 +169,7 @@ term_definition:
   | proc_definition                                     { $1 }
 
 type_definition:
-  | s=shape n=kind_binder EQUALS t=raw_type             { TypeDef (n, Raw (s, t)) }
+  | s=shape n=kind_binder EQUALS t=full_raw_type        { TypeDef (n, Raw (s, t)) }
   | TYPE n=kind_binder EQUALS t=type_expr               { TypeDef (n, t) }
 
 
@@ -185,7 +185,7 @@ term_signature:
  * this will allow developers to still know the
  * default evaluation strategy for any type. *)
 type_signature:
-  | s=shape n=kind_binder EQUALS t=raw_type             { TypeSigDef (n, s, Some (Raw (s, t))) }
+  | s=shape n=kind_binder EQUALS t=full_raw_type        { TypeSigDef (n, s, Some (Raw (s, t))) }
   | s=shape n=kind_binder                               { TypeSigDef (n, s, None) }
 
 let_definition:
@@ -267,6 +267,7 @@ indirect_term:
   | simple_number_term                                  { $1 }
   | array_term                                          { $1 }
   | DONE                                                { Done }
+  | t=indirect_term COLON ty=type_use                   { Ann (t, ty) }
   | LPAREN t=term RPAREN                                { t }
 
 array_term:
@@ -374,7 +375,8 @@ moded_type:
 
 type_expr:
   | named_type                                          { $1 }
-  | shape=shape raw=raw_type                            { Raw (shape, raw) }
+  | shape=shape raw=simple_raw_type                     { Raw (shape, raw) }
+  | shape=shape LBRACE raw=adt_raw_type RBRACE          { Raw (shape, raw) }
 
 maybe_mode:
   |                                                     { None }
@@ -387,11 +389,17 @@ named_type:
   | n=namespaced(IDENT) LANGLE ts=list_of(type_use, COMMA) RANGLE
       { Named (n, ts) }
 
-raw_type:
+adt_raw_type:
   | BAR? variants=nonempty_list_of(variant, BAR)        { ADT variants }
-  | tuple_type                                          { $1 }
+
+simple_raw_type:
   | RAW64                                               { Raw64 }
+  | tuple_type                                          { $1 }
   | array_type                                          { $1 }
+
+full_raw_type:
+  | adt_raw_type                                        { $1 }
+  | simple_raw_type                                     { $1 }
   (*
   | RAW8                                                { type_raw8 }
   *)
