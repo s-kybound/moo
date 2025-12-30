@@ -87,8 +87,8 @@
 %left STAR SLASH PERCENT
 %right UNARY
 
-%start <t> parse_program
-%start <sig_t> parse_signature
+%start <module_> parse_program
+%start <sig_module> parse_signature
 %%
 (* -- auxillary helpers -- *)
 list_of(elem, joiner):
@@ -268,6 +268,7 @@ indirect_term:
   | array_term                                          { $1 }
   | DONE                                                { Done }
   | t=indirect_term COLON ty=type_use                   { Ann (t, ty) }
+(*| MU naked_mu_term                                    { $2 }*)
   | LPAREN t=term RPAREN                                { t }
 
 array_term:

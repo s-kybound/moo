@@ -1,9 +1,4 @@
 (library
  (name moo)
- (modules ast parser lexer))
-
-(menhir
- (modules parser))
-
-(ocamllex
- (modules lexer))
+ (modules)
+ (libraries syntax resolution))

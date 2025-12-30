@@ -1,13 +1,15 @@
 {
   open Parser
+  open Error
 
   let raisef lexbuf fmt =
     Printf.ksprintf
-      (fun msg ->
-         let pos = Lexing.lexeme_start_p lexbuf in
-         let line = pos.Lexing.pos_lnum in
-         let col = pos.Lexing.pos_cnum - pos.Lexing.pos_bol + 1 in
-         failwith (Printf.sprintf "Lexing error at line %d, column %d: %s" line col msg))
+      (fun message ->
+        let position = Some (Utils.get_lexing_position lexbuf) in
+        raise (Syntax_error 
+                { position
+                ; message
+                })) 
       fmt
 
   let keywords : (string, Parser.token) Hashtbl.t =
@@ -69,7 +71,7 @@ rule token = parse
   | hspace+                   { token lexbuf }
   | newline+                  { Lexing.new_line lexbuf; token lexbuf }
   | "/*"                      { skip_comment 1 lexbuf; token lexbuf }
-  | "*/"                      { raisef lexbuf "Unmatched */. Was a comment erased incorrectly?" }
+  | "*/"                      { raisef lexbuf "Unmatched */.`" }
   | "//"                      { skip_line lexbuf; token lexbuf }
   | "->"                      { LTRARROW }
   | "<-"                      { RTLARROW }
