@@ -152,7 +152,7 @@ and show_arith_command arith_cmd =
 let rec show_definition def =
   match def with
   | TermDef (binder, term) ->
-    Printf.sprintf "let %s = %s" (show_binder binder) (show_term term)
+    Printf.sprintf "def %s = %s" (show_binder binder) (show_term term)
   | TypeDef (kind_binder, ty) ->
     Printf.sprintf "type %s = %s" (show_kind_binder kind_binder) (show_ty ty)
   | ModuleDef { name; program } ->

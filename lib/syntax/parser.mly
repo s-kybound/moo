@@ -58,6 +58,7 @@
 %token LET IN
 %token REC
 %token PROC
+%token DEF
 %token DELIMITER
 
 %token MATCH
@@ -137,7 +138,8 @@ parse_signature: interface EOF                          { $1 }
 program:
   | opens=list_of(open_statement, DELIMITER?) 
     definitions=list_of(top_level_definition, DELIMITER?)
-      { { opens; definitions } }
+    maybe_command = statement?
+      { { opens; definitions; command = maybe_command } }
 
 interface:
   | opens=list_of(open_statement, DELIMITER?) 
@@ -178,7 +180,7 @@ module_signature:
       { ModuleSigDef { name; interface  } }
 
 term_signature:
-  | LET b=binder EQUALS t=type_use                      { TermSigDef (b, t) }
+  | DEF b=binder EQUALS t=type_use                      { TermSigDef (b, t) }
 
 (* type signatures should expose whether
  * the type is data or codata.
@@ -189,8 +191,8 @@ type_signature:
   | s=shape n=kind_binder                               { TypeSigDef (n, s, None) }
 
 let_definition:
-  | LET b=binder EQUALS t=term                          { TermDef (b, t) }
-  | LET REC b=binder EQUALS t=term                      { TermDef (b, Rec (b, t)) }
+  | DEF b=binder EQUALS t=term                          { TermDef (b, t) }
+  | DEF REC b=binder EQUALS t=term                      { TermDef (b, Rec (b, t)) }
 
 (* procedures are sugar over matchers,
  * they are useful enough to be granted

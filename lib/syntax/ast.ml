@@ -131,6 +131,7 @@ and module_def =
 and module_ =
   { opens : module_open list
   ; definitions : definition list
+  ; command : command option
   }
 
 type sig_module =
