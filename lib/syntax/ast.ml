@@ -66,13 +66,27 @@ type binder =
   ; typ : ty_use option
   }
 
-type pattern =
-  | Var of binder
+type pattern_binder =
   | Wildcard
+  | Var of binder
+
+type pattern =
+  | Pat_binder of pattern_binder
+  (* TODO: nested pattern matching for the future!
+  papers:
+  - "Compiling Pattern Matching to Good Decision Trees" by Luc Maranget
+  - "Optimizing Pattern Matching" by Fabrice Le Fessant, Luc Maranget
+  the most important thing is to find an efficient way to handle the switch-case-exit semantics
+  using the duality of our calculus.
   | Tup of pattern list
   | Constr of
       { pat_name : name
       ; pat_args : pattern list
+      } *)
+  | Tup of pattern_binder list
+  | Constr of
+      { pat_name : name
+      ; pat_args : pattern_binder list
       }
 
 type term =

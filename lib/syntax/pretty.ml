@@ -91,15 +91,19 @@ let show_binder binder =
   | None -> binder.name
 ;;
 
-let rec show_pattern pat =
+let show_pattern pat =
+  let show_pattern_binder pb =
+    match pb with
+    | Wildcard -> "_"
+    | Var binder -> show_binder binder
+  in
   match pat with
-  | Wildcard -> "_"
-  | Var binder -> show_binder binder
+  | Pat_binder pb -> show_pattern_binder pb
   | Constr { pat_name; pat_args } ->
-    let args_str = pat_args |> List.map show_pattern |> String.concat ", " in
+    let args_str = pat_args |> List.map show_pattern_binder |> String.concat ", " in
     Printf.sprintf "%s(%s)" (show_name pat_name) args_str
   | Tup pats ->
-    let pats_str = pats |> List.map show_pattern |> String.concat ", " in
+    let pats_str = pats |> List.map show_pattern_binder |> String.concat ", " in
     Printf.sprintf "(%s)" pats_str
 ;;
 

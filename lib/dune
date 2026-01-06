@@ -1,4 +1,5 @@
 (library
  (name moo)
- (modules)
- (libraries syntax resolution))
+ (public_name moo)
+ (modules reader)
+ (libraries moo.syntax moo.core))

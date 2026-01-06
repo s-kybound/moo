@@ -68,9 +68,9 @@ proc list_map<A, B>(f: fun<A, B>, xs: list<A>, k: -list<B>) {
     }
 }
 
-proc stream_map<A, B>(f : fun<A, B>, xs : stream<A>, k : -stream<B>) {
+proc stream_map<A, B>(f : fun<A, B>, xs : stream<A>, k : -stream<B>) =
     match k {
-        Head(k1: -B) -> 
+        Head(k1: -B) ->
             let x <- { k -> xs . Head k } in
             let x' <- f(x) in
             k1 . x'
@@ -78,7 +78,7 @@ proc stream_map<A, B>(f : fun<A, B>, xs : stream<A>, k : -stream<B>) {
             let xs' <- { k -> xs . Tail k } in
             stream_map(f, xs') . k2
     }
-}
+
 
 /* conversion between cbn and cbv modes can be done at matches. 
  * as the bound variable is forced to be in the canonical form for that
@@ -97,6 +97,37 @@ proc lazify_list<A>(xs: [CBV]list<A>, k: -[CBN]list<A>) {
     }
 }
 
+// forcing and lazifying for codata is a little harder, but can be encoded too
+
+codata wrapper<A> =
+    | Unwrap(~A)
+    | Lazify(-[CBN]wrapper<A>)
+    | Force(-[CBN]wrapper<A>)
+
+let rec foo: [CBN]wrapper<i64> = { k ->
+    println("Constructing wrapper");
+    let rec i_foo: [CBV]wrapper<i64> <-
+        match {
+	    Unwrap(k: -i64) -> 42 . k
+	    Lazify(k: -[CBN]wrapper<i64>) -> foo . k
+	    Force(k: -[CBV]wrapper<i64>) -> i_foo . k
+    	} 
+    in
+    i_foo k
+}
+
+let rec foo: [CBV]wrapper<i64> = { k ->
+    println("Constructing wrapper");
+    let rec i_foo: [CBN]wrapper<i64> <-
+        match {
+	    Unwrap(k: -i64) -> 42 . k
+	    Lazify(k: -[CBN]wrapper<i64>) -> i_foo . k
+	    Force(k: -[CBV]wrapper<i64>) -> foo . k
+    	} 
+    in
+    i_foo k
+}
+
 /*
 desugared:
 let lazify_list =
@@ -111,3 +142,19 @@ let lazify_list =
             }
     }
 */
+
+// array syntax?
+
+/*
+a[i] desugared to  a . Get(i)
+a[i] <- v  desugared to a . Set(i, v)
+
+// get item command
+a[i] -> k
+// sugar?
+a[i] => { k -> a[i] -> k }
+// setting item command is fine as is
+
+// set item command
+a[i] <- v | k
+ */

@@ -191,8 +191,8 @@ type_signature:
   | s=shape n=kind_binder                               { TypeSigDef (n, s, None) }
 
 let_definition:
-  | DEF b=binder EQUALS t=term                          { TermDef (b, t) }
-  | DEF REC b=binder EQUALS t=term                      { TermDef (b, Rec (b, t)) }
+  | DEF b=binder EQUALS t=def_term                          { TermDef (b, t) }
+  | DEF REC b=binder EQUALS t=def_term                      { TermDef (b, Rec (b, t)) }
 
 (* procedures are sugar over matchers,
  * they are useful enough to be granted
@@ -261,6 +261,10 @@ term:
   | active_number_term                                  { $1 }
   | indirect_term                                       { $1 }
 
+def_term:
+  | indirect_term                                       { $1 }
+  | naked_mu_term                                       { $1 }
+
 indirect_term:
   | namespaced(IDENT)                                   { Variable $1 }
   | MATCH match_body                                    { $2 }
@@ -323,25 +327,28 @@ match_body:
 match_case:
   | p=pattern LTRARROW t=statement                      { (p, t) }
 
+pattern_binder:
+  | binder                                              { Var $1 }
+  | UNDERSCORE                                          { Wildcard }
+
 pattern:
-  | binder
-      { Var $1 }
-  | UNDERSCORE
-      { Wildcard }
+  | pattern_binder
+      { Pat_binder $1 }
   | tuple_pattern
       { $1 }
+  (* TODO: allow nested pattern matching *)
   | pat_name=namespaced(CONSTRUCTOR_IDENT)
       { Constr { pat_name; pat_args = [] } }
-  | pat_name=namespaced(CONSTRUCTOR_LPAREN) pat_args=nonempty_list_of(pattern, COMMA) RPAREN
+  | pat_name=namespaced(CONSTRUCTOR_LPAREN) pat_args=nonempty_list_of(pattern_binder, COMMA) RPAREN
       { Constr { pat_name; pat_args } }
   (* TODO: allow matching on constant values *)
 
 tuple_pattern:
   | LPAREN RPAREN
       { Tup [] }
-  | LPAREN p=pattern COMMA RPAREN
+  | LPAREN p=pattern_binder COMMA RPAREN
       { Tup [p] }
-  | LPAREN p=pattern COMMA ps=nonempty_list_of(pattern, COMMA) RPAREN
+  | LPAREN p=pattern_binder COMMA ps=nonempty_list_of(pattern_binder, COMMA) RPAREN
       { Tup (p :: ps) }
 
 cons_term:

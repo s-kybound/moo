@@ -14,18 +14,22 @@ type bop =
   | Shl
   | Shr
 
-type name = string
+type name = string 
 
+(* NON-NESTED patterns for pattern matching *)
 type form =
-  | Var of name
-  | Wildcard
-  | Tuple of form list
+  | Binder of name
+  | Tuple of name list
   | Constr of
       { form_name : name
-      ; form_args : form list
+      ; form_args : name list
       }
 
 type term =
+  | NeedsForce of term
+    (* injected during core AST conversion, will
+     * instruct the runtime to force evaluation of
+     * the specified term *)
   | Mu of name * command
   | Variable of name
   | Construction of
@@ -35,7 +39,7 @@ type term =
   | Tuple of term list
   | Matcher of (form * command) list
   | Num of int64
-  | Rec of name * term (* todo - recursive terms have yet to be figured out *)
+  | Rec of string * term (* todo - recursive terms have yet to be figured out *)
   | Arr of term list
   | Done
 
@@ -49,12 +53,12 @@ and command =
 
 and arith_command =
   | Unop of
-      { op : string
+      { op : unop
       ; in_focus_term : term
       ; out_unfocus_term : term
       }
   | Bop of
-      { op : string
+      { op : bop
       ; l_focus_term : term
       ; r_focus_term : term
       ; out_unfocus_term : term
@@ -76,18 +80,22 @@ type control_item =
   | C of command
 
 type control = control_item list
+
 type stash = value list
 
-type environment_frame =
+and environment_frame =
   { parent : environment_frame option
-  ; bindings : (name * value) list (* todo *)
+  ; mutable bindings : (string * value) list (* todo *)
   }
 
-type value =
+and value =
   | VMu of name * control * stash * environment_frame
   | VConstruction of name * value list
   | VTuple of value list
   | VArr of value array
   | VMatcher of (form * command) list * environment_frame
   | VNum of int64
-  | Done
+  | VDone
+
+let empty_environment : environment_frame =
+  { parent = None; bindings = [] }
