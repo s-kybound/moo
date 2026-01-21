@@ -14,7 +14,7 @@ type bop =
   | Shl
   | Shr
 
-type name = string 
+type name = string
 
 (* NON-NESTED patterns for pattern matching *)
 type form =
@@ -84,9 +84,12 @@ type control = control_item list
 type stash = value list
 
 and environment_frame =
-  { parent : environment_frame option
-  ; mutable bindings : (string * value) list (* todo *)
-  }
+  | Top
+  | Frame of
+      { parent : environment_frame
+      ; binding : string
+      ; mutable value : value
+      }
 
 and value =
   | VMu of name * control * stash * environment_frame
@@ -97,5 +100,6 @@ and value =
   | VNum of int64
   | VDone
 
-let empty_environment : environment_frame =
-  { parent = None; bindings = [] }
+let empty_environment : environment_frame = Top
+
+type state = control * stash * environment_frame

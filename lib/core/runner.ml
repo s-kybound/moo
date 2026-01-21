@@ -7,8 +7,6 @@ exception RuntimeError of string
 exception AssertionError of string
 exception Not_implemented
 
-type state = control * stash * environment_frame
-
 type program_state =
   | Running of state
   | Terminated of int64 * environment_frame
@@ -19,19 +17,20 @@ let gensym _s = raise Not_implemented
 let extend_env (env : environment_frame) (new_bindings : (name * value) list)
   : environment_frame
   =
-  { parent = Some env; bindings = new_bindings }
+  List.fold_left
+    (fun parent (binding, value) -> Frame { parent; binding; value })
+    env
+    new_bindings
 ;;
 
 let lookup (env : environment_frame) (name : name) : value option =
   let rec aux current_env =
     match current_env with
-    | None -> None
-    | Some frame ->
-      (match List.assoc_opt name frame.bindings with
-       | Some v -> Some v
-       | None -> aux frame.parent)
+    | Top -> None
+    | Frame { parent; binding; value } ->
+      if binding = name then Some value else aux parent
   in
-  aux (Some env)
+  aux env
 ;;
 
 let form_matches_value (form : form) (v : value) : bool =
