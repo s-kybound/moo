@@ -12,7 +12,13 @@ type program_state =
   | Terminated of int64 * environment_frame
 
 let force_term t : control_item list = [ T t; I Force ]
-let gensym _s = raise Not_implemented
+let counter = ref 0
+
+let gensym s =
+  let name = Printf.sprintf "%s_%d" s !counter in
+  incr counter;
+  name
+;;
 
 let extend_env (env : environment_frame) (new_bindings : (name * value) list)
   : environment_frame
@@ -35,7 +41,7 @@ let lookup (env : environment_frame) (name : name) : value option =
 
 let form_matches_value (form : form) (v : value) : bool =
   match form, v with
-  | Binder _ , _ -> true
+  | Binder _, _ -> true
   | Tuple form_names, VTuple v_list -> List.length form_names = List.length v_list
   | Constr { form_name; form_args }, VConstruction (cons_name, cons_args) ->
     form_name = cons_name && List.length form_args = List.length cons_args
@@ -73,7 +79,7 @@ let pattern_match (forms : (form * 'a) list) (value : value)
 
 let eval_state (state : state) : program_state =
   match state with
-  | [], _, e -> Terminated (Int64.zero, e) (* no more control items *)
+  | [], _, _ -> raise (AssertionError "empty control stack")
   | T term :: c', s, e ->
     (match term with
      | NeedsForce t -> Running (force_term t @ c', s, e)
@@ -213,7 +219,7 @@ let eval_state (state : state) : program_state =
     (match cmd with
      | Fork (cmd1, cmd2) -> Running (I (Spawn cmd2) :: C cmd1 :: c', s, e)
      | Core { focus_term; unfocus_term } ->
-       Running (force_term focus_term @ force_term unfocus_term @ c', s, e)
+       Running (force_term focus_term @ (T unfocus_term :: I Cut :: c'), s, e)
      | Arith (Unop { op; in_focus_term; out_unfocus_term }) ->
        Running
          ( force_term in_focus_term
@@ -229,10 +235,10 @@ let eval_state (state : state) : program_state =
          , e ))
 ;;
 
-let state_of_command (cmd : command) : state =
-  ([ C cmd ], [], Ir.empty_environment)
+let state_of_command (cmd : command) : state = [ C cmd ], [], Ir.empty_environment
 
 let rec eval_program (initial_state : state) : program_state =
   match eval_state initial_state with
   | Running (c', s', e') -> eval_program (c', s', e')
   | Terminated (n, e') -> Terminated (n, e')
+;;
