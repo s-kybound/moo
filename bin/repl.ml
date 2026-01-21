@@ -66,23 +66,59 @@ module State = struct
 end
 
 let get_ast str = str |> Reader.of_string ~filename:"REPL"
-
 let print_ast ast = Printf.printf "%s\n%!" (Pretty.show_program ast)
 
-let print_result result = 
+let print_result result =
   match result with
   | Core.Runner.Terminated (n, _env) -> Printf.printf "=> Terminated with %Ld\n%!" n
   | _ -> assert false
+;;
 
 let print_error msg = Printf.eprintf "Error: %s\n%!" msg
 
 let parse_and_eval input =
   try
     let core_ast = get_ast input in
-    let converted = Core.Ast_to_ir.ast_command_of_module core_ast |> Core.Ast_to_ir.ast_to_ir_command in
+    let converted =
+      Core.Ast_to_ir.ast_command_of_module core_ast |> Core.Ast_to_ir.ast_to_ir_command
+    in
     let converted = Core.Runner.state_of_command converted in
     let result = Core.Runner.eval_program converted in
     print_result result
+  with
+  | exn -> print_error (Printexc.to_string exn)
+;;
+
+let parse_and_step input =
+  let show_state (control, stash, _env) =
+    Printf.printf "Control Stack:\n";
+    List.iter
+      (fun ci -> Printf.printf "  %s\n" (Core.Pretty.show_control_item ci))
+      control;
+    Printf.printf "Stash:\n";
+    List.iter (fun v -> Printf.printf "  %s\n" (Core.Pretty.show_value v)) stash;
+    Printf.printf "\n%!"
+  in
+  let rec step_loop state =
+    show_state state;
+    match LNoise.linenoise "step> " with
+    | None -> ()
+    | Some "q" | Some "quit" | Some "exit" -> ()
+    | Some _ ->
+      let next_state = Core.Runner.eval_state state in
+      (match next_state with
+       | Core.Runner.Running s -> step_loop s
+       | Core.Runner.Terminated (n, _env) ->
+         Printf.printf "Program terminated with %Ld\n%!" n)
+  in
+  try
+    let core_ast = get_ast input in
+    let converted =
+      Core.Ast_to_ir.ast_command_of_module core_ast |> Core.Ast_to_ir.ast_to_ir_command
+    in
+    let converted = Core.Runner.state_of_command converted in
+    Printf.printf "press any key to step through the program, q to quit\n%!";
+    step_loop converted
   with
   | exn -> print_error (Printexc.to_string exn)
 ;;
@@ -153,6 +189,11 @@ let rec repl_loop () =
     print_endline "  :q, :quit, :exit      Exit REPL";
     print_endline "  :show <expr>          Visualize the expression";
     print_endline "  :help                 Show this help";
+    print_endline "  :step <program>       Step through the program (not implemented)";
+    repl_loop ()
+  | Some line when String.starts_with ~prefix:":step " line ->
+    let expr = String.sub line 6 (String.length line - 6) in
+    parse_and_step expr;
     repl_loop ()
   | Some line ->
     add_to_history line;
