@@ -14,7 +14,7 @@
 
   let keywords : (string, Parser.token) Hashtbl.t =
     let keywords : (string * Parser.token) list = [
-      ("def",     DEF);
+      ("do",      DO);
       ("let",     LET);
       ("in",      IN);
       ("rec",     REC);

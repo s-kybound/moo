@@ -58,7 +58,7 @@
 %token LET IN
 %token REC
 %token PROC
-%token DEF
+%token DO
 %token DELIMITER
 
 %token MATCH
@@ -91,17 +91,6 @@
 %start <module_> parse_program
 %start <sig_module> parse_signature
 %%
-(* -- auxillary helpers -- *)
-list_of(elem, joiner):
-  |                                                     { [] }
-  | nonempty_list_of(elem, joiner)                      { $1 }
-
-nonempty_list_of(elem, joiner):
-  | x=elem xs=nonempty_list_of_2(elem, joiner)          { x :: xs }
-
-nonempty_list_of_2(elem, joiner):
-  |                                                     { [] }
-  | joiner xs=nonempty_list_of(elem, joiner)            { xs }
 
 (* -- names -- *)
 binder:
@@ -115,7 +104,7 @@ untyped_binder: name=IDENT                              { { name; typ = None } }
 kind_binder:
   | name=IDENT
       { (name, []) }
-  | name=IDENT LANGLE ts=list_of(CONSTRUCTOR_IDENT, COMMA) RANGLE
+  | name=IDENT LANGLE ts=separated_list(COMMA, CONSTRUCTOR_IDENT) RANGLE
       { (name, ts) }
 
 %inline abstract_binder:
@@ -136,28 +125,37 @@ parse_program: program EOF                              { $1 }
 parse_signature: interface EOF                          { $1 }
 
 program:
-  | opens=list_of(open_statement, DELIMITER?) 
-    definitions=list_of(top_level_definition, DELIMITER?)
-    maybe_command = statement?
+  | opens=list(open_statement) 
+    definitions=list(top_level_definition)
+    maybe_command = top_level_command?
       { { opens; definitions; command = maybe_command } }
 
+top_level_command:
+  | DO statement                                        { $2 }
+
 interface:
-  | opens=list_of(open_statement, DELIMITER?) 
-    signatures=list_of(top_level_signature, DELIMITER?)
+  | opens=list(open_statement) 
+    signatures=list(top_level_signature)
       { { opens; signatures } }
 
 open_statement:
-  | OPEN n=namespaced(any_ident)
+  | OPEN n=namespaced(any_ident) DELIMITER?
       { Open n }
-  | USE mod_name=namespaced(any_ident) AS use_name=any_ident    
+  | USE mod_name=namespaced(any_ident) AS use_name=any_ident DELIMITER?
       { Use { mod_name; use_name } }
 
 top_level_definition:
+  | top_level_definition_item DELIMITER?                { $1 }
+
+top_level_definition_item:
   | module_definition                                   { $1 }
   | term_definition                                     { $1 }
   | type_definition                                     { $1 }
 
 top_level_signature:
+  | top_level_signature_item DELIMITER?                 { $1 }
+
+top_level_signature_item:
   | module_signature                                    { $1 }
   | term_signature                                      { $1 }
   | type_signature                                      { $1 }
@@ -180,7 +178,7 @@ module_signature:
       { ModuleSigDef { name; interface  } }
 
 term_signature:
-  | DEF b=binder EQUALS t=type_use                      { TermSigDef (b, t) }
+  | LET b=untyped_binder EQUALS t=type_use              { TermSigDef (b, t) }
 
 (* type signatures should expose whether
  * the type is data or codata.
@@ -191,8 +189,8 @@ type_signature:
   | s=shape n=kind_binder                               { TypeSigDef (n, s, None) }
 
 let_definition:
-  | DEF b=binder EQUALS t=def_term                          { TermDef (b, t) }
-  | DEF REC b=binder EQUALS t=def_term                      { TermDef (b, Rec (b, t)) }
+  | LET b=binder EQUALS t=def_term                          { TermDef (b, t) }
+  | LET REC b=binder EQUALS t=def_term                      { TermDef (b, Rec (b, t)) }
 
 (* procedures are sugar over matchers,
  * they are useful enough to be granted
@@ -204,7 +202,7 @@ proc_definition:
       { TermDef (b, Rec (b, make_proc params body)) }
 
 proc_binders:
-  | LPAREN list_of(binder, COMMA) RPAREN                { $2 }
+  | LPAREN separated_list(COMMA, binder) RPAREN                { $2 }
 
 proc_body:
   | LBRACE statement RBRACE                           { $2 }
@@ -278,7 +276,7 @@ indirect_term:
   | LPAREN t=term RPAREN                                { t }
 
 array_term:
-  | LBRACK r_terms=list_of(term, COMMA) RBRACK          { Arr r_terms }
+  | LBRACK r_terms=separated_list(COMMA, term) RBRACK          { Arr r_terms }
 
 naked_mu_term:
   | LBRACE b=binder LTRARROW t=statement RBRACE         { Mu (b, t) }
@@ -288,7 +286,7 @@ product_term:
       { Tuple [] }
   | LPAREN t=term COMMA RPAREN
       { Tuple [t] }
-  | LPAREN t=term COMMA ts=nonempty_list_of(term, COMMA) RPAREN
+  | LPAREN t=term COMMA ts=separated_nonempty_list(COMMA, term) RPAREN
       { Tuple (t :: ts) }
 
 (* direct numbers *)
@@ -321,7 +319,7 @@ active_number_term:
   *)
 
 match_body:
-  | LBRACE BAR? matches=nonempty_list_of(match_case, BAR?) RBRACE
+  | LBRACE BAR? matches=separated_nonempty_list(BAR?, match_case) RBRACE
       { Matcher matches }
 
 match_case:
@@ -339,7 +337,7 @@ pattern:
   (* TODO: allow nested pattern matching *)
   | pat_name=namespaced(CONSTRUCTOR_IDENT)
       { Constr { pat_name; pat_args = [] } }
-  | pat_name=namespaced(CONSTRUCTOR_LPAREN) pat_args=nonempty_list_of(pattern_binder, COMMA) RPAREN
+  | pat_name=namespaced(CONSTRUCTOR_LPAREN) pat_args=separated_nonempty_list(COMMA, pattern_binder) RPAREN
       { Constr { pat_name; pat_args } }
   (* TODO: allow matching on constant values *)
 
@@ -348,13 +346,13 @@ tuple_pattern:
       { Tup [] }
   | LPAREN p=pattern_binder COMMA RPAREN
       { Tup [p] }
-  | LPAREN p=pattern_binder COMMA ps=nonempty_list_of(pattern_binder, COMMA) RPAREN
+  | LPAREN p=pattern_binder COMMA ps=separated_nonempty_list(COMMA, pattern_binder) RPAREN
       { Tup (p :: ps) }
 
 cons_term:
   | cons_name=namespaced(CONSTRUCTOR_IDENT)
       { Construction { cons_name; cons_args = [] } }
-  | cons_name=namespaced(CONSTRUCTOR_LPAREN) cons_args=nonempty_list_of(term, COMMA) RPAREN
+  | cons_name=namespaced(CONSTRUCTOR_LPAREN) cons_args=separated_nonempty_list(COMMA, term) RPAREN
       { Construction { cons_name; cons_args } }
 
 (* TYPES *)
@@ -386,7 +384,6 @@ moded_type:
 type_expr:
   | named_type                                          { $1 }
   | shape=shape raw=simple_raw_type                     { Raw (shape, raw) }
-  | shape=shape LBRACE raw=adt_raw_type RBRACE          { Raw (shape, raw) }
 
 maybe_mode:
   |                                                     { None }
@@ -396,11 +393,8 @@ maybe_mode:
 named_type:
   | n=namespaced(IDENT)
       { Named (n, []) }
-  | n=namespaced(IDENT) LANGLE ts=list_of(type_use, COMMA) RANGLE
+  | n=namespaced(IDENT) LANGLE ts=separated_list(COMMA, type_use) RANGLE
       { Named (n, ts) }
-
-adt_raw_type:
-  | BAR? variants=nonempty_list_of(variant, BAR)        { ADT variants }
 
 simple_raw_type:
   | RAW64                                               { Raw64 }
@@ -408,26 +402,20 @@ simple_raw_type:
   | array_type                                          { $1 }
 
 full_raw_type:
-  | adt_raw_type                                        { $1 }
+  // | adt_raw_type                                        { $1 }
   | simple_raw_type                                     { $1 }
   (*
   | RAW8                                                { type_raw8 }
   *)
 
-variant:
-  | n=CONSTRUCTOR_IDENT
-      { (n, []) }
-  | n=CONSTRUCTOR_LPAREN ts=nonempty_list_of(type_use, COMMA) RPAREN
-      { (n, ts) }
-
 tuple_type:
   | UNIT
-      { Unit }
+      { Product [] }
   | LPAREN RPAREN
-      { Unit }
+      { Product [] }
   | LPAREN t=type_use COMMA RPAREN
       { Product [t] }
-  | LPAREN t=type_use COMMA ts=nonempty_list_of(type_use, COMMA) RPAREN
+  | LPAREN t=type_use COMMA ts=separated_nonempty_list(COMMA, type_use) RPAREN
       { Product (t :: ts) }
 
 array_type:
