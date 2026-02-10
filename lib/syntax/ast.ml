@@ -51,13 +51,15 @@ and ty =
 
 and raw_ty =
   | Raw64
-  | Unit
   | Product of ty_use list
   | Array of ty_use
-  | ADT of variant list
-  | Pattern of variant
+  | Variant of variant list (* ADT *)
+  | Destructor of raw_ty
 
-and variant = string * ty_use list
+and variant =
+  { constr_name : string
+  ; constr_args : ty_use list
+  }
 
 type kind_binder = string * string list
 
@@ -66,6 +68,7 @@ type binder =
   ; typ : ty_use option
   }
 
+(* TODO: not good design *)
 type pattern_binder =
   | Wildcard
   | Var of binder

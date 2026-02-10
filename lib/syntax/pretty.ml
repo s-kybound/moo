@@ -66,19 +66,22 @@ and show_ty ty =
 and show_raw_ty raw =
   match raw with
   | Raw64 -> "raw64"
-  | Unit -> "unit"
+  | Product [] -> "unit"
   | Product tys ->
     let tys_str = tys |> List.map show_ty_use |> String.concat ", " in
     Printf.sprintf "(%s)" tys_str
-  | ADT variants ->
-    let variants_str = variants |> List.map show_variant |> String.concat " | " in
-    Printf.sprintf "{ %s }" variants_str
   | Array tyu -> Printf.sprintf "[%s]" (show_ty_use tyu)
-  | Pattern variant -> show_variant variant
+  | Variant variants ->
+    let variants_str = variants |> List.map show_variant |> String.concat " | " in
+    Printf.sprintf "variant { %s }" variants_str
+  | Destructor raw_ty -> Printf.sprintf "rawdestructor(%s)" (show_raw_ty raw_ty)
 
-and show_variant (name, params) =
-  let params_str = params |> List.map show_ty_use |> String.concat ", " in
-  Printf.sprintf "%s(%s)" name params_str
+and show_variant { constr_name; constr_args } =
+  match constr_args with
+  | [] -> constr_name
+  | _ ->
+    let params_str = constr_args |> List.map show_ty_use |> String.concat ", " in
+    Printf.sprintf "%s(%s)" constr_name params_str
 ;;
 
 let show_kind_binder (name, params) =
