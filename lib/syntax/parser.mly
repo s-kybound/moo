@@ -276,7 +276,7 @@ indirect_term:
   | LPAREN t=term RPAREN                                { t }
 
 array_term:
-  | LBRACK r_terms=separated_list(COMMA, term) RBRACK          { Arr r_terms }
+  | LBRACK r_terms=separated_list(COMMA, term) RBRACK   { Arr r_terms }
 
 naked_mu_term:
   | LBRACE b=binder LTRARROW t=statement RBRACE         { Mu (b, t) }
@@ -374,21 +374,29 @@ abstract_type:
   | NEG t=abstract_type                                 { let (name, negated) = t in (name, not negated) }
 
 polarised_type:
-  | p=polarity t=moded_type                             { Polarised (p, t) }
+  | p=polarity t=maybe_moded_type                       { Polarised (p, t) }
   (* sugar: unannotated is expression by default *)
-  | t=moded_type                                        { Polarised (Plus, t) }
+  | t=maybe_moded_type                                  { Polarised (Plus, t) }
+
+maybe_moded_type:
+  | t=type_expr                                         { make_moded_type None t }
+  | moded_type                                          { $1 }
 
 moded_type:
-  | mode=maybe_mode t=type_expr                         { make_moded_type mode t }
+  | mode=mode t=type_expr                               { make_moded_type (Some mode) t }
+  | LPAREN moded_type RPAREN                            { $2 }
 
 type_expr:
   | named_type                                          { $1 }
+  | shaped_type                                         { $1 }
+  | LPAREN type_expr RPAREN                             { $2 }
+
+shaped_type:
   | shape=shape raw=simple_raw_type                     { Raw (shape, raw) }
 
-maybe_mode:
-  |                                                     { None }
-  | LBRACK CBV RBRACK                                   { Some By_value }
-  | LBRACK CBN RBRACK                                   { Some By_name }
+mode:
+  | LBRACK CBV RBRACK                                   { By_value }
+  | LBRACK CBN RBRACK                                   { By_name }
 
 named_type:
   | n=namespaced(IDENT)

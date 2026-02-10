@@ -57,6 +57,7 @@ and show_moded_ty (mode_opt, ty) =
 
 and show_ty ty =
   match ty with
+  | Named (name, []) -> show_name name
   | Named (name, params) ->
     let params_str = params |> List.map show_ty_use |> String.concat ", " in
     Printf.sprintf "%s<%s>" (show_name name) params_str
@@ -81,8 +82,11 @@ and show_variant (name, params) =
 ;;
 
 let show_kind_binder (name, params) =
-  let params_str = String.concat ", " params in
-  Printf.sprintf "%s<%s>" name params_str
+  match params with
+  | [] -> name
+  | _ ->
+    let params_str = String.concat ", " params in
+    Printf.sprintf "%s<%s>" name params_str
 ;;
 
 let show_binder binder =
@@ -156,7 +160,7 @@ and show_arith_command arith_cmd =
 let rec show_definition def =
   match def with
   | TermDef (binder, term) ->
-    Printf.sprintf "def %s = %s" (show_binder binder) (show_term term)
+    Printf.sprintf "let %s = %s" (show_binder binder) (show_term term)
   | TypeDef (kind_binder, ty) ->
     Printf.sprintf "type %s = %s" (show_kind_binder kind_binder) (show_ty ty)
   | ModuleDef { name; program } ->
@@ -169,7 +173,8 @@ and show_open mo =
     Printf.sprintf "use %s as %s" (show_name mod_name) use_name
 
 and show_program prog =
-  let opens_str = prog.opens |> List.map show_open |> String.concat ";\n" in
-  let defs_str = prog.definitions |> List.map show_definition |> String.concat ";\n" in
-  Printf.sprintf "%s\n%s" opens_str defs_str
+  let opens_str = prog.opens |> List.map show_open |> String.concat "\n" in
+  let defs_str = prog.definitions |> List.map show_definition |> String.concat "\n" in
+  let command_str = Option.fold ~none:"" ~some:show_command prog.command in
+  Printf.sprintf "%s\n%s\n%s" opens_str defs_str command_str
 ;;

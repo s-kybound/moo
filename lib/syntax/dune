@@ -15,7 +15,11 @@
  (action
   (with-stdout-to
    parserMessages.ml
-   (run menhir %{dep:parser.mly} --compile-errors %{dep:parser.auto.messages}))))
+   (run
+    menhir
+    %{dep:parser.mly}
+    --compile-errors
+    %{dep:parser.auto.messages}))))
 
 (rule
  (with-stdout-to
