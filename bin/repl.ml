@@ -67,26 +67,17 @@ end
 
 let get_ast str = str |> Reader.of_string ~filename:"REPL"
 let print_ast ast = Printf.printf "%s\n%!" (Pretty.show_program ast)
-
-let print_result result =
-  match result with
-  | Core.Runner.Terminated (n, _env) -> Printf.printf "=> Terminated with %Ld\n%!" n
-  | _ -> assert false
-;;
-
 let print_error msg = Printf.eprintf "Error: %s\n%!" msg
 
 let parse_and_eval input =
   try
     let core_ast = get_ast input in
-    Pretty.show_program core_ast |> print_endline;
     Typechecker.Bidir.tycheck_program core_ast;
     let converted =
       Core.Ast_to_ir.ast_command_of_module core_ast |> Core.Ast_to_ir.ast_to_ir_command
     in
     let converted = Core.Runner.state_of_command converted in
-    let result = Core.Runner.eval_program converted in
-    print_result result
+    ignore (Core.Runner.eval_program converted)
   with
   | exn -> print_error (Printexc.to_string exn)
 ;;
@@ -101,17 +92,27 @@ let parse_and_step input =
     List.iter (fun v -> Printf.printf "  %s\n" (Core.Pretty.show_value v)) stash;
     Printf.printf "\n%!"
   in
-  let rec step_loop state =
-    show_state state;
-    match LNoise.linenoise "step> " with
-    | None -> ()
-    | Some "q" | Some "quit" | Some "exit" -> ()
-    | Some _ ->
-      let next_state = Core.Runner.eval_state state in
-      (match next_state with
-       | Core.Runner.Running s -> step_loop s
-       | Core.Runner.Terminated (n, _env) ->
-         Printf.printf "Program terminated with %Ld\n%!" n)
+  let rec step_loop states =
+    let open Core.Runner in
+    match states with
+    | [] -> Printf.printf "No more states to step through.\n%!"
+    | Step state :: rest ->
+      show_state state;
+      (match LNoise.linenoise "step> " with
+       | None -> ()
+       | Some "q" | Some "quit" | Some "exit" -> ()
+       | Some _ ->
+         let next_state = eval_state state in
+         step_loop (rest @ [ next_state ]))
+    | Stop :: rest -> step_loop rest
+    | Split (state1, state2) :: rest ->
+      Printf.printf "Program split into two concurrent states.\n%!";
+      step_loop ((Step state1 :: rest) @ [ Step state2 ])
+    | Send (_v, _chan, _next) :: _rest ->
+      print_error "Step-through for Send not implemented."
+    | Receive (_chan, _cont) :: _rest ->
+      print_error "Step-through for Receive not implemented."
+    | Error exn :: _ -> print_error (Printexc.to_string exn)
   in
   try
     let core_ast = get_ast input in
@@ -120,7 +121,7 @@ let parse_and_step input =
     in
     let converted = Core.Runner.state_of_command converted in
     Printf.printf "press any key to step through the program, q to quit\n%!";
-    step_loop converted
+    step_loop [ Step converted ]
   with
   | exn -> print_error (Printexc.to_string exn)
 ;;

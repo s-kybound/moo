@@ -39,7 +39,7 @@ type term =
   | Tuple of term list
   | Matcher of (form * command) list
   | Num of int64
-  | Rec of string * term (* todo - recursive terms have yet to be figured out *)
+  | Rec of string * term (* TODO - recursive terms have yet to be figured out *)
   | Arr of term list
   | Done
 

@@ -115,9 +115,9 @@ let empty_ast_command : Ast.command =
     { l_term =
         Ast.Ann
           ( Ast.Done
-          , Ast.Polarised (Ast.Plus, (Some Ast.By_value, Ast.Raw (Ast.Data, Ast.Raw64)))
-          )
-    ; r_term = Ast.Done
+          , Ast.Polarised
+              (Ast.Plus, (Some Ast.By_value, Ast.Raw (Ast.Data, Ast.Product []))) )
+    ; r_term = Ast.Tuple []
     }
 ;;
 
@@ -132,9 +132,10 @@ let ast_command_of_module ((defs, cmd) : Ast.module_) : Ast.command =
     match defs with
     | [] -> end_cmd
     | Open _ :: rest -> aux rest end_cmd
-    | Def TypeDef (_kind_binder, _ty_def) :: rest -> aux rest end_cmd
-    | Def ModuleDef _ :: _ -> failwith "Nested modules not supported in AST to IR conversion"
-    | Def TermDef (b, term) :: rest ->
+    | Def (TypeDef (_kind_binder, _ty_def)) :: rest -> aux rest end_cmd
+    | Def (ModuleDef _) :: _ ->
+      failwith "Nested modules not supported in AST to IR conversion"
+    | Def (TermDef (b, term)) :: rest ->
       let rest_cmd = aux rest end_cmd in
       Core { l_term = term; r_term = Mu (b, rest_cmd) }
   in

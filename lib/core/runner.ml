@@ -5,11 +5,8 @@ exception RuntimeError of string
 
 (* Assertion error - something went horribly wrong *)
 exception AssertionError of string
+exception Exit of int64
 exception Not_implemented
-
-type program_state =
-  | Running of state
-  | Terminated of int64 * environment_frame
 
 let force_term t : control_item list = [ T t; I Force ]
 let counter = ref 0
@@ -77,53 +74,63 @@ let pattern_match (forms : (form * 'a) list) (value : value)
   aux forms
 ;;
 
-let eval_state (state : state) : program_state =
+type channel = unit (* TODO *)
+
+type program_step =
+  | Step of state
+  | Split of state * state
+  | Stop
+  | Error of exn
+  | Send of value * channel * state
+  | Receive of channel * (value -> state)
+
+let eval_state (state : state) : program_step =
   match state with
   | [], _, _ -> raise (AssertionError "empty control stack")
   | T term :: c', s, e ->
     (match term with
-     | NeedsForce t -> Running (force_term t @ c', s, e)
-     | Mu (name, cmd) -> Running (c', VMu (name, [ C cmd ], [], e) :: s, e)
+     | NeedsForce t -> Step (force_term t @ c', s, e)
+     | Mu (name, cmd) -> Step (c', VMu (name, [ C cmd ], [], e) :: s, e)
      | Variable name ->
        (match lookup e name with
-        | Some v -> Running (c', v :: s, e)
+        | Some v -> Step (c', v :: s, e)
         | None -> raise (AssertionError ("unbound variable: " ^ name)))
      | Construction { cons_name; cons_args } ->
        let arg_eval_sequcence =
          List.map (fun arg -> T arg) cons_args
          @ [ I (Con_instr (cons_name, List.length cons_args)) ]
        in
-       Running (arg_eval_sequcence @ c', s, e)
+       Step (arg_eval_sequcence @ c', s, e)
      | Tuple terms ->
        let term_eval_sequence =
          List.map (fun t -> T t) terms @ [ I (Tup_instr (List.length terms)) ]
        in
-       Running (term_eval_sequence @ c', s, e)
-     | Matcher patterns_cmds -> Running (c', VMatcher (patterns_cmds, e) :: s, e)
-     | Num n -> Running (c', VNum n :: s, e)
+       Step (term_eval_sequence @ c', s, e)
+     | Matcher patterns_cmds -> Step (c', VMatcher (patterns_cmds, e) :: s, e)
+     | Num n -> Step (c', VNum n :: s, e)
      | Rec (_name, _t) -> raise Not_implemented
      | Arr terms ->
        let term_eval_sequence =
          List.map (fun t -> T t) terms @ [ I (Arr_instr (List.length terms)) ]
        in
-       Running (term_eval_sequence @ c', s, e)
-     | Done -> Running (c', VDone :: s, e))
+       Step (term_eval_sequence @ c', s, e)
+     | Done -> Step (c', VDone :: s, e))
   (* instructions *)
   | I Force :: c', VMu (name, mu_c, mu_s, mu_e) :: s', e ->
     let k_name = gensym "k" in
     let captured_mu = VMu (k_name, c', s', e) in
     let new_e = extend_env mu_e [ name, captured_mu ] in
-    Running (mu_c, mu_s, new_e)
+    Step (mu_c, mu_s, new_e)
   | I Force :: c', v :: s', e ->
     (* non-thunk value, force has no effect *)
-    Running (c', v :: s', e)
-  | I Cut :: _c', unfocus_val :: focus_val :: _s', e ->
+    Step (c', v :: s', e)
+  | I Cut :: _c', unfocus_val :: focus_val :: _s', _e ->
     (match focus_val, unfocus_val with
      (* "active" computation binding *)
      | VMu _, _ -> raise (AssertionError "focused value cannot be a mu thunk")
      | _, VMu (name, mu_c, mu_s, mu_e) ->
        let new_e = extend_env mu_e [ name, focus_val ] in
-       Running (mu_c, mu_s, new_e)
+       Step (mu_c, mu_s, new_e)
      (* invalid states - self matching
       * these should have been handled in the typechecking *)
      | VDone, VDone -> raise (AssertionError "cannot cut two done values")
@@ -133,14 +140,16 @@ let eval_state (state : state) : program_state =
        raise (AssertionError "cannot cut two construction values")
      | VNum _, VNum _ -> raise (AssertionError "cannot cut two numeric values")
      | VMatcher _, VMatcher _ -> raise (AssertionError "cannot cut two matcher values")
-     (* done semantics - think of it as an exit status *)
-     | VDone, VNum n | VNum n, VDone -> Terminated (n, e)
+     (* done semantics *)
+     | VDone, VTuple [] | VTuple [], VDone -> Stop
+     (* | VExit, VNum n | VNum n, VExit -> Error (Exit n) *)
+     (* array semantics -- TODO *)
      (* match semantics *)
      | VMatcher (cases, match_e), adt | adt, VMatcher (cases, match_e) ->
        (match pattern_match cases adt with
         | Some (bindings, cmd) ->
           let new_e = extend_env match_e bindings in
-          Running ([ C cmd ], [], new_e)
+          Step ([ C cmd ], [], new_e)
         (* failure to pattern match should not happen *)
         | None -> raise (AssertionError "no matching pattern found"))
      (* invalid states - attempt to match value to non-mu value *)
@@ -151,21 +160,25 @@ let eval_state (state : state) : program_state =
      | VConstruction _, _ ->
        raise (AssertionError "attempt to cut construction value with value")
      | VNum _, _ -> raise (AssertionError "attempt to cut numeric value with value"))
-  | I (Spawn _) :: _, _, _ -> failwith "concurrent command evaluation not implemented yet"
+  | I (Spawn cmd2) :: c', s', e' ->
+    (* TODO: check whether this is the correct formulation - should s' be preserved in one or the other or etc? *)
+    let state1 = c', s', e' in
+    let state2 = [ C cmd2 ], [], e' in
+    Split (state1, state2)
   | I (Unop_instr op) :: c', v :: s', e ->
     (match op, v with
      | Neg, VNum n ->
        let result = Int64.neg n in
-       Running (c', VNum result :: s', e)
+       Step (c', VNum result :: s', e)
      | Not, VNum n ->
        let result = Int64.lognot n in
-       Running (c', VNum result :: s', e)
+       Step (c', VNum result :: s', e)
      | _ -> raise (AssertionError "unop applied to invalid value"))
   | I (Bop_instr op) :: c', v2 :: v1 :: s', e ->
     let safe_operate f n1 n2 k =
       try
         let result = f n1 n2 in
-        Running (c', VNum result :: s', e)
+        Step (c', VNum result :: s', e)
       with
       | Division_by_zero -> raise (RuntimeError "division by zero")
       | _ -> raise (AssertionError ("invalid binary operation: " ^ k))
@@ -185,27 +198,27 @@ let eval_state (state : state) : program_state =
        then raise (RuntimeError "negative shift amount")
        else (
          let result = Int64.shift_left n1 shift_amount in
-         Running (c', VNum result :: s', e))
+         Step (c', VNum result :: s', e))
      | Shr, VNum n1, VNum n2 ->
        let shift_amount = Int64.to_int n2 in
        if shift_amount < 0
        then raise (RuntimeError "negative shift amount")
        else (
          let result = Int64.shift_right n1 shift_amount in
-         Running (c', VNum result :: s', e))
+         Step (c', VNum result :: s', e))
      | _ -> raise (AssertionError "bop applied to invalid values"))
   | I (Con_instr (name, arity)) :: c', s, e when List.length s >= arity ->
     let args = List.rev (List.take arity s) in
     let s' = List.drop arity s in
-    Running (c', VConstruction (name, args) :: s', e)
+    Step (c', VConstruction (name, args) :: s', e)
   | I (Tup_instr arity) :: c', s, e when List.length s >= arity ->
     let args = List.rev (List.take arity s) in
     let s' = List.drop arity s in
-    Running (c', VTuple args :: s', e)
+    Step (c', VTuple args :: s', e)
   | I (Arr_instr arity) :: c', s, e when List.length s >= arity ->
     let args = List.rev (List.take arity s) in
     let s' = List.drop arity s in
-    Running (c', VArr (Array.of_list args) :: s', e)
+    Step (c', VArr (Array.of_list args) :: s', e)
   (* invalid instruction states *)
   | I Force :: _, [], _ -> raise (AssertionError "stack underflow on force")
   | I Cut :: _, _, _ -> raise (AssertionError "stack underflow on cut")
@@ -217,17 +230,17 @@ let eval_state (state : state) : program_state =
   (* commands *)
   | C cmd :: c', s, e ->
     (match cmd with
-     | Fork (cmd1, cmd2) -> Running (I (Spawn cmd2) :: C cmd1 :: c', s, e)
+     | Fork (cmd1, cmd2) -> Step (I (Spawn cmd2) :: C cmd1 :: c', s, e)
      | Core { focus_term; unfocus_term } ->
-       Running (force_term focus_term @ (T unfocus_term :: I Cut :: c'), s, e)
+       Step (force_term focus_term @ (T unfocus_term :: I Cut :: c'), s, e)
      | Arith (Unop { op; in_focus_term; out_unfocus_term }) ->
-       Running
+       Step
          ( force_term in_focus_term
            @ (I (Unop_instr op) :: T out_unfocus_term :: I Cut :: c')
          , s
          , e )
      | Arith (Bop { op; l_focus_term; r_focus_term; out_unfocus_term }) ->
-       Running
+       Step
          ( force_term l_focus_term
            @ force_term r_focus_term
            @ (I (Bop_instr op) :: T out_unfocus_term :: I Cut :: c')
@@ -237,8 +250,19 @@ let eval_state (state : state) : program_state =
 
 let state_of_command (cmd : command) : state = [ C cmd ], [], Ir.empty_environment
 
-let rec eval_program (initial_state : state) : program_state =
-  match eval_state initial_state with
-  | Running (c', s', e') -> eval_program (c', s', e')
-  | Terminated (n, e') -> Terminated (n, e')
+let eval_program (initial_state : state) : int64 * environment_frame =
+  let rec runner states status curr_frame =
+    match states with
+    | [] -> status, curr_frame
+    | Step state :: rest_states ->
+      let next_step = eval_state state in
+      runner (rest_states @ [ next_step ]) status curr_frame
+    | Stop :: rest -> runner rest status curr_frame
+    | Split (state1, state2) :: rest ->
+      runner ((Step state1 :: rest) @ [ Step state2 ]) status curr_frame
+    | Send (_v, _chan, _next) :: _rest -> raise Not_implemented
+    | Receive (_chan, _cont) :: _rest -> raise Not_implemented
+    | Error exn :: _ -> raise exn (* TODO: better error handling *)
+  in
+  runner [ Step initial_state ] Int64.zero Ir.empty_environment
 ;;
