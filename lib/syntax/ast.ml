@@ -24,8 +24,8 @@ type name =
 let rec raw_of_name (n : name) : string =
   match n with
   | Base s -> s
-  | Namespaced { namespace; inner } ->
-      namespace ^ "." ^ raw_of_name inner
+  | Namespaced { namespace; inner } -> namespace ^ "." ^ raw_of_name inner
+;;
 
 let namespaced_path (n : name) : string list =
   let rec aux acc n =
@@ -34,6 +34,7 @@ let namespaced_path (n : name) : string list =
     | Namespaced { namespace; inner } -> aux (namespace :: acc) inner
   in
   aux [] n
+;;
 
 type polarity =
   | Plus
@@ -57,7 +58,7 @@ type ty_use =
    * created directly here *)
   | Unresolved of raw_ty
   | Unmoded of polarity * ty
-  (* TODO: probably better to have ty_use be Concrete and Weak ... *)
+(* TODO: probably better to have ty_use be Concrete and Weak ... *)
 
 and moded_ty = mode option * ty
 
@@ -165,7 +166,7 @@ and 'a top_level_item =
   | Open of module_open
   | Def of 'a
 
-and module_ = definition top_level_item list * (command option)
+and module_ = definition top_level_item list * command option
 
 type sig_module = sig_definition top_level_item list
 
@@ -178,4 +179,3 @@ and module_sig_def =
   { name : string
   ; interface : sig_module
   }
-

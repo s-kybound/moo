@@ -6,7 +6,11 @@ let with_filename buffer name =
   buffer
 ;;
 
-let parse program_buffer = Incremental.parse program_buffer (Parser.Incremental.parse_program program_buffer.lex_curr_p)
+let parse program_buffer =
+  Incremental.parse
+    program_buffer
+    (Parser.Incremental.parse_program program_buffer.lex_curr_p)
+;;
 
 let of_channel ~filename ic =
   let lb = with_filename (Lexing.from_channel ic) filename in

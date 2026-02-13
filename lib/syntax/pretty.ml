@@ -177,9 +177,12 @@ and show_open (mo : module_open) =
     Printf.sprintf "use %s as %s" (show_name mod_name) use_name
 
 and show_program (prog, cmd) =
-  (prog |> List.map (show_top_level_item show_definition)) @ Option.to_list (Option.map show_command cmd) |> String.concat "\n"
+  (prog |> List.map (show_top_level_item show_definition))
+  @ Option.to_list (Option.map show_command cmd)
+  |> String.concat "\n"
 
-and show_top_level_item (show_definition : 'a -> string)(tli :'a top_level_item) =
+and show_top_level_item (show_definition : 'a -> string) (tli : 'a top_level_item) =
   match tli with
   | Open o -> show_open o
   | Def d -> show_definition d
+;;
