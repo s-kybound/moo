@@ -124,38 +124,36 @@ parse_program: program EOF                              { $1 }
 
 parse_signature: interface EOF                          { $1 }
 
+maybe_delimited(item):
+  | item DELIMITER?                                     { $1 }
+
 program:
-  | opens=list(open_statement) 
-    definitions=list(top_level_definition)
+  | defs=list(maybe_delimited(top_level_item(top_level_definition)))
     maybe_command = top_level_command?
-      { { opens; definitions; command = maybe_command } }
+    { defs, maybe_command }
 
 top_level_command:
   | DO statement                                        { $2 }
 
 interface:
-  | opens=list(open_statement) 
-    signatures=list(top_level_signature)
-      { { opens; signatures } }
+  | defs=list(maybe_delimited(top_level_item(top_level_signature_definition)))
+    { defs }
+
+top_level_item(definition):
+  | open_statement                                      { Open $1 }
+  | definition                                          {Def $1}
 
 open_statement:
-  | OPEN n=namespaced(any_ident) DELIMITER?
-      { Open n }
-  | USE mod_name=namespaced(any_ident) AS use_name=any_ident DELIMITER?
+  | OPEN n=namespaced(any_ident)      { Open n }
+  | USE mod_name=namespaced(any_ident) AS use_name=any_ident
       { Use { mod_name; use_name } }
 
 top_level_definition:
-  | top_level_definition_item DELIMITER?                { $1 }
-
-top_level_definition_item:
   | module_definition                                   { $1 }
   | term_definition                                     { $1 }
   | type_definition                                     { $1 }
 
-top_level_signature:
-  | top_level_signature_item DELIMITER?                 { $1 }
-
-top_level_signature_item:
+top_level_signature_definition:
   | module_signature                                    { $1 }
   | term_signature                                      { $1 }
   | type_signature                                      { $1 }
@@ -410,11 +408,22 @@ simple_raw_type:
   | array_type                                          { $1 }
 
 full_raw_type:
-  // | adt_raw_type                                        { $1 }
+  | variant_raw_type                                    { $1 }
   | simple_raw_type                                     { $1 }
   (*
   | RAW8                                                { type_raw8 }
   *)
+
+variant_raw_type:
+  | BAR? variants=separated_nonempty_list(BAR, variant) { Variant variants }
+
+variant:
+  | constr_name=CONSTRUCTOR_IDENT
+      { { constr_name; constr_args = [] } }
+  | constr_name=CONSTRUCTOR_LPAREN 
+    constr_args=separated_nonempty_list(COMMA, type_use)
+                RPAREN
+      { { constr_name; constr_args } }
 
 tuple_type:
   | UNIT

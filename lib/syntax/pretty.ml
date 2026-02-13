@@ -49,6 +49,7 @@ let rec show_ty_use tyu =
   | Polarised (pol, m) -> Printf.sprintf "%s%s" (show_polarity pol) (show_moded_ty m)
   | Abstract { negated; name } -> if negated then Printf.sprintf "~%s" name else name
   | Unresolved raw -> Printf.sprintf "unresolved(%s)" (show_raw_ty raw)
+  | Unmoded (pol, ty) -> Printf.sprintf "%s[???]%s" (show_polarity pol) (show_ty ty)
 
 and show_moded_ty (mode_opt, ty) =
   match mode_opt with
@@ -169,15 +170,16 @@ let rec show_definition def =
   | ModuleDef { name; program } ->
     Printf.sprintf "module %s {\n%s\n}" name (show_program program)
 
-and show_open mo =
+and show_open (mo : module_open) =
   match mo with
   | Open name -> Printf.sprintf "open %s" (show_name name)
   | Use { mod_name; use_name } ->
     Printf.sprintf "use %s as %s" (show_name mod_name) use_name
 
-and show_program prog =
-  let opens_str = prog.opens |> List.map show_open |> String.concat "\n" in
-  let defs_str = prog.definitions |> List.map show_definition |> String.concat "\n" in
-  let command_str = Option.fold ~none:"" ~some:show_command prog.command in
-  Printf.sprintf "%s\n%s\n%s" opens_str defs_str command_str
-;;
+and show_program (prog, cmd) =
+  (prog |> List.map (show_top_level_item show_definition)) @ Option.to_list (Option.map show_command cmd) |> String.concat "\n"
+
+and show_top_level_item (show_definition : 'a -> string)(tli :'a top_level_item) =
+  match tli with
+  | Open o -> show_open o
+  | Def d -> show_definition d

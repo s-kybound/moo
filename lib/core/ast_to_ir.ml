@@ -32,6 +32,7 @@ let gensym =
     let name = Printf.sprintf "%s_%d" prefix !counter in
     incr counter;
     name
+;;
 
 let ast_to_ir_form (f : Ast.pattern) : Ir.form =
   let pat_binder_to_name pb =
@@ -40,8 +41,7 @@ let ast_to_ir_form (f : Ast.pattern) : Ir.form =
     | Ast.Wildcard -> gensym "wildcard"
   in
   match f with
-  | Ast.Pat_binder pb ->
-    Ir.Binder (pat_binder_to_name pb)
+  | Ast.Pat_binder pb -> Ir.Binder (pat_binder_to_name pb)
   | Ast.Tup names ->
     let names = List.map pat_binder_to_name names in
     Ir.Tuple names
@@ -121,25 +121,22 @@ let empty_ast_command : Ast.command =
     }
 ;;
 
-let ast_command_of_module (m : Ast.module_) : Ast.command =
+(* a sequential order of commands to do by the program *)
+let ast_command_of_module ((defs, cmd) : Ast.module_) : Ast.command =
   let base =
-    match m.command with
-    | Some cmd -> cmd
+    match cmd with
+    | Some new_base -> new_base
     | None -> empty_ast_command
   in
-  let rec aux (defs : Ast.definition list) end_cmd : Ast.command =
+  let rec aux (defs : Ast.definition Ast.top_level_item list) end_cmd : Ast.command =
     match defs with
     | [] -> end_cmd
-    | TypeDef (_kind_binder, _ty_def) :: rest ->
-      aux rest end_cmd
-    | ModuleDef _ :: _ ->
-      failwith "Nested modules not supported in AST to IR conversion"
-    | TermDef (b, term) :: rest ->
+    | Open _ :: rest -> aux rest end_cmd
+    | Def TypeDef (_kind_binder, _ty_def) :: rest -> aux rest end_cmd
+    | Def ModuleDef _ :: _ -> failwith "Nested modules not supported in AST to IR conversion"
+    | Def TermDef (b, term) :: rest ->
       let rest_cmd = aux rest end_cmd in
-      Core {
-        l_term = term;
-        r_term = Mu (b, rest_cmd);
-      }
+      Core { l_term = term; r_term = Mu (b, rest_cmd) }
   in
-  aux m.definitions base
+  aux defs base
 ;;

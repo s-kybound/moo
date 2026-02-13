@@ -21,6 +21,20 @@ type name =
       ; inner : name
       }
 
+let rec raw_of_name (n : name) : string =
+  match n with
+  | Base s -> s
+  | Namespaced { namespace; inner } ->
+      namespace ^ "." ^ raw_of_name inner
+
+let namespaced_path (n : name) : string list =
+  let rec aux acc n =
+    match n with
+    | Base s -> List.rev (s :: acc)
+    | Namespaced { namespace; inner } -> aux (namespace :: acc) inner
+  in
+  aux [] n
+
 type polarity =
   | Plus
   | Minus
@@ -39,9 +53,11 @@ type ty_use =
       { negated : bool
       ; name : string
       }
-  (* this is for the typechecking phase, and will not be
+  (* these are for the typechecking phase, and will not be
    * created directly here *)
   | Unresolved of raw_ty
+  | Unmoded of polarity * ty
+  (* TODO: probably better to have ty_use be Concrete and Weak ... *)
 
 and moded_ty = mode option * ty
 
@@ -145,16 +161,13 @@ and module_def =
   ; program : module_
   }
 
-and module_ =
-  { opens : module_open list
-  ; definitions : definition list
-  ; command : command option
-  }
+and 'a top_level_item =
+  | Open of module_open
+  | Def of 'a
 
-type sig_module =
-  { opens : module_open list
-  ; signatures : sig_definition list
-  }
+and module_ = definition top_level_item list * (command option)
+
+type sig_module = sig_definition top_level_item list
 
 and sig_definition =
   | TypeSigDef of kind_binder * shape * ty option
@@ -165,3 +178,4 @@ and module_sig_def =
   { name : string
   ; interface : sig_module
   }
+
