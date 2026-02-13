@@ -79,6 +79,8 @@ let print_error msg = Printf.eprintf "Error: %s\n%!" msg
 let parse_and_eval input =
   try
     let core_ast = get_ast input in
+    Pretty.show_program core_ast |> print_endline;
+    Typechecker.Bidir.tycheck_program core_ast;
     let converted =
       Core.Ast_to_ir.ast_command_of_module core_ast |> Core.Ast_to_ir.ast_to_ir_command
     in

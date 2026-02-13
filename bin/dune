@@ -1,4 +1,4 @@
 (executable
  (public_name moo)
  (name main)
- (libraries cmdliner dune-build-info linenoise moo.core moo.syntax moo))
+ (libraries cmdliner dune-build-info linenoise moo.core moo.syntax moo.typechecker moo))
