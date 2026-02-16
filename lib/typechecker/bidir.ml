@@ -1,4 +1,5 @@
 open Syntax
+open Type
 (* a cocontextual typechecker that analyses a given program *)
 
 type tycheck_var =
@@ -299,7 +300,6 @@ let tycheck_module_of_ast (modu : Syntax.Ast.module_) : tycheck_module =
         let tdef, new_env = tycheck_definition_of_ast d env in
         Def tdef, new_env
     in
-    (* TODO *)
     let unannotated_definitions, new_env, env_checkpoints =
       List.fold_left
         (fun (defs_acc, env_acc, env_checkpoints) def ->
@@ -423,159 +423,13 @@ let rec tycheck_module_to_ast (tmodu : tycheck_module) : Syntax.Ast.module_ =
   List.map tycheck_top_level_item_to_ast defs, Option.map tycheck_command_to_ast maybe_cmd
 ;;
 
-let invert (ty_use : Syntax.Ast.ty_use) : Syntax.Ast.ty_use =
-  match ty_use with
-  | Polarised (Plus, mty) -> Polarised (Minus, mty)
-  | Polarised (Minus, mty) -> Polarised (Plus, mty)
-  | Abstract { negated; name } -> Abstract { negated = not negated; name }
-  | Unresolved (Destructor raw_ty) -> Unresolved raw_ty
-  | Unresolved raw_ty -> Unresolved (Destructor raw_ty)
-  | Unmoded (Plus, ty) -> Unmoded (Minus, ty)
-  | Unmoded (Minus, ty) -> Unmoded (Plus, ty)
-;;
-
 type context = (int * Syntax.Ast.ty_use) list
 
-type tydef_env =
-  | Top
-  | TyFrame of
-      { parent : tydef_env
-      ; var : Ast.name
-      ; ty : Syntax.Ast.ty
-      }
-
-let lookup (name : Ast.name) (tydef_env : tydef_env) : Syntax.Ast.ty =
-  match name with
-  | Base _ ->
-    let rec aux env =
-      match env with
-      | Top -> failwith "lookup: type not found in environment"
-      | TyFrame { parent; var = frame_var; ty } ->
-        if frame_var = name then ty else aux parent
-    in
-    aux tydef_env
-  | Namespaced _ -> failwith "lookup: namespaced types not supported"
-;;
-
-let rec tyu_equal (tyu1 : Syntax.Ast.ty_use) (tyu2 : Syntax.Ast.ty_use) tydef_env : bool =
-  match tyu1, tyu2 with
-  | Polarised (pol1, (mode1, ty1)), Polarised (pol2, (mode2, ty2)) ->
-    pol1 = pol2 && mode1 = mode2 && ty_equal ty1 ty2 tydef_env
-  | Abstract { negated = neg1; name = name1 }, Abstract { negated = neg2; name = name2 }
-    -> neg1 = neg2 && name1 = name2
-  | Abstract _, _ | _, Abstract _ ->
-    failwith "TODO: abstract type equality not implemented in tyu_equal"
-  | Unresolved raw_ty1, Unresolved raw_ty2 -> rty_equal raw_ty1 raw_ty2 tydef_env
-  | Polarised (polarity, (_, ty)), Unresolved raw_ty
-  | Unresolved raw_ty, Polarised (polarity, (_, ty)) ->
-    (match ty with
-     | Named (name, []) ->
-       let rec nested_lookup name =
-         match lookup name tydef_env with
-         | Raw (chirality, raw_ty) ->
-           (match polarity, chirality with
-            | Plus, Ast.Data | Minus, Ast.Codata -> raw_ty
-            | Plus, Ast.Codata | Minus, Ast.Data -> Destructor raw_ty)
-         | Named (inner_name, []) -> nested_lookup inner_name
-         | Named (_, _rest) ->
-           failwith "TODO: named type lookup in tyu_equal with parameters"
-       in
-       rty_equal raw_ty (nested_lookup name) tydef_env
-     | Named (_, _rest) -> failwith "TODO: named type lookup in tyu_equal"
-     | Raw (_, raw_ty2) -> rty_equal raw_ty raw_ty2 tydef_env)
-  | _ -> failwith "TODO"
-
-and ty_equal (ty1 : Syntax.Ast.ty) (ty2 : Syntax.Ast.ty) tydef_env : bool =
-  match ty1, ty2 with
-  | Named (name1, []), ty2 -> ty_equal (lookup name1 tydef_env) ty2 tydef_env
-  | ty1, Named (name2, []) -> ty_equal ty1 (lookup name2 tydef_env) tydef_env
-  | Named _, _ | _, Named _ ->
-    failwith "TODO: named type equality with parameters not implemented in ty_equal"
-  | Raw (shape1, raw_ty1), Raw (shape2, raw_ty2) ->
-    shape1 = shape2 && rty_equal raw_ty1 raw_ty2 tydef_env
-
-and rty_equal
-      (rty1 : Syntax.Ast.raw_ty)
-      (rty2 : Syntax.Ast.raw_ty)
-      (tydef_env : tydef_env)
-  : bool
-  =
-  match rty1, rty2 with
-  | Raw64, Raw64 -> true
-  | Product tys1, Product tys2 ->
-    List.length tys1 = List.length tys2
-    && List.for_all2
-         (fun ty_use1 ty_use2 -> tyu_equal ty_use1 ty_use2 tydef_env)
-         tys1
-         tys2
-  | Destructor raw_ty1, Destructor raw_ty2 -> rty_equal raw_ty1 raw_ty2 tydef_env
-  | _, _ -> false
-;;
-
-(* Given a constructor and arity, look up the first matching type *)
-let type_of_constructor
-      (constr_name : Ast.name)
-      (constr_arity : int)
-      (tydef_env : tydef_env)
-  : (Ast.name * Syntax.Ast.ty) option
-  =
-  (* placeholder implementation for constructor lookup *)
-  let raw_constr_name = Ast.raw_of_name constr_name in
-  let namespace_path = Ast.namespaced_path constr_name in
-  let rec aux env =
-    match env with
-    | Top -> None
-    | TyFrame { parent; var; ty = Raw (_, Variant variants) as ty } ->
-      if Ast.namespaced_path var <> namespace_path
-      then aux parent
-      else (
-        let is_matching_variant (v : Ast.variant) =
-          v.constr_name = raw_constr_name && List.length v.constr_args = constr_arity
-        in
-        match List.find_opt is_matching_variant variants with
-        | Some _ -> Some (var, ty)
-        | None -> aux parent)
-    | TyFrame { parent; _ } -> aux parent
-  in
-  aux tydef_env
-;;
-
-(* given a constructor and a type, get the types of the constructor's arguments 
- * invariant: type must match*)
-let args_of_variant (constr : Ast.name) (ty : Ast.ty) : Syntax.Ast.ty_use list =
-  let raw_constr = Ast.raw_of_name constr in
-  match ty with
-  | Raw (_, Variant variants) ->
-    (match
-       List.find_opt (fun (v : Ast.variant) -> v.constr_name = raw_constr) variants
-     with
-     | Some v -> v.constr_args
-     | None -> assert false)
-  | _ -> assert false
-;;
+(* TODO *)
 
 exception TypeMismatch of Ast.ty_use * Ast.ty_use * string
 exception TypeError of string
 exception Underspecified of string
-
-let get_raw_type (ty_use : Syntax.Ast.ty_use) (tydef_env : tydef_env) : Syntax.Ast.raw_ty =
-  match ty_use with
-  | Syntax.Ast.Unresolved raw_ty -> raw_ty
-  | Syntax.Ast.Abstract _ -> failwith "get_raw_type: cannot get raw type of abstract type"
-  | Syntax.Ast.Polarised (_, (_, ty)) | Syntax.Ast.Unmoded (_, ty) ->
-    (match ty with
-     | Named (name, []) ->
-       let rec nested_lookup name =
-         match lookup name tydef_env with
-         | Raw (_, raw_ty) -> raw_ty
-         | Named (inner_name, []) -> nested_lookup inner_name
-         | Named (_, _rest) ->
-           failwith "TODO: named type lookup in get_raw_type with parameters"
-       in
-       nested_lookup name
-     | Named (_, _rest) -> failwith "TODO: named type lookup in get_raw_type"
-     | Raw (_, raw_ty) -> raw_ty)
-;;
 
 (* Workflow - synthesize takes in a set of invariants, and determines the type of an expression.
  *            it returns the demands in order to have that expression have that type *)
@@ -638,7 +492,7 @@ let rec synthesize (checkables : context) (expr : tycheck_term) (tydef_env : tyd
            else verify_demands tail
        in
        verify_demands rest;
-       invert inferred_ty, demands)
+       Type.negate_tyu inferred_ty, demands)
   | TMatcher branches ->
     let most_specific_type, demands =
       List.fold_left
@@ -651,7 +505,9 @@ let rec synthesize (checkables : context) (expr : tycheck_term) (tydef_env : tyd
      | None -> assert false
      | Some tyu -> tyu, demands)
   | TConstruction { tcons_name; tcons_args } ->
-    let typ = type_of_constructor tcons_name (List.length tcons_args) tydef_env in
+    let typ =
+      type_of_namespaced_constructor tcons_name (List.length tcons_args) tydef_env
+    in
     (match typ with
      | None ->
        let msg =
@@ -700,7 +556,7 @@ and check
       (tydef_env : tydef_env)
   : context
   =
-  let raw_ty = get_raw_type expected_type tydef_env in
+  let _, _, _, raw_ty = tyu_to_raw_ty expected_type tydef_env in
   match expr with
   | TVariable tvar -> [ tvar.unique_id, expected_type ]
   | TNum _ ->
@@ -720,7 +576,7 @@ and check
            , Ast.Unresolved (Destructor Raw64)
            , "check: TDone expected type mismatch" ))
   | TMu (tbinder, tcommand) ->
-    let tbinder_ty = invert expected_type in
+    let tbinder_ty = Type.negate_tyu expected_type in
     let new_demands = List.map (fun id -> id, tbinder_ty) tbinder.unique_ids in
     let updated_checkables = checkables @ new_demands in
     typecheck_command updated_checkables tcommand tydef_env
@@ -774,15 +630,6 @@ and check
     then discoveries
     else
       raise (TypeMismatch (expected_type, ty_use, "check: TConstruction type mismatch"))
-  | TArr [] ->
-    (match get_raw_type expected_type tydef_env with
-     | Array _ -> []
-     | _ ->
-       raise
-         (TypeMismatch
-            ( expected_type
-            , Ast.Unresolved (Array (Ast.Unresolved Raw64)) (* TODO: Raw64 -> Weak *)
-            , "check: TArr [] expected type mismatch" )))
   | TArr _terms ->
     (* placeholder implementation for arrays *)
     failwith "check: arrays not implemented"
@@ -797,7 +644,7 @@ and typecheck_command
   | TCore { tl_term; tr_term } ->
     (try
        let l_ty_use, l_demands = synthesize checkables tl_term tydef_env in
-       let r_ty_use = invert l_ty_use in
+       let r_ty_use = Type.negate_tyu l_ty_use in
        let r_demands = check checkables tr_term r_ty_use tydef_env in
        l_demands @ r_demands
      with
@@ -809,7 +656,7 @@ and typecheck_command
        in
        print_endline warning_msg;
        let r_ty_use, r_demands = synthesize checkables tr_term tydef_env in
-       let l_ty_use = invert r_ty_use in
+       let l_ty_use = Type.negate_tyu r_ty_use in
        let l_demands = check checkables tl_term l_ty_use tydef_env in
        l_demands @ r_demands
      | TypeMismatch (expected, actual, msg) ->
@@ -824,7 +671,7 @@ and typecheck_command
      | e -> raise e)
   | TArith (TBop { top = _; tl_term; tr_term; tout_term }) ->
     let out_ty_use, out_demands = synthesize checkables tout_term tydef_env in
-    let in_ty_use = invert out_ty_use in
+    let in_ty_use = Type.negate_tyu out_ty_use in
     if not (tyu_equal out_ty_use (Ast.Unresolved (Destructor Raw64)) tydef_env)
     then
       raise
@@ -838,7 +685,7 @@ and typecheck_command
       out_demands @ left_demands @ right_demands)
   | TArith (TUnop { top = _; tin_term; tout_term }) ->
     let out_ty_use, out_demands = synthesize checkables tout_term tydef_env in
-    let in_ty_use = invert out_ty_use in
+    let in_ty_use = Type.negate_tyu out_ty_use in
     if not (tyu_equal out_ty_use (Ast.Unresolved (Destructor Raw64)) tydef_env)
     then
       raise
@@ -874,8 +721,8 @@ let rec tycheck_definition
        let new_insights = List.map (fun id -> id, ty_use) tbinder.unique_ids in
        let total_insights = insights @ new_insights in
        total_insights, tydef_env)
-  | TTypeDef ((name, _typs), ty) ->
-    let new_tydef_env = TyFrame { parent = tydef_env; var = Base name; ty } in
+  | TTypeDef (tbinder, ty) ->
+    let new_tydef_env = TyFrame { parent = tydef_env; var = tbinder; ty } in
     [], new_tydef_env
   | TModuleDef { tmod_name = _; tprogram } ->
     let new_insights, _ = tycheck_module checkables tprogram tydef_env in
