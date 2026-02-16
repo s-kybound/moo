@@ -556,7 +556,9 @@ and check
       (tydef_env : tydef_env)
   : context
   =
-  let _, _, _, raw_ty = tyu_to_raw_ty expected_type tydef_env in
+  let _inferred_mode, _inferred_polarity_chirality, raw_ty =
+    tyu_to_raw_ty expected_type tydef_env
+  in
   match expr with
   | TVariable tvar -> [ tvar.unique_id, expected_type ]
   | TNum _ ->

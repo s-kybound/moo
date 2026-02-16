@@ -85,35 +85,52 @@ let ty_to_raw_ty (ty : ty) (tydef_env : tydef_env) : shape * raw_ty =
   aux ty
 ;;
 
+(* Infers the default mode of a type *)
+let infer_mode shape : mode =
+  match shape with
+  | Data -> By_value
+  | Codata -> By_name
+;;
+
 let tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env)
-  : polarity option * mode option * shape option * raw_ty
+  : mode option * (polarity * shape) option * raw_ty
   =
   match tyu with
-  | Polarised (polarity, (mode, ty)) ->
+  | Polarised (polarity, (mode_opt, ty)) ->
     let shape, raw_ty = ty_to_raw_ty ty tydef_env in
-    Some polarity, mode, Some shape, raw_ty
-  | Unresolved raw_ty -> None, None, None, raw_ty
+    let mode =
+      match mode_opt with
+      | Some mode -> mode
+      | None -> infer_mode shape
+    in
+    let raw_ty =
+      match polarity, shape with
+      | Plus, Data | Minus, Codata -> raw_ty
+      | Plus, Codata | Minus, Data -> Destructor raw_ty
+    in
+    Some mode, Some (polarity, shape), raw_ty
+  | Unresolved raw_ty -> None, None, raw_ty
   | Unmoded (polarity, ty) ->
     let shape, raw_ty = ty_to_raw_ty ty tydef_env in
-    Some polarity, None, Some shape, raw_ty
+    None, Some (polarity, shape), raw_ty
   | Abstract _ -> failwith "tyu_to_raw_ty: cannot convert abstract type to raw type"
 ;;
 
 let rec tyu_equal (tyu1 : Syntax.Ast.ty_use) (tyu2 : Syntax.Ast.ty_use) tydef_env : bool =
   match tyu1, tyu2 with
-  | Polarised (pol1, (mode1, ty1)), Polarised (pol2, (mode2, ty2)) ->
-    pol1 = pol2 && mode1 = mode2 && ty_equal ty1 ty2 tydef_env
   | Abstract { negated = neg1; name = name1 }, Abstract { negated = neg2; name = name2 }
     -> neg1 = neg2 && name1 = name2
   | Abstract _, _ | _, Abstract _ -> false
-  | Unresolved raw_ty1, Unresolved raw_ty2 -> raw_ty_equal raw_ty1 raw_ty2 tydef_env
-  | Polarised (polarity, (_, ty)), Unresolved raw_ty
-  | Unresolved raw_ty, Polarised (polarity, (_, ty)) ->
-    let chirality, raw_ty2 = ty_to_raw_ty ty tydef_env in
-    (match polarity, chirality with
-     | Plus, Data | Minus, Codata -> raw_ty_equal raw_ty raw_ty2 tydef_env
-     | Plus, Codata | Minus, Data -> raw_ty_equal (Destructor raw_ty) raw_ty2 tydef_env)
-  | _ -> failwith "TODO"
+  | _ ->
+    let mode1, polarity_chirality1, raw_ty1 = tyu_to_raw_ty tyu1 tydef_env in
+    let mode2, polarity_chirality2, raw_ty2 = tyu_to_raw_ty tyu2 tydef_env in
+    (match mode1, mode2 with
+     | Some m1, Some m2 when m1 <> m2 -> false
+     | _ ->
+       (match polarity_chirality1, polarity_chirality2 with
+        | Some (pol1, shape1), Some (pol2, shape2) when pol1 <> pol2 || shape1 <> shape2
+          -> false
+        | _ -> raw_ty_equal raw_ty1 raw_ty2 tydef_env))
 
 and ty_equal (ty1 : Syntax.Ast.ty) (ty2 : Syntax.Ast.ty) tydef_env : bool =
   let shape1, raw_ty1 = ty_to_raw_ty ty1 tydef_env in
