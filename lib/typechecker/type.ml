@@ -232,3 +232,21 @@ let args_of_namespaced_variant (constr : name) (ty : ty) : Syntax.Ast.ty_use lis
     failwith
       "TODO: namespacing resolution - namespace semantics have not been figured out"
 ;;
+
+(* TODO: the granularity of this tyu upgrading system can be improved *)
+let most_specific_tyu (tyu1 : ty_use) (tyu2 : ty_use) (tydef_env : tydef_env) : ty_use =
+  if not (tyu_equal tyu1 tyu2 tydef_env)
+  then failwith "most_specific_tyu: types are not equal, cannot determine most specific"
+  else (
+    match tyu1, tyu2 with
+    | Abstract _, Abstract _ -> tyu1 (* tyu_equal ensures that both are equal *)
+    | Abstract _, tyu | tyu, Abstract _ -> tyu
+    | (Polarised (_, (Some _, _)) as tyu), Polarised _
+    | Polarised _, (Polarised (_, (Some _, _)) as tyu) ->
+      tyu (* A polarised type with a known mode is more specific than one without *)
+    | (Polarised _ as tyu), _ | _, (Polarised _ as tyu) ->
+      tyu (* Polarised is more specific than Unmoded or Unresolved *)
+    | Unmoded _, Unmoded _ -> tyu1 (* both are equally specific *)
+    | Unmoded _, _ | _, Unmoded _ -> tyu1 (* Unmoded is more specific than Unresolved *)
+    | Unresolved _, Unresolved _ -> tyu1 (* both are equally specific *))
+;;
