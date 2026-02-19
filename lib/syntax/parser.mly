@@ -91,7 +91,12 @@ binder:
   | typed_binder                                        { $1 }
   | untyped_binder                                      { $1 }
 
-typed_binder: name=untyped_binder COLON ty=type_use     { { name with typ = Some ty } }
+typed_binder:
+  | typed_binder_aux                                    { $1 }
+  | LPAREN typed_binder_aux RPAREN                      { $2 }
+
+typed_binder_aux: 
+  | name=untyped_binder COLON ty=type_use               { { name with typ = Some ty } }
 
 untyped_binder: 
   | name=IDENT                                          { { name = Var name; typ = None } }
@@ -335,6 +340,9 @@ tuple_pattern:
   | LPAREN p=binder COMMA RPAREN
       { Tup [p] }
   | LPAREN p=binder COMMA ps=separated_nonempty_list(COMMA, binder) RPAREN
+      { Tup (p :: ps) }
+    (* sugar: we don't need the parentheses if we have at least two components, since the comma is unambiguous *)
+  | p=binder COMMA ps=separated_nonempty_list(COMMA, binder) 
       { Tup (p :: ps) }
 
 cons_term:
