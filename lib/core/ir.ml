@@ -24,6 +24,7 @@ type form =
       { form_name : name
       ; form_args : name list
       }
+  | Numeral of int64
 
 type term =
   | NeedsForce of term

@@ -42,6 +42,7 @@ let form_matches_value (form : form) (v : value) : bool =
   | Tuple form_names, VTuple v_list -> List.length form_names = List.length v_list
   | Constr { form_name; form_args }, VConstruction (cons_name, cons_args) ->
     form_name = cons_name && List.length form_args = List.length cons_args
+  | Numeral n, VNum m -> n = m
   | _, _ -> false
 ;;
 
@@ -68,7 +69,8 @@ let pattern_match (forms : (form * 'a) list) (value : value)
            | VConstruction (_cons_name, cons_args) ->
              let bindings = List.combine names cons_args in
              Some (bindings, cmd)
-           | _ -> None))
+           | _ -> None)
+        | Numeral _ -> Some ([], cmd))
       else aux rest
   in
   aux forms

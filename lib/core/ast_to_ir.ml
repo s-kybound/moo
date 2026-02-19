@@ -34,28 +34,30 @@ let gensym =
     name
 ;;
 
+let ast_binder_to_ir_binder (b : Ast.binder) : Ir.name =
+  match b with
+  | Var name -> name
+  | Wildcard -> gensym "wildcard"
+;;
+
 let ast_to_ir_form (f : Ast.pattern) : Ir.form =
-  let pat_binder_to_name pb =
-    match pb with
-    | Ast.Var { name; typ = _ } -> name
-    | Ast.Wildcard -> gensym "wildcard"
-  in
   match f with
-  | Ast.Pat_binder pb -> Ir.Binder (pat_binder_to_name pb)
+  | Ast.Numeral n -> Ir.Numeral n
+  | Ast.Binder pb -> Ir.Binder (ast_binder_to_ir_binder pb)
   | Ast.Tup names ->
-    let names = List.map pat_binder_to_name names in
+    let names = List.map ast_binder_to_ir_binder names in
     Ir.Tuple names
   | Ast.Constr { pat_name; pat_args } ->
     Ir.Constr
       { form_name = ast_name_to_ir_name pat_name
-      ; form_args = List.map pat_binder_to_name pat_args
+      ; form_args = List.map ast_binder_to_ir_binder pat_args
       }
 ;;
 
 (* invariant: terms should be annotated with their types *)
 let rec ast_to_ir_command (c : Ast.command) : Ir.command =
   match c with
-  | Ast.Core { l_term = Ast.Ann (l_term, Polarised (pol, (Some mode, _))); r_term } ->
+  (* | Ast.Core { l_term = Ast.Ann (l_term, Polarised (pol, (Some mode, _))); r_term } ->
     (match pol, mode with
      (* left term eagerly captures right term *)
      | Plus, By_value | Minus, By_name ->
@@ -64,8 +66,11 @@ let rec ast_to_ir_command (c : Ast.command) : Ir.command =
      (* right term eagerly captures left term *)
      | Plus, By_name | Minus, By_value ->
        Ir.Core
-         { focus_term = ast_to_ir_term r_term; unfocus_term = ast_to_ir_term l_term })
-  | Ast.Core _ -> failwith "Only annotated left terms are supported in Core commands"
+         { focus_term = ast_to_ir_term r_term; unfocus_term = ast_to_ir_term l_term }) *)
+  | Ast.Core _ ->
+    failwith
+      "need to convert to the typechecked AST first to get the annotations for Core \
+       commands"
   | Ast.Arith (Ast.Unop { op; in_term; out_term }) ->
     Ir.Arith
       (Ir.Unop
@@ -85,7 +90,8 @@ let rec ast_to_ir_command (c : Ast.command) : Ir.command =
 
 and ast_to_ir_term (t : Ast.term) : Ir.term =
   match t with
-  | Ast.Mu ({ name; typ = _ }, command) -> Ir.Mu (name, ast_to_ir_command command)
+  | Ast.Mu (name, command) ->
+    Ir.Mu (ast_binder_to_ir_binder name, ast_to_ir_command command)
   | Ast.Variable name -> Ir.Variable (ast_name_to_ir_name name)
   | Ast.Construction { cons_name; cons_args } ->
     Ir.Construction
@@ -104,7 +110,7 @@ and ast_to_ir_term (t : Ast.term) : Ir.term =
     in
     Ir.Matcher ir_branches
   | Ast.Num n -> Ir.Num n
-  | Ast.Rec ({ name; typ = _ }, term) -> Ir.Rec (name, ast_to_ir_term term)
+  | Ast.Rec (name, term) -> Ir.Rec (ast_binder_to_ir_binder name, ast_to_ir_term term)
   | Ast.Arr terms -> Ir.Arr (List.map ast_to_ir_term terms)
   | Ast.Ann (term, _) -> ast_to_ir_term term
   | Ast.Done -> Ir.Done
@@ -115,8 +121,7 @@ let empty_ast_command : Ast.command =
     { l_term =
         Ast.Ann
           ( Ast.Done
-          , Ast.Polarised
-              (Ast.Plus, (Some Ast.By_value, Ast.Raw (Ast.Data, Ast.Product []))) )
+          , Ast.Polarised (Ast.Plus, Ast.Raw (Ast.By_value, Ast.Data, Ast.Product [])) )
     ; r_term = Ast.Tuple []
     }
 ;;
