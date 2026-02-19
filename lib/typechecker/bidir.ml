@@ -374,7 +374,7 @@ let rec synthesize (knowledge : context) (expr : tycheck_term) (tydef_env : tyde
     let tyu = Type.negate_tyu (Type.new_constructor_tyu (Product [])) in
     annotate_with tyu, tyu, knowledge
   | TTuple [] ->
-    let tyu = Type.negate_tyu (Type.new_constructor_tyu (Product [])) in
+    let tyu = Type.new_constructor_tyu (Product []) in
     annotate_with tyu, tyu, knowledge
   | TTuple terms ->
     let terms, typs, new_knowledge =
