@@ -210,8 +210,8 @@ let rec tyu_equal (tyu1 : Syntax.Ast.ty_use) (tyu2 : Syntax.Ast.ty_use) tydef_en
       ->
       let mode, polarity, chirality, raw_ty2 = tyu_to_raw_ty resolved_tyu tydef_env in
       (match polarity, chirality with
-       | Plus, Codata | Minus, Data -> false
-       | Plus, Data | Minus, Codata ->
+       | Plus, Data | Minus, Codata -> false
+       | Plus, Codata | Minus, Data ->
          if not (raw_ty_equal raw_ty1 raw_ty2 tydef_env)
          then false
          else state_equal_to_mode_shape state mode chirality)
