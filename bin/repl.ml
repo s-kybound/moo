@@ -76,7 +76,7 @@ let parse_to_core_ast ?k input =
 
 let eval_module input =
   try
-    let tychecked = Typechecker.Bidir.tycheck_program input in
+    let tychecked, _ = Typechecker.Bidir.tycheck_program input in
     let converted =
       Core.Tycheck_to_ir.tycheck_command_of_module tychecked
       |> Core.Tycheck_to_ir.tycheck_to_ir_command
@@ -122,7 +122,7 @@ let step_module input =
     | Error exn :: _ -> print_error (Printexc.to_string exn)
   in
   try
-    let tychecked = Typechecker.Bidir.tycheck_program input in
+    let tychecked, _ = Typechecker.Bidir.tycheck_program input in
     let converted =
       Core.Tycheck_to_ir.tycheck_command_of_module tychecked
       |> Core.Tycheck_to_ir.tycheck_to_ir_command

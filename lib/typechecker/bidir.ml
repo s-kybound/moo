@@ -830,8 +830,10 @@ and tycheck_module
     (new_top_level_items, Some newcmd), command_knowledge, after_defs_tydef_env
 ;;
 
-let tycheck_program (modu : Ast.module_) : tycheck_module =
+let tycheck_program (modu : Ast.module_) : tycheck_module * tydef_env =
   let modu = tycheck_module_of_ast modu in
-  let out, _, _ = tycheck_module IMap.empty modu Top in
-  out
+  let out, _, env = tycheck_module IMap.empty modu Top in
+  out, env
 ;;
+
+(* TODO: make the resolver *)
