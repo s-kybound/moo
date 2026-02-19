@@ -83,6 +83,29 @@ let ty_to_raw_ty (ty : ty) (tydef_env : tydef_env) : mode * shape * raw_ty =
   aux ty
 ;;
 
+let rec tyu_is_resolved (tyu : ty_use) : bool =
+  match tyu with
+  | Polarised (_, ty) -> ty_is_resolved ty
+  | Abstract _ -> false
+  | Constructor (state, raw_ty) | Destructor (state, raw_ty) ->
+    !(state.mode) <> None && !(state.shape) <> None && raw_ty_is_resolved raw_ty
+
+and ty_is_resolved (ty : ty) : bool =
+  match ty with
+  | Named (_, ty_uses) -> List.for_all tyu_is_resolved ty_uses
+  | Raw (_, _, raw_ty) -> raw_ty_is_resolved raw_ty
+
+and raw_ty_is_resolved (raw_ty : raw_ty) : bool =
+  match raw_ty with
+  | Raw64 -> true
+  | Product ty_uses -> List.for_all tyu_is_resolved ty_uses
+  | Array ty_use -> tyu_is_resolved ty_use
+  | Variant variants ->
+    List.for_all
+      (fun { constr_args; _ } -> List.for_all tyu_is_resolved constr_args)
+      variants
+;;
+
 let tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env)
   : mode * polarity * shape * raw_ty
   =
@@ -91,7 +114,13 @@ let tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env)
     let mode, shape, raw_ty = ty_to_raw_ty ty tydef_env in
     mode, polarity, shape, raw_ty
   | Abstract _ -> assert false (* should not be called on abstract types *)
-  | Constructor _ | Destructor _ -> failwith "TODO: only allow when tyu is fully resolved"
+  | Constructor (state, raw_ty) | Destructor (state, raw_ty) ->
+    if not (tyu_is_resolved tyu)
+    then assert false (* should only be called on resolved tyu's *)
+    else (
+      match !(state.mode), !(state.shape) with
+      | Some mode, Some shape -> mode, Plus, shape, raw_ty
+      | _ -> assert false)
 ;;
 
 let is_constructor_tyu (tyu : ty_use) (tydef_env : tydef_env) : bool =
@@ -108,12 +137,6 @@ let is_constructor_tyu (tyu : ty_use) (tydef_env : tydef_env) : bool =
 
 let new_constructor_tyu raw : ty_use =
   Constructor ({ mode = ref None; shape = ref None }, raw)
-;;
-
-let new_unmoded_constructor_tyu raw shape : ty_use =
-  let state = { mode = ref None; shape = ref shape } in
-  state.mode := Some By_value;
-  Constructor (state, raw)
 ;;
 
 (* compare both the modes and shapes. if all is compatible, collapse both states into the most informational state *)
@@ -152,42 +175,50 @@ let state_equal_to_mode_shape (state : unresolved_tyu_state) (mode : mode) (shap
 ;;
 
 let rec tyu_equal (tyu1 : Syntax.Ast.ty_use) (tyu2 : Syntax.Ast.ty_use) tydef_env : bool =
-  match tyu1, tyu2 with
-  | Abstract { negated = neg1; name = name1 }, Abstract { negated = neg2; name = name2 }
-    -> neg1 = neg2 && name1 = name2
-  | Abstract _, _ | _, Abstract _ -> false
-  | Constructor (state1, raw_ty1), Constructor (state2, raw_ty2)
-  | Destructor (state1, raw_ty1), Destructor (state2, raw_ty2) ->
-    (* TODO: attempt promotion as much as possible, if not fail *)
-    if not (raw_ty_equal raw_ty1 raw_ty2 tydef_env)
-    then false
-    else state_equal state1 state2
-  | Constructor _, Destructor _ | Destructor _, Constructor _ ->
-    false (* should never be equal *)
-  | Constructor (state, raw_ty1), resolved_tyu | resolved_tyu, Constructor (state, raw_ty1)
-    ->
-    let mode, polarity, chirality, raw_ty2 = tyu_to_raw_ty resolved_tyu tydef_env in
-    (match polarity, chirality with
-     | Plus, Codata | Minus, Data -> false
-     | Plus, Data | Minus, Codata ->
-       if not (raw_ty_equal raw_ty1 raw_ty2 tydef_env)
-       then false
-       else state_equal_to_mode_shape state mode chirality)
-  | Destructor (state, raw_ty1), resolved_tyu | resolved_tyu, Destructor (state, raw_ty1)
-    ->
-    let mode, polarity, chirality, raw_ty2 = tyu_to_raw_ty resolved_tyu tydef_env in
-    (match polarity, chirality with
-     | Plus, Codata | Minus, Data -> false
-     | Plus, Data | Minus, Codata ->
-       if not (raw_ty_equal raw_ty1 raw_ty2 tydef_env)
-       then false
-       else state_equal_to_mode_shape state mode chirality)
-  | _ ->
+  let compare_resolved tyu1 tyu2 =
     let mode1, polarity1, chirality1, raw_ty1 = tyu_to_raw_ty tyu1 tydef_env in
     let mode2, polarity2, chirality2, raw_ty2 = tyu_to_raw_ty tyu2 tydef_env in
     if mode1 <> mode2 || polarity1 <> polarity2 || chirality1 <> chirality2
     then false
     else raw_ty_equal raw_ty1 raw_ty2 tydef_env
+  in
+  if tyu_is_resolved tyu1 && tyu_is_resolved tyu2
+  then compare_resolved tyu1 tyu2
+  else (
+    match tyu1, tyu2 with
+    | Abstract { negated = neg1; name = name1 }, Abstract { negated = neg2; name = name2 }
+      -> neg1 = neg2 && name1 = name2
+    | Abstract _, _ | _, Abstract _ -> false
+    | Constructor (state1, raw_ty1), Constructor (state2, raw_ty2)
+    | Destructor (state1, raw_ty1), Destructor (state2, raw_ty2) ->
+      (* TODO: attempt promotion as much as possible, if not fail *)
+      if not (raw_ty_equal raw_ty1 raw_ty2 tydef_env)
+      then false
+      else state_equal state1 state2
+    | Constructor _, Destructor _ | Destructor _, Constructor _ ->
+      false (* should never be equal *)
+    | Constructor (state, raw_ty1), resolved_tyu
+    | resolved_tyu, Constructor (state, raw_ty1) ->
+      let mode, polarity, chirality, raw_ty2 = tyu_to_raw_ty resolved_tyu tydef_env in
+      (match polarity, chirality with
+       | Plus, Codata | Minus, Data -> false
+       | Plus, Data | Minus, Codata ->
+         if not (raw_ty_equal raw_ty1 raw_ty2 tydef_env)
+         then false
+         else state_equal_to_mode_shape state mode chirality)
+    | Destructor (state, raw_ty1), resolved_tyu | resolved_tyu, Destructor (state, raw_ty1)
+      ->
+      let mode, polarity, chirality, raw_ty2 = tyu_to_raw_ty resolved_tyu tydef_env in
+      (match polarity, chirality with
+       | Plus, Codata | Minus, Data -> false
+       | Plus, Data | Minus, Codata ->
+         if not (raw_ty_equal raw_ty1 raw_ty2 tydef_env)
+         then false
+         else state_equal_to_mode_shape state mode chirality)
+    | _ ->
+      if (not (tyu_is_resolved tyu1)) || not (tyu_is_resolved tyu2)
+      then assert false (* everything here should be resolved *)
+      else compare_resolved tyu1 tyu2)
 
 and ty_equal (ty1 : Syntax.Ast.ty) (ty2 : Syntax.Ast.ty) tydef_env : bool =
   let mode1, shape1, raw_ty1 = ty_to_raw_ty ty1 tydef_env in

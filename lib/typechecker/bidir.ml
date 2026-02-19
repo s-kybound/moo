@@ -347,15 +347,19 @@ exception TypeMismatch of Ast.ty_use * Ast.ty_use * string
 exception TypeError of string
 exception Underspecified of string
 
+let annotate term tyu = TAnn (term, tyu)
+
 (* Workflow - synthesize takes in a set of invariants, and determines the type of an expression.
- *            it returns the demands in order to have that expression have that type *)
+ *            it returns the demands in order to have that expression have that type 
+ *            it also returns the annotated terms themselves *)
 let rec synthesize (knowledge : context) (expr : tycheck_term) (tydef_env : tydef_env)
-  : Syntax.Ast.ty_use * context
+  : tycheck_term * Syntax.Ast.ty_use * context
   =
+  let annotate_with = annotate expr in
   match expr with
   | TVariable tvar ->
     (match IMap.find_opt tvar.unique_id knowledge with
-     | Some ty_use -> ty_use, knowledge
+     | Some ty_use -> annotate_with ty_use, ty_use, knowledge
      | None ->
        let msg =
          Printf.sprintf
@@ -363,61 +367,75 @@ let rec synthesize (knowledge : context) (expr : tycheck_term) (tydef_env : tyde
            (Syntax.Pretty.show_name tvar.original_name)
        in
        raise (Underspecified msg))
-  | TNum _ -> Type.new_constructor_tyu Raw64, knowledge
-  | TDone -> Type.negate_tyu (Type.new_constructor_tyu (Product [])), knowledge
-  | TTuple [] -> Type.new_constructor_tyu (Product []), knowledge
+  | TNum _ ->
+    let tyu = Type.new_constructor_tyu Raw64 in
+    annotate_with tyu, tyu, knowledge
+  | TDone ->
+    let tyu = Type.negate_tyu (Type.new_constructor_tyu (Product [])) in
+    annotate_with tyu, tyu, knowledge
+  | TTuple [] ->
+    let tyu = Type.negate_tyu (Type.new_constructor_tyu (Product [])) in
+    annotate_with tyu, tyu, knowledge
   | TTuple terms ->
-    let terms, new_knowledge =
+    let terms, typs, new_knowledge =
       List.fold_left
-        (fun (tys_acc, ctx_acc) term ->
-           let ty_use, term_ctx = synthesize ctx_acc term tydef_env in
-           tys_acc @ [ ty_use ], merge_contexts ctx_acc term_ctx tydef_env)
-        ([], knowledge)
+        (fun (terms_acc, tys_acc, ctx_acc) term ->
+           let term, ty_use, term_ctx = synthesize ctx_acc term tydef_env in
+           ( terms_acc @ [ term ]
+           , tys_acc @ [ ty_use ]
+           , merge_contexts ctx_acc term_ctx tydef_env ))
+        ([], [], knowledge)
         terms
     in
-    Type.new_constructor_tyu (Product terms), new_knowledge
+    let tyu = Type.new_constructor_tyu (Product typs) in
+    annotate (TTuple terms) tyu, tyu, new_knowledge
   | TAnn (tterm, ty_use) ->
-    let demands = check knowledge tterm ty_use tydef_env in
-    ty_use, demands
+    let _, demands = check knowledge tterm ty_use tydef_env in
+    expr, ty_use, demands
   | TRec (tbinder, tterm) ->
-    let inferred_ty, demands = synthesize knowledge tterm tydef_env in
+    let _, inferred_ty, demands = synthesize knowledge tterm tydef_env in
     let relevant_ids = tbinder.unique_ids in
     (match type_of_usages relevant_ids demands tydef_env with
      | Ok None -> raise (Underspecified "synthesize: no demands found for rec binder")
      | Error msg -> raise (TypeError msg)
-     | Ok (Some ty_use) -> most_specific_tyu inferred_ty ty_use tydef_env, demands)
+     | Ok (Some ty_use) ->
+       let tyu = most_specific_tyu inferred_ty ty_use tydef_env in
+       annotate_with tyu, tyu, demands)
   | TMu (tbinder, tcommand) ->
-    let new_knowledge = typecheck_command knowledge tcommand tydef_env in
+    let tcommand, new_knowledge = typecheck_command knowledge tcommand tydef_env in
     (* lookup the type of the tbinder in the demands *)
     let relevant_ids = tbinder.unique_ids in
     (* collect the demands with the relevant ids *)
     (match type_of_usages relevant_ids new_knowledge tydef_env with
      | Ok None -> raise (Underspecified "synthesize: no demands found for mu binder")
      | Error msg -> raise (TypeError msg)
-     | Ok (Some ty_use) -> Type.negate_tyu ty_use, new_knowledge)
+     | Ok (Some ty_use) ->
+       let tyu = Type.negate_tyu ty_use in
+       let expr = TMu (tbinder, tcommand) in
+       annotate expr tyu, tyu, new_knowledge)
   | TMatcher branches ->
-    let most_specific_type, new_knowledge =
+    let new_branches, most_specific_type, new_knowledge =
       List.fold_left
-        (fun (most_specific_type, demands) (pattern, command) ->
-           let tyu_of_pattern_opt, new_knowledge =
+        (fun (branches_acc, most_specific_type, demands) (pattern, command) ->
+           let new_command, tyu_of_pattern_opt, new_knowledge =
              match pattern with
              | TNumeral _ ->
-               ( Some (Type.negate_tyu (Type.new_constructor_tyu Raw64))
-               , typecheck_command demands command tydef_env )
+               let cmd, command_knowledge = typecheck_command demands command tydef_env in
+               ( cmd
+               , Some (Type.negate_tyu (Type.new_constructor_tyu Raw64))
+               , command_knowledge )
              | TPatVariable { unique_ids; _ } ->
-               let command_knowledge = typecheck_command demands command tydef_env in
+               let cmd, command_knowledge = typecheck_command demands command tydef_env in
                (match type_of_usages unique_ids command_knowledge tydef_env with
                 | Error msg -> raise (TypeError msg)
-                | Ok None -> None, merge_contexts demands command_knowledge tydef_env
+                | Ok None -> cmd, None, command_knowledge
                 | Ok (Some result) ->
                   (* make sure that the variable is a constructed item *)
                   if not (Type.is_constructor_tyu result tydef_env)
                   then raise (TypeError "variable is not a constructed item")
-                  else
-                    ( Some (Type.negate_tyu result)
-                    , merge_contexts demands command_knowledge tydef_env ))
+                  else cmd, Some (Type.negate_tyu result), command_knowledge)
              | TTup subpats ->
-               let command_knowledge = typecheck_command demands command tydef_env in
+               let cmd, command_knowledge = typecheck_command demands command tydef_env in
                let unique_ids = List.map (fun subpat -> subpat.unique_ids) subpats in
                let types_of_binders =
                  List.map
@@ -428,9 +446,10 @@ let rec synthesize (knowledge : context) (expr : tycheck_term) (tydef_env : tyde
                       | Ok None -> failwith "TODO: need to implement typeholes")
                    unique_ids
                in
-               ( Some
+               ( cmd
+               , Some
                    (Type.negate_tyu (Type.new_constructor_tyu (Product types_of_binders)))
-               , merge_contexts demands command_knowledge tydef_env )
+               , command_knowledge )
              | TConstr { tpat_name; tpat_args } ->
                (match
                   type_of_namespaced_constructor
@@ -448,7 +467,9 @@ let rec synthesize (knowledge : context) (expr : tycheck_term) (tydef_env : tyde
                   raise (TypeError msg)
                 | Some (_ty_name, ty, polarity) ->
                   (* TODO - abstract type inference *)
-                  let command_knowledge = typecheck_command demands command tydef_env in
+                  let cmd, command_knowledge =
+                    typecheck_command demands command tydef_env
+                  in
                   let unique_ids =
                     List.map (fun pat_arg -> pat_arg.unique_ids) tpat_args
                   in
@@ -496,12 +517,13 @@ let rec synthesize (knowledge : context) (expr : tycheck_term) (tydef_env : tyde
                     raise (TypeError msg))
                   else
                     (* we have the polarity and the type. output it. *)
-                    ( Some (Polarised (polarity, ty))
-                    , merge_contexts demands command_knowledge tydef_env ))
+                    cmd, Some (Polarised (polarity, ty)), command_knowledge)
            in
            match most_specific_type, tyu_of_pattern_opt with
            | continue, None | None, continue ->
-             continue, merge_contexts demands new_knowledge tydef_env
+             ( (pattern, new_command) :: branches_acc
+             , continue
+             , merge_contexts demands new_knowledge tydef_env )
            | Some most_specific, Some new_ty ->
              if not (tyu_equal most_specific new_ty tydef_env)
              then (
@@ -513,14 +535,17 @@ let rec synthesize (knowledge : context) (expr : tycheck_term) (tydef_env : tyde
                in
                raise (TypeError msg))
              else
-               ( Some (Type.most_specific_tyu most_specific new_ty tydef_env)
+               ( (pattern, new_command) :: branches_acc
+               , Some (Type.most_specific_tyu most_specific new_ty tydef_env)
                , merge_contexts demands new_knowledge tydef_env ))
-        (None, knowledge)
+        ([], None, knowledge)
         branches
     in
     (match most_specific_type with
      | None -> assert false
-     | Some tyu -> tyu, new_knowledge)
+     | Some tyu ->
+       let expr = TMatcher (List.rev new_branches) in
+       annotate expr tyu, tyu, new_knowledge)
   | TConstruction { tcons_name; tcons_args } ->
     let typ =
       type_of_namespaced_constructor tcons_name (List.length tcons_args) tydef_env
@@ -537,31 +562,35 @@ let rec synthesize (knowledge : context) (expr : tycheck_term) (tydef_env : tyde
      | Some (_ty_name, ty, polarity) ->
        (* TODO - abstract type inference *)
        let tyu = Ast.Polarised (polarity, ty) in
-       tyu, check knowledge expr tyu tydef_env)
+       let _, new_knowledge = check knowledge expr tyu tydef_env in
+       annotate_with tyu, tyu, new_knowledge)
   | TArr terms ->
     (* ensure that each term is ty_equal with the last, and return the most
      * specific term *)
-    let most_specific_term, total_knowledge =
+    let new_terms, most_specific_term, total_knowledge =
       List.fold_left
-        (fun (ty_acc, ctx_acc) term ->
-           let ty_use, term_ctx = synthesize ctx_acc term tydef_env in
+        (fun (terms_acc, ty_acc, ctx_acc) term ->
+           let t, ty_use, term_ctx = synthesize ctx_acc term tydef_env in
            match ty_acc with
-           | None -> Some ty_use, merge_contexts ctx_acc term_ctx tydef_env
+           | None ->
+             t :: terms_acc, Some ty_use, merge_contexts ctx_acc term_ctx tydef_env
            | Some ty_use_acc ->
              if not (tyu_equal ty_use_acc ty_use tydef_env)
              then
                raise
                  (TypeMismatch
                     (ty_use_acc, ty_use, "synthesize: TArr terms have mismatched types"))
-             else ty_acc, merge_contexts ctx_acc term_ctx tydef_env)
-        (None, knowledge)
+             else t :: terms_acc, Some ty_use, merge_contexts ctx_acc term_ctx tydef_env)
+        ([], None, knowledge)
         terms
     in
     (match most_specific_term with
      | None ->
        (* Ast.Unresolved (Array Ast.Weak), []*) failwith "synthesize: TArr with no terms"
      | Some most_specific_term ->
-       Type.new_constructor_tyu (Array most_specific_term), total_knowledge)
+       let expr = TArr (List.rev new_terms) in
+       let tyu = Type.new_constructor_tyu (Array most_specific_term) in
+       annotate expr tyu, tyu, total_knowledge)
 
 (* workflow - given demands, check an expression with a type and output discoveries *)
 
@@ -570,19 +599,21 @@ and check
       (expr : tycheck_term)
       (expected_type : Syntax.Ast.ty_use)
       (tydef_env : tydef_env)
-  : context
+  : tycheck_term * context
   =
+  let annotate_with_tyu expr = annotate expr expected_type in
   match expr with
-  | TVariable tvar -> IMap.add tvar.unique_id expected_type knowledge
+  | TVariable tvar ->
+    annotate_with_tyu expr, IMap.add tvar.unique_id expected_type knowledge
   | TNum _ ->
-    let tyu, knowledge = synthesize knowledge expr tydef_env in
+    let _, tyu, knowledge = synthesize knowledge expr tydef_env in
     if tyu_equal expected_type tyu tydef_env
-    then knowledge
+    then annotate_with_tyu expr, knowledge
     else raise (TypeMismatch (expected_type, tyu, "check: TNum expected type mismatch"))
   | TDone ->
-    let tyu, knowledge = synthesize knowledge expr tydef_env in
+    let _, tyu, knowledge = synthesize knowledge expr tydef_env in
     if tyu_equal expected_type tyu tydef_env
-    then knowledge
+    then annotate_with_tyu expr, knowledge
     else raise (TypeMismatch (expected_type, tyu, "check: TDone expected type mismatch"))
   | TMu (tbinder, tcommand) ->
     let tbinder_ty = Type.negate_tyu expected_type in
@@ -593,11 +624,13 @@ and check
         tbinder.unique_ids
     in
     let updated_knowledge = merge_contexts knowledge new_demands tydef_env in
-    typecheck_command updated_knowledge tcommand tydef_env
+    let cmd, knowledge = typecheck_command updated_knowledge tcommand tydef_env in
+    let expr = TMu (tbinder, cmd) in
+    annotate expr expected_type, knowledge
   | TTuple [] ->
-    let tyu, knowledge = synthesize knowledge expr tydef_env in
+    let _, tyu, knowledge = synthesize knowledge expr tydef_env in
     if tyu_equal expected_type tyu tydef_env
-    then knowledge
+    then annotate_with_tyu expr, knowledge
     else
       raise (TypeMismatch (expected_type, tyu, "check: TTuple [] expected type mismatch"))
   | TTuple terms ->
@@ -622,14 +655,18 @@ and check
                ( expected_type
                , Type.new_constructor_tyu (Product expected_tys)
                , "check: TTuple arity mismatch" ))
-        else
-          List.fold_left2
-            (fun ctx_acc term expected_ty ->
-               let term_demands = check ctx_acc term expected_ty tydef_env in
-               merge_contexts ctx_acc term_demands tydef_env)
-            knowledge
-            terms
-            expected_tys
+        else (
+          let new_terms, knowledge =
+            List.fold_left2
+              (fun (terms, ctx_acc) term expected_ty ->
+                 let t, term_demands = check ctx_acc term expected_ty tydef_env in
+                 t :: terms, merge_contexts ctx_acc term_demands tydef_env)
+              ([], knowledge)
+              terms
+              expected_tys
+          in
+          let expr = TTuple (List.rev new_terms) in
+          annotate expr expected_type, knowledge)
       | _ ->
         (* TODO: a hole tyu *)
         raise
@@ -650,13 +687,16 @@ and check
       List.fold_left (fun acc (id, ty) -> IMap.add id ty acc) knowledge new_demands
     in
     check updated_knowledge tterm expected_type tydef_env
+  (* TODO: i am pretty sure this should be check *)
   | TMatcher _ ->
-    (* placeholder implementation for matcher *)
-    failwith "check: matcher not implemented"
-  | TConstruction { tcons_name = _; tcons_args = _ } ->
-    let ty_use, discoveries = synthesize knowledge expr tydef_env in
+    let t, ty_use, discoveries = synthesize knowledge expr tydef_env in
     if tyu_equal expected_type ty_use tydef_env
-    then discoveries
+    then t, discoveries
+    else raise (TypeMismatch (expected_type, ty_use, "check: TMatcher type mismatch"))
+  | TConstruction { tcons_name = _; tcons_args = _ } ->
+    let t, ty_use, discoveries = synthesize knowledge expr tydef_env in
+    if tyu_equal expected_type ty_use tydef_env
+    then t, discoveries
     else
       raise (TypeMismatch (expected_type, ty_use, "check: TConstruction type mismatch"))
   | TArr _terms ->
@@ -667,13 +707,13 @@ and typecheck_command
       (knowledge : context)
       (command : tycheck_command)
       (tydef_env : tydef_env)
-  : context
+  : tycheck_command * context
   =
   let typecheck_command_aux l_term r_term =
-    let l_ty_use, l_knowledge = synthesize knowledge l_term tydef_env in
+    let tl_term, l_ty_use, l_knowledge = synthesize knowledge l_term tydef_env in
     let r_ty_use = Type.negate_tyu l_ty_use in
-    let final_knowledge = check l_knowledge r_term r_ty_use tydef_env in
-    final_knowledge
+    let tr_term, final_knowledge = check l_knowledge r_term r_ty_use tydef_env in
+    TCore { tl_term; tr_term }, final_knowledge
   in
   match command with
   | TCore { tl_term; tr_term } ->
@@ -696,8 +736,8 @@ and typecheck_command
        in
        failwith msg
      | e -> raise e)
-  | TArith (TBop { top = _; tl_term; tr_term; tout_term }) ->
-    let out_ty_use, out_knowledge = synthesize knowledge tout_term tydef_env in
+  | TArith (TBop { top; tl_term; tr_term; tout_term }) ->
+    let tout_term, out_ty_use, out_knowledge = synthesize knowledge tout_term tydef_env in
     let in_ty_use = Type.negate_tyu out_ty_use in
     let expected_in_ty = Type.new_constructor_tyu Raw64 in
     if not (tyu_equal out_ty_use (Type.negate_tyu expected_in_ty) tydef_env)
@@ -708,11 +748,11 @@ and typecheck_command
            , out_ty_use
            , "typecheck_command: arithmetic binary operation expected raw64 output" ))
     else (
-      let left_knowledge = check out_knowledge tl_term in_ty_use tydef_env in
-      let right_knowledge = check left_knowledge tr_term in_ty_use tydef_env in
-      right_knowledge)
-  | TArith (TUnop { top = _; tin_term; tout_term }) ->
-    let out_ty_use, out_knowledge = synthesize knowledge tout_term tydef_env in
+      let tl_term, left_knowledge = check out_knowledge tl_term in_ty_use tydef_env in
+      let tr_term, right_knowledge = check left_knowledge tr_term in_ty_use tydef_env in
+      TArith (TBop { top; tl_term; tr_term; tout_term }), right_knowledge)
+  | TArith (TUnop { top; tin_term; tout_term }) ->
+    let tout_term, out_ty_use, out_knowledge = synthesize knowledge tout_term tydef_env in
     let in_ty_use = Type.negate_tyu out_ty_use in
     let expected_in_ty = Type.new_constructor_tyu Raw64 in
     if not (tyu_equal out_ty_use (Type.negate_tyu expected_in_ty) tydef_env)
@@ -723,72 +763,75 @@ and typecheck_command
            , out_ty_use
            , "typecheck_command: arithmetic unary operation expected raw64 output" ))
     else (
-      let in_knowledge = check out_knowledge tin_term in_ty_use tydef_env in
-      in_knowledge)
+      let tin_term, in_knowledge = check out_knowledge tin_term in_ty_use tydef_env in
+      TArith (TUnop { top; tin_term; tout_term }), in_knowledge)
   | TFork (cmd1, cmd2) ->
-    let ctx1 = typecheck_command knowledge cmd1 tydef_env in
-    let ctx2 = typecheck_command ctx1 cmd2 tydef_env in
-    ctx2
+    let cmd1, ctx1 = typecheck_command knowledge cmd1 tydef_env in
+    let cmd2, ctx2 = typecheck_command ctx1 cmd2 tydef_env in
+    TFork (cmd1, cmd2), ctx2
 ;;
 
 let rec tycheck_definition
           (knowledge : context)
           (def : tycheck_definition)
           (tydef_env : tydef_env)
-  : context * tydef_env
+  : tycheck_definition * context * tydef_env
   =
   match def with
   | TTermDef (tbinder, tterm) ->
-    let inferred_ty, synth_knowledge = synthesize knowledge tterm tydef_env in
+    let tterm, inferred_ty, synth_knowledge = synthesize knowledge tterm tydef_env in
     let new_knowledge =
       List.fold_left
         (fun acc id -> IMap.add id inferred_ty acc)
         synth_knowledge
         tbinder.unique_ids
     in
-    new_knowledge, tydef_env
+    TTermDef (tbinder, tterm), new_knowledge, tydef_env
   | TTypeDef (tbinder, ty) ->
     let new_tydef_env = TyFrame { parent = tydef_env; var = tbinder; ty } in
-    knowledge, new_tydef_env
-  | TModuleDef { tmod_name = _; tprogram } ->
+    TTypeDef (tbinder, ty), knowledge, new_tydef_env
+  | TModuleDef { tmod_name; tprogram } ->
     (* TODO: update outer tydef_env accessible space once Module namespacing is done *)
-    let new_insights, _ = tycheck_module knowledge tprogram tydef_env in
-    new_insights, tydef_env
+    let tprogram, new_insights, _ = tycheck_module knowledge tprogram tydef_env in
+    TModuleDef { tmod_name; tprogram }, new_insights, tydef_env
 
 and tycheck_module
       (knowledge : context)
       ((top_level_items, top_level_command) : tycheck_module)
       (tydef_env : tydef_env)
-  : context * tydef_env
+  : tycheck_module * context * tydef_env
   =
   let rec process_top_level_items
             (defs : tycheck_top_level_item list)
+            (defs_acc : tycheck_top_level_item list)
             (knowledge_acc : context)
             (tydef_env_acc : tydef_env)
-    : context * tydef_env
+    : tycheck_top_level_item list * context * tydef_env
     =
     match defs with
-    | [] -> knowledge_acc, tydef_env_acc
+    | [] -> List.rev defs_acc, knowledge_acc, tydef_env_acc
     | Def def :: rest ->
-      let new_knowledge, new_tydef_env =
+      let newdef, new_knowledge, new_tydef_env =
         tycheck_definition knowledge_acc def tydef_env_acc
       in
-      process_top_level_items rest new_knowledge new_tydef_env
-    | Open _ :: rest -> process_top_level_items rest knowledge_acc tydef_env_acc
+      process_top_level_items rest (Def newdef :: defs_acc) new_knowledge new_tydef_env
+    | Open o :: rest ->
+      process_top_level_items (Open o :: rest) defs_acc knowledge_acc tydef_env_acc
   in
-  let after_defs_knowledge, after_defs_tydef_env =
-    process_top_level_items top_level_items knowledge tydef_env
+  let new_top_level_items, after_defs_knowledge, after_defs_tydef_env =
+    process_top_level_items top_level_items [] knowledge tydef_env
   in
   match top_level_command with
-  | None -> after_defs_knowledge, after_defs_tydef_env
+  | None -> (new_top_level_items, None), after_defs_knowledge, after_defs_tydef_env
   | Some command ->
-    let command_knowledge =
+    let newcmd, command_knowledge =
       typecheck_command after_defs_knowledge command after_defs_tydef_env
     in
-    command_knowledge, after_defs_tydef_env
+    (new_top_level_items, Some newcmd), command_knowledge, after_defs_tydef_env
 ;;
 
-let tycheck_program (modu : Ast.module_) : unit =
+let tycheck_program (modu : Ast.module_) : tycheck_module =
   let modu = tycheck_module_of_ast modu in
-  tycheck_module IMap.empty modu Top |> ignore
+  let out, _, _ = tycheck_module IMap.empty modu Top in
+  out
 ;;
