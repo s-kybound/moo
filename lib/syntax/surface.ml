@@ -1,20 +1,44 @@
-include Surface
+type unop =
+  | Neg
+  | Not
 
-(* from shape, one can discover polarity *)
-type unresolved_tyu_state =
-  { mode : mode option ref
-  ; shape : shape option ref
-  }
+type bop =
+  | Add
+  | Sub
+  | Mul
+  | Div
+  | Mod
+  | And
+  | Or
+  | Xor
+  | Shl
+  | Shr
 
-and ty_use =
+type name =
+  | Base of string
+  | Namespaced of
+      { namespace : string
+      ; inner : name
+      }
+
+type polarity =
+  | Plus
+  | Minus
+
+type mode =
+  | By_value
+  | By_name
+
+type shape =
+  | Data
+  | Codata
+
+type ty_use =
   | Polarised of polarity * ty
   | Abstract of
       { negated : bool
       ; name : string
       }
-  (* for type inference *)
-  | Constructor of unresolved_tyu_state * raw_ty
-  | Destructor of unresolved_tyu_state * raw_ty
 
 and ty =
   | Named of name * ty_use list
@@ -31,12 +55,26 @@ and variant =
   ; constr_args : ty_use list
   }
 
-type binder =
+type kind_binder = string * string list
+
+type binder_name =
   | Var of string
   | Wildcard
 
+type binder =
+  { name : binder_name
+  ; typ : ty_use option
+  }
+
 type pattern =
   | Binder of binder
+  (* TODO: nested pattern matching for the future!
+    papers:
+    - "Compiling Pattern Matching to Good Decision Trees" by Luc Maranget
+    - "Optimizing Pattern Matching" by Fabrice Le Fessant, Luc Maranget
+    the most important thing is to find an efficient way to handle the switch-case-exit semantics
+    using the duality of our calculus.
+  *)
   | Tup of binder list
   | Constr of
       { pat_name : name
@@ -80,6 +118,13 @@ and arith_command =
       ; out_term : term
       }
 
+type module_open =
+  | Open of name
+  | Use of
+      { mod_name : name
+      ; use_name : string
+      }
+
 type definition =
   | TermDef of binder * term
   | TypeDef of kind_binder * ty
@@ -90,6 +135,10 @@ and module_def =
   ; program : module_
   }
 
+and 'a top_level_item =
+  | Open of module_open
+  | Def of 'a
+
 and module_ = definition top_level_item list * command option
 
 type sig_module = sig_definition top_level_item list
@@ -98,3 +147,8 @@ and sig_definition =
   | TypeSigDef of kind_binder * shape * ty option
   | TermSigDef of binder * ty_use
   | ModuleSigDef of module_sig_def
+
+and module_sig_def =
+  { name : string
+  ; interface : sig_module
+  }

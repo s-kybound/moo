@@ -1,18 +1,18 @@
 open Ast
 
-let rec show_name name =
+let rec show_name (name : name) =
   match name with
   | Namespaced { namespace; inner } -> Printf.sprintf "%s::%s" namespace (show_name inner)
   | Base s -> s
 ;;
 
-let show_unop op =
+let show_unop (op : unop) =
   match op with
   | Not -> "!"
   | Neg -> "-"
 ;;
 
-let show_bop op =
+let show_bop (op : bop) =
   match op with
   | Add -> "+"
   | Sub -> "-"
@@ -26,19 +26,19 @@ let show_bop op =
   | Shr -> ">>"
 ;;
 
-let show_polarity p =
+let show_polarity (p : polarity) =
   match p with
   | Plus -> "+"
   | Minus -> "-"
 ;;
 
-let show_mode m =
+let show_mode (m : mode) =
   match m with
   | By_value -> "cbv"
   | By_name -> "cbn"
 ;;
 
-let show_shape s =
+let show_shape (s : shape) =
   match s with
   | Data -> "data"
   | Codata -> "codata"
@@ -46,15 +46,42 @@ let show_shape s =
 
 let rec show_ty_use tyu =
   match tyu with
-  | Polarised (pol, m) -> Printf.sprintf "%s%s" (show_polarity pol) (show_moded_ty m)
+  | Polarised (pol, t) -> Printf.sprintf "%s%s" (show_polarity pol) (show_ty t)
   | Abstract { negated; name } -> if negated then Printf.sprintf "~%s" name else name
-  | Unresolved raw -> Printf.sprintf "unresolved(%s)" (show_raw_ty raw)
-  | Unmoded (pol, ty) -> Printf.sprintf "%s[???]%s" (show_polarity pol) (show_ty ty)
+  | Constructor (unresolved_tyu, raw_ty) ->
+    Printf.sprintf
+      "linked(%s)"
+      (show_unresolved_tyu ~destructor:false unresolved_tyu raw_ty)
+  | Destructor (unresolved_tyu, raw_ty) ->
+    Printf.sprintf
+      "~linked(%s)"
+      (show_unresolved_tyu ~destructor:true unresolved_tyu raw_ty)
 
-and show_moded_ty (mode_opt, ty) =
-  match mode_opt with
-  | Some m -> Printf.sprintf "[%s]%s" (show_mode m) (show_ty ty)
-  | None -> Printf.sprintf "[???]%s" (show_ty ty)
+and show_unresolved_tyu ~destructor { mode; shape } raw_ty =
+  let inferred_polarity =
+    match !shape, destructor with
+    | Some Data, true | Some Codata, false -> Some Surface.Minus
+    | Some Data, false | Some Codata, true -> Some Surface.Plus
+    | None, _ -> None
+  in
+  match !mode, inferred_polarity with
+  | Some mode, Some pol ->
+    show_ty_use (Polarised (pol, Raw (mode, Option.get !shape, raw_ty)))
+  | None, Some pol ->
+    Printf.sprintf
+      "%s(%s[???] %s)"
+      (show_polarity pol)
+      (show_shape (Option.get !shape))
+      (show_raw_ty raw_ty)
+  | _, None ->
+    let mode_str =
+      match !mode with
+      | Some m -> show_mode m
+      | None -> "???"
+    in
+    if destructor
+    then Printf.sprintf "[%s]destructor(%s)" mode_str (show_raw_ty raw_ty)
+    else Printf.sprintf "[%s]%s" mode_str (show_raw_ty raw_ty)
 
 and show_ty ty =
   match ty with
@@ -62,7 +89,8 @@ and show_ty ty =
   | Named (name, params) ->
     let params_str = params |> List.map show_ty_use |> String.concat ", " in
     Printf.sprintf "%s<%s>" (show_name name) params_str
-  | Raw (shape, raw) -> Printf.sprintf "%s %s" (show_shape shape) (show_raw_ty raw)
+  | Raw (mode, shape, raw) ->
+    Printf.sprintf "%s[%s] %s" (show_shape shape) (show_mode mode) (show_raw_ty raw)
 
 and show_raw_ty raw =
   match raw with
@@ -75,7 +103,6 @@ and show_raw_ty raw =
   | Variant variants ->
     let variants_str = variants |> List.map show_variant |> String.concat " | " in
     Printf.sprintf "variant { %s }" variants_str
-  | Destructor raw_ty -> Printf.sprintf "rawdestructor(%s)" (show_raw_ty raw_ty)
 
 and show_variant { constr_name; constr_args } =
   match constr_args with
@@ -94,25 +121,21 @@ let show_kind_binder (name, params) =
 ;;
 
 let show_binder binder =
-  match binder.typ with
-  | Some tyu -> Printf.sprintf "%s:%s" binder.name (show_ty_use tyu)
-  | None -> binder.name
+  match binder with
+  | Wildcard -> "_"
+  | Var name -> name
 ;;
 
 let show_pattern pat =
-  let show_pattern_binder pb =
-    match pb with
-    | Wildcard -> "_"
-    | Var binder -> show_binder binder
-  in
   match pat with
-  | Pat_binder pb -> show_pattern_binder pb
+  | Binder pb -> show_binder pb
   | Constr { pat_name; pat_args } ->
-    let args_str = pat_args |> List.map show_pattern_binder |> String.concat ", " in
+    let args_str = pat_args |> List.map show_binder |> String.concat ", " in
     Printf.sprintf "%s(%s)" (show_name pat_name) args_str
   | Tup pats ->
-    let pats_str = pats |> List.map show_pattern_binder |> String.concat ", " in
+    let pats_str = pats |> List.map show_binder |> String.concat ", " in
     Printf.sprintf "(%s)" pats_str
+  | Numeral n -> Int64.to_string n
 ;;
 
 let rec show_term term =
@@ -170,7 +193,7 @@ let rec show_definition def =
   | ModuleDef { name; program } ->
     Printf.sprintf "module %s {\n%s\n}" name (show_program program)
 
-and show_open (mo : module_open) =
+and show_open (mo : Surface.module_open) =
   match mo with
   | Open name -> Printf.sprintf "open %s" (show_name name)
   | Use { mod_name; use_name } ->
@@ -181,7 +204,8 @@ and show_program (prog, cmd) =
   @ Option.to_list (Option.map show_command cmd)
   |> String.concat "\n"
 
-and show_top_level_item (show_definition : 'a -> string) (tli : 'a top_level_item) =
+and show_top_level_item (show_definition : 'a -> string) (tli : 'a Surface.top_level_item)
+  =
   match tli with
   | Open o -> show_open o
   | Def d -> show_definition d

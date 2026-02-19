@@ -1,5 +1,5 @@
 %{
-  open Ast
+  open Surface
 
   module Gensym : sig
     val make : string -> string
@@ -14,30 +14,24 @@
   let term_binop op l_term r_term =
     let name = Gensym.make "binop_out" in
     let arith_cmd = Bop { op; l_term; r_term; out_term = Variable (Base name) } in
-    let out_binder = { name; typ = None } in
+    let out_binder = { name = Var name; typ = None } in
     Mu (out_binder, Arith arith_cmd)
 
   let term_unop op in_term =
     let name = Gensym.make "unop_out" in
     let arith_cmd = Unop { op; in_term; out_term = Variable (Base name) } in
-    let out_binder = { name; typ = None } in
+    let out_binder = { name = Var name; typ = None } in
     Mu (out_binder, Arith arith_cmd)
 
-  (* constructs a moded type.
-   * infers mode if necessary *)
-  let make_moded_type mode_opt ty =
-    match mode_opt, ty with
-    (* can't infer without shape info *)
-    | _, Named _ -> mode_opt, ty
-    | Some _, Raw _ -> mode_opt, ty
-    (* default inferences *)
-    | None, Raw (Data, _) -> Some By_value, ty
-    | None, Raw (Codata, _) -> Some By_name, ty
+  let infer_mode shape =
+    match shape with
+    | Data -> By_value
+    | Codata -> By_name
 
   (* desugars procedures into pattern matchers *)
   let make_proc binders body =
     Matcher [
-      (Tup (List.map (fun b -> Var b) binders), body)
+      (Tup binders, body)
     ]
 %}
 
@@ -99,7 +93,9 @@ binder:
 
 typed_binder: name=untyped_binder COLON ty=type_use     { { name with typ = Some ty } }
 
-untyped_binder: name=IDENT                              { { name; typ = None } }
+untyped_binder: 
+  | name=IDENT                                          { { name = Var name; typ = None } }
+  | UNDERSCORE                                          { { name = Wildcard; typ = None } }
 
 kind_binder:
   | name=IDENT
@@ -141,7 +137,7 @@ interface:
 
 top_level_item(definition):
   | open_statement                                      { Open $1 }
-  | definition                                          {Def $1}
+  | definition                                          { Def $1 }
 
 open_statement:
   | OPEN n=namespaced(any_ident)      { Open n }
@@ -167,7 +163,8 @@ term_definition:
   | proc_definition                                     { $1 }
 
 type_definition:
-  | s=shape n=kind_binder EQUALS t=full_raw_type        { TypeDef (n, Raw (s, t)) }
+  | s=shape m=mode n=kind_binder EQUALS t=full_raw_type { TypeDef (n, Raw (m, s, t)) }
+  | s=shape n=kind_binder EQUALS t=full_raw_type        { TypeDef (n, Raw (infer_mode s, s, t)) }
   | TYPE n=kind_binder EQUALS t=type_expr               { TypeDef (n, t) }
 
 
@@ -178,17 +175,14 @@ module_signature:
 term_signature:
   | LET b=untyped_binder EQUALS t=type_use              { TermSigDef (b, t) }
 
-(* type signatures should expose whether
- * the type is data or codata.
- * this will allow developers to still know the
- * default evaluation strategy for any type. *)
 type_signature:
-  | s=shape n=kind_binder EQUALS t=full_raw_type        { TypeSigDef (n, s, Some (Raw (s, t))) }
-  | s=shape n=kind_binder                               { TypeSigDef (n, s, None) }
+  | s=shape m=mode n=kind_binder EQUALS t=full_raw_type { TypeSigDef (n, s, Some (Raw (m, s, t))) }
+  | s=shape n=kind_binder EQUALS t=full_raw_type        { TypeSigDef (n, s, Some (Raw (infer_mode s, s, t))) }
+  // | s=shape n=kind_binder                               { TypeSigDef (n, s, None) }
 
 let_definition:
-  | LET b=binder EQUALS t=def_term                          { TermDef (b, t) }
-  | LET REC b=binder EQUALS t=def_term                      { TermDef (b, Rec (b, t)) }
+  | LET b=typed_binder EQUALS t=def_term                { TermDef (b, t) }
+  | LET REC b=typed_binder EQUALS t=def_term            { TermDef (b, Rec (b, t)) }
 
 (* procedures are sugar over matchers,
  * they are useful enough to be granted
@@ -200,10 +194,10 @@ proc_definition:
       { TermDef (b, Rec (b, make_proc params body)) }
 
 proc_binders:
-  | LPAREN separated_list(COMMA, binder) RPAREN                { $2 }
+  | LPAREN separated_list(COMMA, typed_binder) RPAREN   { $2 }
 
 proc_body:
-  | LBRACE statement RBRACE                           { $2 }
+  | LBRACE statement RBRACE                             { $2 }
 
 (* -- STATEMENTS AND TERMS -- *)
 
@@ -323,28 +317,24 @@ match_body:
 match_case:
   | p=pattern LTRARROW t=statement                      { (p, t) }
 
-pattern_binder:
-  | binder                                              { Var $1 }
-  | UNDERSCORE                                          { Wildcard }
-
 pattern:
-  | pattern_binder
-      { Pat_binder $1 }
+  | binder
+      { Binder $1 }
   | tuple_pattern
       { $1 }
-  (* TODO: allow nested pattern matching *)
   | pat_name=namespaced(CONSTRUCTOR_IDENT)
       { Constr { pat_name; pat_args = [] } }
-  | pat_name=namespaced(CONSTRUCTOR_LPAREN) pat_args=separated_nonempty_list(COMMA, pattern_binder) RPAREN
+  | pat_name=namespaced(CONSTRUCTOR_LPAREN) pat_args=separated_nonempty_list(COMMA, binder) RPAREN
       { Constr { pat_name; pat_args } }
-  (* TODO: allow matching on constant values *)
+  | NUMBER
+      { Numeral $1 }
 
 tuple_pattern:
   | LPAREN RPAREN
       { Tup [] }
-  | LPAREN p=pattern_binder COMMA RPAREN
+  | LPAREN p=binder COMMA RPAREN
       { Tup [p] }
-  | LPAREN p=pattern_binder COMMA ps=separated_nonempty_list(COMMA, pattern_binder) RPAREN
+  | LPAREN p=binder COMMA ps=separated_nonempty_list(COMMA, binder) RPAREN
       { Tup (p :: ps) }
 
 cons_term:
@@ -372,17 +362,9 @@ abstract_type:
   | NEG t=abstract_type                                 { let (name, negated) = t in (name, not negated) }
 
 polarised_type:
-  | p=polarity t=maybe_moded_type                       { Polarised (p, t) }
+  | p=polarity t=type_expr                              { Polarised (p, t) }
   (* sugar: unannotated is expression by default *)
-  | t=maybe_moded_type                                  { Polarised (Plus, t) }
-
-maybe_moded_type:
-  | t=type_expr                                         { make_moded_type None t }
-  | moded_type                                          { $1 }
-
-moded_type:
-  | mode=mode t=type_expr                               { make_moded_type (Some mode) t }
-  | LPAREN moded_type RPAREN                            { $2 }
+  | t=type_expr                                         { Polarised (Plus, t) }
 
 type_expr:
   | named_type                                          { $1 }
@@ -390,7 +372,9 @@ type_expr:
   | LPAREN type_expr RPAREN                             { $2 }
 
 shaped_type:
-  | shape=shape raw=simple_raw_type                     { Raw (shape, raw) }
+  | shape=shape mode=mode raw=simple_raw_type           { Raw (mode, shape, raw) }
+  (* sugar: no mode annotation means inference by shape *)
+  | shape=shape raw=simple_raw_type                     { Raw (infer_mode shape, shape, raw) }
 
 mode:
   | LBRACK CBV RBRACK                                   { By_value }

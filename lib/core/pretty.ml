@@ -28,6 +28,7 @@ let show_form form =
   | Tuple names -> "(" ^ String.concat ", " (List.map show_name names)
   | Constr { form_name; form_args } ->
     Printf.sprintf "%s(%s)" form_name (String.concat ", " (List.map show_name form_args))
+  | Numeral n -> Int64.to_string n
 ;;
 
 let rec show_term term =
