@@ -122,8 +122,8 @@ let show_kind_binder (name, params) =
 
 let show_binder binder =
   match binder with
-  | Wildcard -> "_"
-  | Var name -> name
+  | Wildcard _ -> "_"
+  | Var (_, name) -> name
 ;;
 
 let show_pattern pat =
@@ -138,7 +138,7 @@ let show_pattern pat =
   | Numeral n -> Int64.to_string n
 ;;
 
-let rec show_term term =
+let rec show_term (_, term) =
   match term with
   | Mu (binder, cmd) ->
     Printf.sprintf "{ %s -> %s }" (show_binder binder) (show_command cmd)
@@ -163,7 +163,7 @@ let rec show_term term =
   | Ann (term, tyu) -> Printf.sprintf "(%s : %s)" (show_term term) (show_ty_use tyu)
   | Done -> "done"
 
-and show_command cmd =
+and show_command (_, cmd) =
   match cmd with
   | Fork (cmd1, cmd2) ->
     Printf.sprintf "[%s | %s]" (show_command cmd1) (show_command cmd2)

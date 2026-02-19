@@ -31,72 +31,76 @@ and variant =
   ; constr_args : ty_use list
   }
 
-type binder =
-  | Var of string
-  | Wildcard
+type 'ann binder =
+  | Var of 'ann * string
+  | Wildcard of 'ann
 
-type pattern =
-  | Binder of binder
-  | Tup of binder list
+type 'ann pattern =
+  | Binder of 'ann binder
+  | Tup of 'ann binder list
   | Constr of
       { pat_name : name
-      ; pat_args : binder list
+      ; pat_args : 'ann binder list
       }
   | Numeral of int64
 
-type term =
-  | Mu of binder * command (* mu and mu tilde *)
+type 'ann term = 'ann * 'ann term_node
+
+and 'ann term_node =
+  | Mu of 'ann binder * 'ann command (* mu and mu tilde *)
   | Variable of name
   | Construction of
       { cons_name : name
-      ; cons_args : term list
+      ; cons_args : 'ann term list
       }
-  | Tuple of term list
-  | Matcher of (pattern * command) list (* match and dispatch *)
+  | Tuple of 'ann term list
+  | Matcher of ('ann pattern * 'ann command) list (* match and dispatch *)
   | Num of int64
-  | Rec of binder * term (* fixpoint term *)
-  | Arr of term list
-  | Ann of term * ty_use
+  | Rec of 'ann binder * 'ann term (* fixpoint term *)
+  | Arr of 'ann term list
+  | Ann of 'ann term * ty_use
   | Done
 
-and command =
-  | Core of
-      { l_term : term
-      ; r_term : term
-      }
-  | Arith of arith_command
-  | Fork of command * command
+and 'ann command = 'ann * 'ann command_node
 
-and arith_command =
+and 'ann command_node =
+  | Core of
+      { l_term : 'ann term
+      ; r_term : 'ann term
+      }
+  | Arith of 'ann arith_command
+  | Fork of 'ann command * 'ann command
+
+and 'ann arith_command =
   | Unop of
       { op : unop
-      ; in_term : term
-      ; out_term : term
+      ; in_term : 'ann term
+      ; out_term : 'ann term
       }
   | Bop of
       { op : bop
-      ; l_term : term
-      ; r_term : term
-      ; out_term : term
+      ; l_term : 'ann term
+      ; r_term : 'ann term
+      ; out_term : 'ann term
       }
 
-type definition =
-  | TermDef of binder * term
+type 'ann definition =
+  | TermDef of 'ann binder * 'ann term
   | TypeDef of kind_binder * ty
-  | ModuleDef of module_def
+  | ModuleDef of 'ann module_def
 
-and module_def =
+and 'ann module_def =
   { name : string
-  ; program : module_
+  ; program : 'ann module_
   }
 
-and module_ = definition top_level_item list * command option
+and 'ann module_ = 'ann definition top_level_item list * 'ann command option
 
 type sig_module = sig_definition top_level_item list
 
 and sig_definition =
   | TypeSigDef of kind_binder * shape * ty option
-  | TermSigDef of binder * ty_use
+  | TermSigDef of unit binder * ty_use
   | ModuleSigDef of module_sig_def
 
 and module_sig_def =
