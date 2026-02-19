@@ -65,16 +65,22 @@ module State = struct
   ;;
 end
 
-let get_ast str = str |> Reader.of_string ~filename:"REPL"
+let get_ast ?k str = str |> Reader.of_string ?k ~filename:"REPL"
 let print_ast ast = Printf.printf "%s\n%!" (Pretty.show_program ast)
 let print_error msg = Printf.eprintf "Error: %s\n%!" msg
 
-let parse_and_eval input =
+let parse_to_core_ast ?k input =
+  let surface_ast = get_ast ?k input in
+  Surface_to_ast.surface_module_to_ast_module surface_ast
+;;
+
+let eval_module input =
   try
-    let core_ast = get_ast input in
-    Typechecker.Bidir.tycheck_program core_ast;
+    print_endline "Parsed AST:";
+    print_ast input;
+    Typechecker.Bidir.tycheck_program input;
     let converted =
-      Core.Ast_to_ir.ast_command_of_module core_ast |> Core.Ast_to_ir.ast_to_ir_command
+      Core.Ast_to_ir.ast_command_of_module input |> Core.Ast_to_ir.ast_to_ir_command
     in
     let converted = Core.Runner.state_of_command converted in
     ignore (Core.Runner.eval_program converted)
@@ -82,7 +88,9 @@ let parse_and_eval input =
   | exn -> print_error (Printexc.to_string exn)
 ;;
 
-let parse_and_step input =
+let show_module input = print_ast input
+
+let step_module input =
   let show_state (control, stash, _env) =
     Printf.printf "Control Stack:\n";
     List.iter
@@ -115,9 +123,9 @@ let parse_and_step input =
     | Error exn :: _ -> print_error (Printexc.to_string exn)
   in
   try
-    let core_ast = get_ast input in
+    Typechecker.Bidir.tycheck_program input;
     let converted =
-      Core.Ast_to_ir.ast_command_of_module core_ast |> Core.Ast_to_ir.ast_to_ir_command
+      Core.Ast_to_ir.ast_command_of_module input |> Core.Ast_to_ir.ast_to_ir_command
     in
     let converted = Core.Runner.state_of_command converted in
     Printf.printf "press any key to step through the program, q to quit\n%!";
@@ -128,7 +136,7 @@ let parse_and_step input =
 
 let parse_and_show input =
   try
-    let core_ast = get_ast input in
+    let core_ast = get_ast input |> Surface_to_ast.surface_module_to_ast_module in
     print_ast core_ast
   with
   | exn -> print_error (Printexc.to_string exn)
@@ -177,31 +185,54 @@ let multiline_prompt base_prompt =
   aux [] |> Option.map String.trim
 ;;
 
-let rec repl_loop () =
-  let prompt = "moo2> " in
-  match LNoise.linenoise prompt with
+(* If there is some context waiting (a checkpoint), we resume parsing from that point *)
+let rec repl_loop (kont : (Error.kont * (Ast.module_ -> 'a)) option) =
+  let attempt_eval ?k input f =
+    try f (parse_to_core_ast ?k input) with
+    | Error.Early_eof k -> repl_loop (Some (k, f))
+    | e ->
+      print_error (Printexc.to_string e);
+      repl_loop None
+  in
+  match kont with
+  | Some (k, f) ->
+    let prompt = "....> " in
+    (match LNoise.linenoise prompt with
+     | None ->
+       print_endline "\nGoodbye!";
+       exit 0
+     | Some line ->
+       attempt_eval ~k line f;
+       repl_loop None)
   | None ->
-    print_endline "\nGoodbye!";
-    exit 0
-  | Some "" -> repl_loop ()
-  | Some ":q" | Some ":quit" | Some ":exit" ->
-    print_endline "Goodbye!";
-    exit 0
-  | Some ":help" ->
-    print_endline "Commands:";
-    print_endline "  :q, :quit, :exit      Exit REPL";
-    print_endline "  :show <expr>          Visualize the expression";
-    print_endline "  :help                 Show this help";
-    print_endline "  :step <program>       Step through the program (not implemented)";
-    repl_loop ()
-  | Some line when String.starts_with ~prefix:":step " line ->
-    let expr = String.sub line 6 (String.length line - 6) in
-    parse_and_step expr;
-    repl_loop ()
-  | Some line ->
-    add_to_history line;
-    parse_and_eval line;
-    repl_loop ()
+    let prompt = "moo2> " in
+    (match LNoise.linenoise prompt with
+     | None ->
+       print_endline "\nGoodbye!";
+       exit 0
+     | Some "" -> repl_loop kont
+     | Some ":q" | Some ":quit" | Some ":exit" ->
+       print_endline "Goodbye!";
+       exit 0
+     | Some ":help" ->
+       print_endline "Commands:";
+       print_endline "  :q, :quit, :exit      Exit REPL";
+       print_endline "  :show <expr>          Visualize the expression";
+       print_endline "  :help                 Show this help";
+       print_endline "  :step <program>       Step through the program (not implemented)";
+       repl_loop None
+     | Some line when String.starts_with ~prefix:":step " line ->
+       let expr = String.sub line 6 (String.length line - 6) in
+       attempt_eval expr step_module;
+       repl_loop None
+     | Some line when String.starts_with ~prefix:":show " line ->
+       let expr = String.sub line 6 (String.length line - 6) in
+       attempt_eval expr show_module;
+       repl_loop None
+     | Some line ->
+       add_to_history line;
+       attempt_eval line eval_module;
+       repl_loop None)
 ;;
 
 let start_repl () =
@@ -209,7 +240,7 @@ let start_repl () =
   Printf.printf
     "Welcome to moo %s.\nType \":help\" for more information.\n%!"
     Version.version;
-  try repl_loop () with
+  try repl_loop None with
   | Sys.Break ->
     print_endline "Goodbye!";
     exit 0

@@ -6,20 +6,26 @@ let with_filename buffer name =
   buffer
 ;;
 
-let parse program_buffer =
-  Incremental.parse
-    program_buffer
-    (Parser.Incremental.parse_program program_buffer.lex_curr_p)
+let with_position buffer (position : position) =
+  (* make a position starting from the next line *)
+  buffer.lex_start_p <- position;
+  buffer.lex_curr_p <- position;
+  buffer
 ;;
+
+let parse = Incremental.parse_module
+let resume_parse = Incremental.resume_parse_module
 
 let of_channel ~filename ic =
   let lb = with_filename (Lexing.from_channel ic) filename in
   parse lb
 ;;
 
-let of_string ?(filename = "<string>") s =
+let of_string ?(k : Error.kont option) ?(filename = "<string>") s =
   let lb = with_filename (Lexing.from_string s) filename in
-  parse lb
+  match k with
+  | None -> parse lb
+  | Some (k, resume_pos) -> resume_parse (with_position lb resume_pos) k
 ;;
 
 let of_file filename =

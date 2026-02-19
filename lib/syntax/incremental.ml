@@ -9,21 +9,43 @@ let get_parse_error env =
      | Not_found -> "invalid syntax (no specific message for this error)")
 ;;
 
-let rec parse lexbuf (checkpoint : 'a I.checkpoint) : 'a =
+let rec parse_module_aux
+          lexbuf
+          (previous : (Parser.token * Surface.module_ I.checkpoint) option)
+          (checkpoint : 'a I.checkpoint)
+  : Surface.module_
+  =
   match checkpoint with
+  | I.Accepted v -> v
+  | I.Rejected -> raise (Syntax_error { position = None; message = "Parsing rejected" })
   | I.InputNeeded _env ->
     let token = Lexer.token lexbuf in
     let startp = lexbuf.lex_start_p
     and endp = lexbuf.lex_curr_p in
-    let checkpoint = I.offer checkpoint (token, startp, endp) in
-    parse lexbuf checkpoint
+    let new_checkpoint = I.offer checkpoint (token, startp, endp) in
+    parse_module_aux lexbuf (Some (token, checkpoint)) new_checkpoint
   | I.Shifting _ | I.AboutToReduce _ ->
     let checkpoint = I.resume checkpoint in
-    parse lexbuf checkpoint
+    let new_previous =
+      match previous with
+      | None -> None
+      | Some (token, _) -> Some (token, checkpoint)
+    in
+    parse_module_aux lexbuf new_previous checkpoint
   | I.HandlingError env ->
     let position = Some (Utils.get_lexing_position lexbuf) in
+    let resume_pos = lexbuf.lex_curr_p in
     let message = get_parse_error env in
-    raise (Syntax_error { position; message })
-  | I.Accepted v -> v
-  | I.Rejected -> raise (Syntax_error { position = None; message = "Parsing rejected" })
+    (match previous with
+     | Some (Parser.EOF, k) -> raise (Early_eof (k, resume_pos))
+     | _ -> raise (Syntax_error { position; message }))
+;;
+
+let parse_module (lexbuf : Lexing.lexbuf) =
+  let initial_checkpoint = Parser.Incremental.parse_program lexbuf.lex_curr_p in
+  parse_module_aux lexbuf None initial_checkpoint
+;;
+
+let resume_parse_module lexbuf (k : Surface.module_ I.checkpoint) =
+  parse_module_aux lexbuf None k
 ;;
