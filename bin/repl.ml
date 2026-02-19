@@ -76,9 +76,10 @@ let parse_to_core_ast ?k input =
 
 let eval_module input =
   try
-    Typechecker.Bidir.tycheck_program input;
+    let tychecked = Typechecker.Bidir.tycheck_program input in
     let converted =
-      Core.Ast_to_ir.ast_command_of_module input |> Core.Ast_to_ir.ast_to_ir_command
+      Core.Tycheck_to_ir.tycheck_command_of_module tychecked
+      |> Core.Tycheck_to_ir.tycheck_to_ir_command
     in
     let converted = Core.Runner.state_of_command converted in
     ignore (Core.Runner.eval_program converted)
@@ -121,9 +122,10 @@ let step_module input =
     | Error exn :: _ -> print_error (Printexc.to_string exn)
   in
   try
-    Typechecker.Bidir.tycheck_program input;
+    let tychecked = Typechecker.Bidir.tycheck_program input in
     let converted =
-      Core.Ast_to_ir.ast_command_of_module input |> Core.Ast_to_ir.ast_to_ir_command
+      Core.Tycheck_to_ir.tycheck_command_of_module tychecked
+      |> Core.Tycheck_to_ir.tycheck_to_ir_command
     in
     let converted = Core.Runner.state_of_command converted in
     Printf.printf "press any key to step through the program, q to quit\n%!";

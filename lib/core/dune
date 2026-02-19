@@ -1,4 +1,4 @@
 (library
  (name core)
  (public_name moo.core)
- (libraries syntax))
+ (libraries syntax typechecker))
