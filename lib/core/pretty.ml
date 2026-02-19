@@ -25,7 +25,8 @@ let show_name name = name
 let show_form form =
   match form with
   | Binder name -> show_name name
-  | Tuple names -> "(" ^ String.concat ", " (List.map show_name names)
+  | Tuple [ name ] -> Printf.sprintf "(%s,)" (show_name name)
+  | Tuple names -> "(" ^ String.concat ", " (List.map show_name names) ^ ")"
   | Constr { form_name; form_args } ->
     Printf.sprintf "%s(%s)" form_name (String.concat ", " (List.map show_name form_args))
   | Numeral n -> Int64.to_string n
@@ -34,10 +35,11 @@ let show_form form =
 let rec show_term term =
   match term with
   | NeedsForce t -> Printf.sprintf "force(%s)" (show_term t)
-  | Mu (name, cmd) -> Printf.sprintf "mu %s. %s" name (show_command cmd)
+  | Mu (name, cmd) -> Printf.sprintf "mu{ %s. %s }" name (show_command cmd)
   | Variable name -> show_name name
   | Construction { cons_name; cons_args } ->
     Printf.sprintf "%s(%s)" cons_name (String.concat ", " (List.map show_term cons_args))
+  | Tuple [ term ] -> Printf.sprintf "(%s,)" (show_term term)
   | Tuple terms -> Printf.sprintf "(%s)" (String.concat ", " (List.map show_term terms))
   | Matcher branches ->
     let branch_strs =
@@ -46,7 +48,7 @@ let rec show_term term =
            Printf.sprintf "| %s -> %s" (show_form form) (show_command cmd))
         branches
     in
-    "match {\n" ^ String.concat "\n" branch_strs ^ "\n}"
+    "match { " ^ String.concat " " branch_strs ^ " }"
   | Num n -> Int64.to_string n
   | Rec (name, t) -> Printf.sprintf "[rec %s] %s" name (show_term t)
   | Arr terms -> Printf.sprintf "[%s]" (String.concat ", " (List.map show_term terms))
