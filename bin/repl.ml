@@ -65,19 +65,17 @@ module State = struct
   ;;
 end
 
-let get_ast ?k str = str |> Reader.of_string ?k ~filename:"REPL"
 let print_ast ast = Printf.printf "%s\n%!" (Pretty.show_program ast)
 let print_error msg = Printf.eprintf "Error: %s\n%!" msg
 
 let parse_to_core_ast ?k input =
-  let surface_ast = get_ast ?k input in
-  Surface_to_ast.surface_module_to_ast_module surface_ast
+  input
+  |> Reader.of_string ?k ~filename:"REPL"
+  |> Surface_to_ast.surface_module_to_ast_module
 ;;
 
 let eval_module input =
   try
-    print_endline "Parsed AST:";
-    print_ast input;
     Typechecker.Bidir.tycheck_program input;
     let converted =
       Core.Ast_to_ir.ast_command_of_module input |> Core.Ast_to_ir.ast_to_ir_command
@@ -87,8 +85,6 @@ let eval_module input =
   with
   | exn -> print_error (Printexc.to_string exn)
 ;;
-
-let show_module input = print_ast input
 
 let step_module input =
   let show_state (control, stash, _env) =
@@ -108,10 +104,12 @@ let step_module input =
       show_state state;
       (match LNoise.linenoise "step> " with
        | None -> ()
-       | Some "q" | Some "quit" | Some "exit" -> ()
-       | Some _ ->
-         let next_state = eval_state state in
-         step_loop (rest @ [ next_state ]))
+       | Some s ->
+         (match String.trim s with
+          | "q" | "quit" | "exit" -> ()
+          | _ ->
+            let next_state = eval_state state in
+            step_loop (rest @ [ next_state ])))
     | Stop :: rest -> step_loop rest
     | Split (state1, state2) :: rest ->
       Printf.printf "Program split into two concurrent states.\n%!";
@@ -130,14 +128,6 @@ let step_module input =
     let converted = Core.Runner.state_of_command converted in
     Printf.printf "press any key to step through the program, q to quit\n%!";
     step_loop [ Step converted ]
-  with
-  | exn -> print_error (Printexc.to_string exn)
-;;
-
-let parse_and_show input =
-  try
-    let core_ast = get_ast input |> Surface_to_ast.surface_module_to_ast_module in
-    print_ast core_ast
   with
   | exn -> print_error (Printexc.to_string exn)
 ;;
@@ -168,69 +158,59 @@ let add_to_history line =
   History.add line (State.get_history ())
 ;;
 
-let multiline_prompt base_prompt =
-  let base_prompt_length = String.length base_prompt in
-  let multiline_prompt length = String.make (length - 5) ' ' ^ "...> " in
-  let rec aux acc =
-    let prompt =
-      match acc with
-      | [] -> base_prompt
-      | _ -> multiline_prompt base_prompt_length
-    in
-    match LNoise.linenoise prompt with
-    | None -> None
-    | Some line when String.ends_with ~suffix:"\\" (String.trim line) -> aux (line :: acc)
-    | Some line -> line :: acc |> List.rev |> String.concat "" |> Option.some
-  in
-  aux [] |> Option.map String.trim
-;;
-
 (* If there is some context waiting (a checkpoint), we resume parsing from that point *)
-let rec repl_loop (kont : (Error.kont * (Ast.module_ -> 'a)) option) =
-  let attempt_eval ?k input f =
-    try f (parse_to_core_ast ?k input) with
-    | Error.Early_eof k -> repl_loop (Some (k, f))
+let rec repl_loop (kont : (Error.kont * (Ast.module_ -> 'a) * string) option) =
+  let attempt_eval ?(previous_input = "") ?k input f =
+    let full_input =
+      previous_input ^ "\n" ^ input
+      |> String.split_on_char '\n'
+      |> String.concat " "
+      |> String.trim
+    in
+    try
+      f (parse_to_core_ast ?k input);
+      add_to_history full_input
+    with
+    | Error.Early_eof k -> repl_loop (Some (k, f, full_input))
     | e ->
       print_error (Printexc.to_string e);
       repl_loop None
   in
-  match kont with
-  | Some (k, f) ->
-    let prompt = "....> " in
-    (match LNoise.linenoise prompt with
-     | None ->
-       print_endline "\nGoodbye!";
-       exit 0
-     | Some line ->
-       attempt_eval ~k line f;
-       repl_loop None)
+  let prompt =
+    match kont with
+    | Some _ -> "....> "
+    | None -> "moo2> "
+  in
+  match LNoise.linenoise prompt with
   | None ->
-    let prompt = "moo2> " in
-    (match LNoise.linenoise prompt with
-     | None ->
-       print_endline "\nGoodbye!";
-       exit 0
-     | Some "" -> repl_loop kont
-     | Some ":q" | Some ":quit" | Some ":exit" ->
+    print_endline "\nGoodbye!";
+    exit 0
+  | Some line ->
+    let trimmed = String.trim line in
+    (match trimmed, kont with
+     | "", _ -> repl_loop kont
+     | "\\q", _ | "\\quit", _ | "\\exit", _ ->
        print_endline "Goodbye!";
        exit 0
-     | Some ":help" ->
+     | "\\help", _ ->
        print_endline "Commands:";
-       print_endline "  :q, :quit, :exit      Exit REPL";
-       print_endline "  :show <expr>          Visualize the expression";
-       print_endline "  :help                 Show this help";
-       print_endline "  :step <program>       Step through the program (not implemented)";
-       repl_loop None
-     | Some line when String.starts_with ~prefix:":step " line ->
-       let expr = String.sub line 6 (String.length line - 6) in
+       print_endline "  \\q, \\quit, \\exit   Exit REPL";
+       print_endline "  \\show <program>      Visualize the expression";
+       print_endline "  \\help                Show this help";
+       print_endline "  \\step <program>      Step through the program (not implemented)";
+       repl_loop kont
+     | l, None when String.starts_with ~prefix:"\\step " l ->
+       let expr = String.sub l 6 (String.length l - 6) in
        attempt_eval expr step_module;
        repl_loop None
-     | Some line when String.starts_with ~prefix:":show " line ->
-       let expr = String.sub line 6 (String.length line - 6) in
-       attempt_eval expr show_module;
+     | l, None when String.starts_with ~prefix:"\\show " l ->
+       let expr = String.sub l 6 (String.length l - 6) in
+       attempt_eval expr print_ast;
        repl_loop None
-     | Some line ->
-       add_to_history line;
+     | _, Some (k, f, previous_input) ->
+       attempt_eval ~previous_input ~k line f;
+       repl_loop None
+     | _, None ->
        attempt_eval line eval_module;
        repl_loop None)
 ;;
@@ -238,7 +218,7 @@ let rec repl_loop (kont : (Error.kont * (Ast.module_ -> 'a)) option) =
 let start_repl () =
   init_repl ();
   Printf.printf
-    "Welcome to moo %s.\nType \":help\" for more information.\n%!"
+    "Welcome to moo %s.\nType \"\\help\" for more information.\n%!"
     Version.version;
   try repl_loop None with
   | Sys.Break ->
