@@ -98,3 +98,8 @@ and sig_definition =
   | TypeSigDef of kind_binder * shape * ty option
   | TermSigDef of binder * ty_use
   | ModuleSigDef of module_sig_def
+
+and module_sig_def =
+  { name : string
+  ; interface : sig_module
+  }
