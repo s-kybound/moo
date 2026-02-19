@@ -26,12 +26,7 @@ let rec parse_module_aux
     parse_module_aux lexbuf (Some (token, checkpoint)) new_checkpoint
   | I.Shifting _ | I.AboutToReduce _ ->
     let checkpoint = I.resume checkpoint in
-    let new_previous =
-      match previous with
-      | None -> None
-      | Some (token, _) -> Some (token, checkpoint)
-    in
-    parse_module_aux lexbuf new_previous checkpoint
+    parse_module_aux lexbuf previous checkpoint
   | I.HandlingError env ->
     let position = Some (Utils.get_lexing_position lexbuf) in
     let resume_pos = lexbuf.lex_curr_p in
