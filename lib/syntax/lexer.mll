@@ -14,32 +14,26 @@
 
   let keywords : (string, Parser.token) Hashtbl.t =
     let keywords : (string * Parser.token) list = [
-      ("do",      DO);
-      ("let",     LET);
-      ("in",      IN);
-      ("rec",     REC);
-      ("match",   MATCH);
-      ("data",    DATA);
-      ("codata",  CODATA);
-      ("done",    DONE);
-      ("proc",    PROC); 
-      ("cbv",     CBV);
-      ("cbn",     CBN);   
-      ("type",    TYPE);
-      ("unit",    UNIT);
-      ("raw64",   RAW64);
-      ("open",    OPEN);
-      ("module",  MODULE);
-      ("use",     USE);
-      ("as",      AS);
-      ("abstract",ABSTRACT);
-      ("_",       UNDERSCORE);
-      (* ("unpack",  UNPACK);
-      ("pack",    PACK);
-      ("gen",     GEN);
-      ("inst",    INST);
-      ("forall",  FORALL);
-      ("exists",  EXISTS); *)
+      ("do",        DO);
+      ("let",       LET);
+      ("in",        IN);
+      ("rec",       REC);
+      ("match",     MATCH);
+      ("data",      DATA);
+      ("codata",    CODATA);
+      ("done",      DONE);
+      ("proc",      PROC); 
+      ("cbv",       CBV);
+      ("cbn",       CBN);   
+      ("type",      TYPE);
+      ("unit",      UNIT);
+      ("raw64",     RAW64);
+      ("open",      OPEN);
+      ("module",    MODULE);
+      ("use",       USE);
+      ("as",        AS);
+      ("abstract",  ABSTRACT);
+      ("_",         UNDERSCORE);
     ] in
     keywords
     |> List.to_seq
@@ -72,6 +66,7 @@ let namespace_sep     = "::"
 rule token = parse
   | hspace+                   { token lexbuf }
   | newline+                  { Lexing.new_line lexbuf; token lexbuf }
+  | "//"                      { skip_line lexbuf; token lexbuf }
   | "/*"                      { skip_comment 1 lexbuf; token lexbuf }
   | "*/"                      { raisef lexbuf "Unmatched */.`" }
   | "->"                      { LTRARROW }

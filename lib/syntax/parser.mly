@@ -406,8 +406,12 @@ type_use:
   | unify_type                                          { $1 }
 
 unify_type:
-  | ABSTRACT 
-    LBRACK names=separated_nonempty_list(COMMA, abstract_binder) RBRACK 
+  | unify_type_aux                                      { $1 }
+  (* sugar - only here to make the abstract type obvious *)
+  | ABSTRACT unify_type_aux                             { $2 }
+
+unify_type_aux:
+  | LBRACK names=separated_nonempty_list(COMMA, abstract_binder) RBRACK 
     t=type_use
       { AbstractIntroducer (names, t) }
 
