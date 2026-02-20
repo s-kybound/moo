@@ -73,12 +73,12 @@ rule token = parse
   | newline+                  { Lexing.new_line lexbuf; token lexbuf }
   | "/*"                      { skip_comment 1 lexbuf; token lexbuf }
   | "*/"                      { raisef lexbuf "Unmatched */.`" }
-  | "//"                      { skip_line lexbuf; token lexbuf }
   | "->"                      { LTRARROW }
   | "<-"                      { RTLARROW }
   | '='                       { EQUALS }
   | ':'                       { COLON }
-  | ";"                       { DELIMITER }
+  | ';'                       { SEMICOLON }
+  | ";;"                      { DELIMITER }
   | '['                       { LBRACK }
   | ']'                       { RBRACK }
   | '('                       { LPAREN }

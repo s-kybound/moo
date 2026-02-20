@@ -64,6 +64,7 @@
 %token LBRACE RBRACE LANGLE RANGLE
 %token LTRARROW RTLARROW
 %token EQUALS
+%token SEMICOLON
 
 %token OPEN MODULE USE AS
 
@@ -261,6 +262,12 @@ cutlet:
         let l_term = mk_term $startpos $endpos (Rec (b, t)) in
         let r_term = mk_term $startpos $endpos (Mu (b, s)) in
         mk_command $startpos $endpos (Core { l_term; r_term })
+      }
+  (* ignored statement *)
+  | ignored_term=term SEMICOLON rest=statement
+      { let ignored_binder = { name = Wildcard; typ = None } in
+        let r_term = mk_term $startpos $endpos (Mu (ignored_binder, rest)) in
+        mk_command $startpos $endpos (Core { l_term = ignored_term; r_term }) 
       }
 
 (* core commands and arithmetic operations *)
