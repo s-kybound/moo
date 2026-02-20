@@ -742,12 +742,12 @@ and typecheck_command
   | Ast.Core { l_term; r_term } ->
     (try typecheck_command_aux l_term r_term ann with
      | Underspecified msg ->
-       let warning_msg =
+       let _warning_msg =
          Printf.sprintf
            "typecheck_command: underspecified left term, trying right term. %s"
            msg
        in
-       print_endline warning_msg;
+       (* print_endline warning_msg; *)
        typecheck_command_aux r_term l_term ann
      | TypeMismatch (expected, actual, msg) ->
        let msg =
@@ -852,7 +852,7 @@ and tycheck_module
         new_knowledge
         new_tydef_env
     | Ast.Open o :: rest ->
-      process_top_level_items (Ast.Open o :: rest) defs_acc knowledge_acc tydef_env_acc
+      process_top_level_items rest (Ast.Open o :: defs_acc) knowledge_acc tydef_env_acc
   in
   let new_top_level_items, after_defs_knowledge, after_defs_tydef_env =
     process_top_level_items top_level_items [] knowledge tydef_env
