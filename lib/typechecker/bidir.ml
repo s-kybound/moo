@@ -448,14 +448,15 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
              | Ast.Binder binder ->
                let unique_ids = binder_ids_of_binder binder in
                let cmd, command_knowledge = typecheck_command demands command tydef_env in
-               (match type_of_usages unique_ids command_knowledge tydef_env with
-                | Error msg -> type_error ?loc:ann.loc msg
-                | Ok None -> cmd, None, command_knowledge
-                | Ok (Some result) ->
-                  (* make sure that the variable is a constructed item *)
-                  if not (Type.is_constructor_tyu result tydef_env)
-                  then type_error ?loc:ann.loc "variable is not a constructed item"
-                  else cmd, Some (Type.negate_tyu result), command_knowledge)
+               begin match type_of_usages unique_ids command_knowledge tydef_env with
+               | Error msg -> type_error ?loc:ann.loc msg
+               | Ok None -> cmd, None, command_knowledge
+               | Ok (Some result) ->
+                 (* make sure that the variable is a constructed item *)
+                 if not (Type.is_constructor_tyu result tydef_env)
+                 then type_error ?loc:ann.loc "variable is not a constructed item"
+                 else cmd, Some (Type.negate_tyu result), command_knowledge
+               end
              | Ast.Tup subpats ->
                let cmd, command_knowledge = typecheck_command demands command tydef_env in
                let unique_ids = List.map binder_ids_of_binder subpats in

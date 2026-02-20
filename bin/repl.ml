@@ -115,14 +115,15 @@ let step_module input =
     | [] -> Printf.printf "No more states to step through.\n%!"
     | Step state :: rest ->
       show_state state;
-      (match LNoise.linenoise "STEP> " with
-       | None -> ()
-       | Some s ->
-       match String.trim s with
-       | "\\q" | "\\quit" | "\\exit" -> ()
-       | _ ->
-         let next_state = eval_state state in
-         step_loop (rest @ [ next_state ]))
+      begin match LNoise.linenoise "STEP> " with
+      | None -> ()
+      | Some s ->
+      match String.trim s with
+      | "\\q" | "\\quit" | "\\exit" -> ()
+      | _ ->
+        let next_state = eval_state state in
+        step_loop (rest @ [ next_state ])
+      end
     | Stop :: rest -> step_loop rest
     | Split (state1, state2) :: rest ->
       Printf.printf "Program split into two concurrent states.\n%!";
@@ -139,7 +140,8 @@ let step_module input =
     |> Core.Tycheck_to_ir.tycheck_to_ir_command
   in
   let converted = Core.Runner.state_of_command converted in
-  Printf.printf "Stepping through program. Press any key to step through the program, \\q to quit\n%!";
+  Printf.printf
+    "Stepping through program. Press any key to step through the program, \\q to quit\n%!";
   step_loop [ Step converted ]
 ;;
 
@@ -198,37 +200,36 @@ let rec repl_loop (kont : (Error.kont * (Ast.core_ann Ast.module_ -> 'a) * strin
     print_endline "\nGoodbye!";
     exit 0
   | Some line ->
-    let trimmed = String.trim line in
-    (match trimmed, kont with
-     | "", None -> repl_loop kont
-     | "", Some (k, f, previous_input) ->
-       (* we need to consider the newlines here for correctness *)
-       attempt_eval ~previous_input ~k line f;
-       repl_loop None
-     | "\\q", _ | "\\quit", _ | "\\exit", _ ->
-       print_endline "Goodbye!";
-       exit 0
-     | "\\help", _ ->
-       print_endline "Commands:";
-       print_endline "  \\q, \\quit, \\exit   Exit REPL";
-       print_endline "  \\show <program>      Visualize the expression";
-       print_endline "  \\help                Show this help";
-       print_endline "  \\step <program>      Step through the program (not implemented)";
-       repl_loop kont
-     | l, None when String.starts_with ~prefix:"\\step " l ->
-       let expr = String.sub l 6 (String.length l - 6) in
-       attempt_eval expr step_module;
-       repl_loop None
-     | l, None when String.starts_with ~prefix:"\\show " l ->
-       let expr = String.sub l 6 (String.length l - 6) in
-       attempt_eval expr print_ast;
-       repl_loop None
-     | _, Some (k, f, previous_input) ->
-       attempt_eval ~previous_input ~k line f;
-       repl_loop None
-     | _, None ->
-       attempt_eval line eval_module;
-       repl_loop None)
+  match String.trim line, kont with
+  | "", None -> repl_loop kont
+  | "", Some (k, f, previous_input) ->
+    (* we need to consider the newlines here for correctness *)
+    attempt_eval ~previous_input ~k line f;
+    repl_loop None
+  | "\\q", _ | "\\quit", _ | "\\exit", _ ->
+    print_endline "Goodbye!";
+    exit 0
+  | "\\help", _ ->
+    print_endline "Commands:";
+    print_endline "  \\q, \\quit, \\exit   Exit REPL";
+    print_endline "  \\show <program>      Visualize the expression";
+    print_endline "  \\help                Show this help";
+    print_endline "  \\step <program>      Step through the program (not implemented)";
+    repl_loop kont
+  | l, None when String.starts_with ~prefix:"\\step " l ->
+    let expr = String.sub l 6 (String.length l - 6) in
+    attempt_eval expr step_module;
+    repl_loop None
+  | l, None when String.starts_with ~prefix:"\\show " l ->
+    let expr = String.sub l 6 (String.length l - 6) in
+    attempt_eval expr print_ast;
+    repl_loop None
+  | _, Some (k, f, previous_input) ->
+    attempt_eval ~previous_input ~k line f;
+    repl_loop None
+  | _, None ->
+    attempt_eval line eval_module;
+    repl_loop None
 ;;
 
 let start_repl () =

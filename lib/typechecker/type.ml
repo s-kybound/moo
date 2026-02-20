@@ -33,14 +33,14 @@ let negate_tyu (ty_use : ty_use) : ty_use =
 let rec tyu_replace (bindings : (string * ty_use) list) (target : ty_use) : ty_use =
   match target with
   | Polarised (polarity, ty) -> Polarised (polarity, ty_replace bindings ty)
-  | Abstract { negated; name } ->
-    (match List.assoc_opt name bindings with
-     | Some ty_use -> if negated then negate_tyu ty_use else ty_use
-     | None -> target)
   | Constructor (unresolved_tyu_state, raw_ty) ->
     Constructor (unresolved_tyu_state, raw_ty_replace bindings raw_ty)
   | Destructor (unresolved_tyu_state, raw_ty) ->
     Destructor (unresolved_tyu_state, raw_ty_replace bindings raw_ty)
+  | Abstract { negated; name } ->
+  match List.assoc_opt name bindings with
+  | Some ty_use -> if negated then negate_tyu ty_use else ty_use
+  | None -> target
 
 and ty_replace (bindings : (string * ty_use) list) (target : ty) : ty =
   match target with
@@ -144,19 +144,19 @@ let state_equal (state1 : unresolved_tyu_state) (state2 : unresolved_tyu_state) 
   match !(state1.mode), !(state2.mode) with
   | Some m1, Some m2 when m1 <> m2 -> false
   | _ ->
+  match !(state1.shape), !(state2.shape) with
+  | Some s1, Some s2 when s1 <> s2 -> false
+  | _ ->
+    (* if one state has more information, promote the other *)
+    (match !(state1.mode), !(state2.mode) with
+     | Some m, None -> state2.mode := Some m
+     | None, Some m -> state1.mode := Some m
+     | _ -> ());
     (match !(state1.shape), !(state2.shape) with
-     | Some s1, Some s2 when s1 <> s2 -> false
-     | _ ->
-       (* if one state has more information, promote the other *)
-       (match !(state1.mode), !(state2.mode) with
-        | Some m, None -> state2.mode := Some m
-        | None, Some m -> state1.mode := Some m
-        | _ -> ());
-       (match !(state1.shape), !(state2.shape) with
-        | Some s, None -> state2.shape := Some s
-        | None, Some s -> state1.shape := Some s
-        | _ -> ());
-       true)
+     | Some s, None -> state2.shape := Some s
+     | None, Some s -> state1.shape := Some s
+     | _ -> ());
+    true
 ;;
 
 let state_equal_to_mode_shape (state : unresolved_tyu_state) (mode : mode) (shape : shape)
@@ -165,13 +165,13 @@ let state_equal_to_mode_shape (state : unresolved_tyu_state) (mode : mode) (shap
   match !(state.mode) with
   | Some m when m <> mode -> false
   | _ ->
-    (match !(state.shape) with
-     | Some s when s <> shape -> false
-     | _ ->
-       (* promote state to have this information *)
-       state.mode := Some mode;
-       state.shape := Some shape;
-       true)
+  match !(state.shape) with
+  | Some s when s <> shape -> false
+  | _ ->
+    (* promote state to have this information *)
+    state.mode := Some mode;
+    state.shape := Some shape;
+    true
 ;;
 
 let rec tyu_equal (tyu1 : Syntax.Ast.ty_use) (tyu2 : Syntax.Ast.ty_use) tydef_env : bool =
@@ -200,12 +200,13 @@ let rec tyu_equal (tyu1 : Syntax.Ast.ty_use) (tyu2 : Syntax.Ast.ty_use) tydef_en
     | Constructor (state, raw_ty1), resolved_tyu
     | resolved_tyu, Constructor (state, raw_ty1) ->
       let mode, polarity, chirality, raw_ty2 = tyu_to_raw_ty resolved_tyu tydef_env in
-      (match polarity, chirality with
-       | Plus, Codata | Minus, Data -> false
-       | Plus, Data | Minus, Codata ->
-         if not (raw_ty_equal raw_ty1 raw_ty2 tydef_env)
-         then false
-         else state_equal_to_mode_shape state mode chirality)
+      begin match polarity, chirality with
+      | Plus, Codata | Minus, Data -> false
+      | Plus, Data | Minus, Codata ->
+        if not (raw_ty_equal raw_ty1 raw_ty2 tydef_env)
+        then false
+        else state_equal_to_mode_shape state mode chirality
+      end
     | Destructor (state, raw_ty1), resolved_tyu | resolved_tyu, Destructor (state, raw_ty1)
       ->
       let mode, polarity, chirality, raw_ty2 = tyu_to_raw_ty resolved_tyu tydef_env in
@@ -278,11 +279,11 @@ let type_of_raw_constructor
         v.constr_name = constr_name && List.length v.constr_args = constr_arity
       in
       (match List.find_opt is_matching_variant variants with
+       | None -> aux parent
        | Some _ ->
-         (match shape with
-          | Data -> Some (var, ty, Plus)
-          | Codata -> Some (var, ty, Minus))
-       | None -> aux parent)
+       match shape with
+       | Data -> Some (var, ty, Plus)
+       | Codata -> Some (var, ty, Minus))
     | TyFrame { parent; _ } -> aux parent
   in
   aux tydef_env

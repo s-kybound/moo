@@ -55,22 +55,24 @@ let pattern_match (forms : (form * 'a) list) (value : value)
     | [] -> None
     | (form, cmd) :: rest ->
       if form_matches_value form value
-      then (
+      then begin
         match form with
         | Binder name -> Some ([ name, value ], cmd)
-        | Tuple names ->
-          (match value with
-           | VTuple v_list ->
-             let bindings = List.combine names v_list in
-             Some (bindings, cmd)
-           | _ -> None)
+        | Numeral _ -> Some ([], cmd)
+        | Tuple names -> begin
+          match value with
+          | VTuple v_list ->
+            let bindings = List.combine names v_list in
+            Some (bindings, cmd)
+          | _ -> None
+        end
         | Constr { form_name = _; form_args = names } ->
-          (match value with
-           | VConstruction (_cons_name, cons_args) ->
-             let bindings = List.combine names cons_args in
-             Some (bindings, cmd)
-           | _ -> None)
-        | Numeral _ -> Some ([], cmd))
+        match value with
+        | VConstruction (_cons_name, cons_args) ->
+          let bindings = List.combine names cons_args in
+          Some (bindings, cmd)
+        | _ -> None
+      end
       else aux rest
   in
   aux forms
@@ -89,34 +91,36 @@ type program_step =
 let eval_state (state : state) : program_step =
   match state with
   | [], _, _ -> raise (AssertionError "empty control stack")
-  | T term :: c', s, e ->
-    (match term with
-     | NeedsForce t -> Step (force_term t @ c', s, e)
-     | Mu (name, cmd) -> Step (c', VMu (name, [ C cmd ], [], e) :: s, e)
-     | Variable name ->
-       (match lookup e name with
-        | Some v -> Step (c', v :: s, e)
-        | None -> raise (AssertionError ("unbound variable: " ^ name)))
-     | Construction { cons_name; cons_args } ->
-       let arg_eval_sequcence =
-         List.map (fun arg -> T arg) cons_args
-         @ [ I (Con_instr (cons_name, List.length cons_args)) ]
-       in
-       Step (arg_eval_sequcence @ c', s, e)
-     | Tuple terms ->
-       let term_eval_sequence =
-         List.map (fun t -> T t) terms @ [ I (Tup_instr (List.length terms)) ]
-       in
-       Step (term_eval_sequence @ c', s, e)
-     | Matcher patterns_cmds -> Step (c', VMatcher (patterns_cmds, e) :: s, e)
-     | Num n -> Step (c', VNum n :: s, e)
-     | Rec (_name, _t) -> raise Not_implemented
-     | Arr terms ->
-       let term_eval_sequence =
-         List.map (fun t -> T t) terms @ [ I (Arr_instr (List.length terms)) ]
-       in
-       Step (term_eval_sequence @ c', s, e)
-     | Done -> Step (c', VDone :: s, e))
+  | T term :: c', s, e -> begin
+    match term with
+    | NeedsForce t -> Step (force_term t @ c', s, e)
+    | Mu (name, cmd) -> Step (c', VMu (name, [ C cmd ], [], e) :: s, e)
+    | Variable name -> begin
+      match lookup e name with
+      | Some v -> Step (c', v :: s, e)
+      | None -> raise (AssertionError ("unbound variable: " ^ name))
+    end
+    | Construction { cons_name; cons_args } ->
+      let arg_eval_sequcence =
+        List.map (fun arg -> T arg) cons_args
+        @ [ I (Con_instr (cons_name, List.length cons_args)) ]
+      in
+      Step (arg_eval_sequcence @ c', s, e)
+    | Tuple terms ->
+      let term_eval_sequence =
+        List.map (fun t -> T t) terms @ [ I (Tup_instr (List.length terms)) ]
+      in
+      Step (term_eval_sequence @ c', s, e)
+    | Matcher patterns_cmds -> Step (c', VMatcher (patterns_cmds, e) :: s, e)
+    | Num n -> Step (c', VNum n :: s, e)
+    | Rec (_name, _t) -> raise Not_implemented
+    | Arr terms ->
+      let term_eval_sequence =
+        List.map (fun t -> T t) terms @ [ I (Arr_instr (List.length terms)) ]
+      in
+      Step (term_eval_sequence @ c', s, e)
+    | Done -> Step (c', VDone :: s, e)
+  end
   (* instructions *)
   | I Force :: c', VMu (name, mu_c, mu_s, mu_e) :: s', e ->
     let k_name = gensym "k" in
@@ -231,23 +235,22 @@ let eval_state (state : state) : program_step =
   | I (Arr_instr _) :: _, _, _ -> raise (AssertionError "stack underflow on array")
   (* commands *)
   | C cmd :: c', s, e ->
-    (match cmd with
-     | Fork (cmd1, cmd2) -> Step (I (Spawn cmd2) :: C cmd1 :: c', s, e)
-     | Core { focus_term; unfocus_term } ->
-       Step (force_term focus_term @ (T unfocus_term :: I Cut :: c'), s, e)
-     | Arith (Unop { op; in_focus_term; out_unfocus_term }) ->
-       Step
-         ( force_term in_focus_term
-           @ (I (Unop_instr op) :: T out_unfocus_term :: I Cut :: c')
-         , s
-         , e )
-     | Arith (Bop { op; l_focus_term; r_focus_term; out_unfocus_term }) ->
-       Step
-         ( force_term l_focus_term
-           @ force_term r_focus_term
-           @ (I (Bop_instr op) :: T out_unfocus_term :: I Cut :: c')
-         , s
-         , e ))
+  match cmd with
+  | Fork (cmd1, cmd2) -> Step (I (Spawn cmd2) :: C cmd1 :: c', s, e)
+  | Core { focus_term; unfocus_term } ->
+    Step (force_term focus_term @ (T unfocus_term :: I Cut :: c'), s, e)
+  | Arith (Unop { op; in_focus_term; out_unfocus_term }) ->
+    Step
+      ( force_term in_focus_term @ (I (Unop_instr op) :: T out_unfocus_term :: I Cut :: c')
+      , s
+      , e )
+  | Arith (Bop { op; l_focus_term; r_focus_term; out_unfocus_term }) ->
+    Step
+      ( force_term l_focus_term
+        @ force_term r_focus_term
+        @ (I (Bop_instr op) :: T out_unfocus_term :: I Cut :: c')
+      , s
+      , e )
 ;;
 
 let state_of_command (cmd : command) : state = [ C cmd ], [], Ir.empty_environment
