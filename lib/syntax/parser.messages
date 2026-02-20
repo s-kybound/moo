@@ -1,0 +1,3245 @@
+parse_program: UNIT
+##
+## Ends in an error in state: 0.
+##
+## parse_program' -> . parse_program [ # ]
+##
+## The known suffix of the stack is as follows:
+##
+##
+
+You're at the top level of a complete program. Next step: start with a top-level form like open, module, let, proc, type, data, codata, or do. Begin with a valid top-level declaration and keep nested constructs balanced.
+
+parse_program: USE USE
+##
+## Ends in an error in state: 1.
+##
+## open_statement -> USE . namespaced(any_ident) AS any_ident [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## USE
+##
+
+You are still in an import declaration. Next step: write the module path after use, then finish with as <name>. Use a full path and alias where required, then continue with the next top-level item.
+
+parse_program: OPEN NAMESPACE_IDENT USE
+##
+## Ends in an error in state: 2.
+##
+## namespaced(any_ident) -> NAMESPACE_IDENT . namespaced(any_ident) [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA AS ]
+##
+## The known suffix of the stack is as follows:
+## NAMESPACE_IDENT
+##
+
+Module path parsing is active. Next step: continue with a namespaced identifier. Use a full path and alias where required, then continue with the next top-level item.
+
+parse_program: USE CONSTRUCTOR_IDENT USE
+##
+## Ends in an error in state: 7.
+##
+## open_statement -> USE namespaced(any_ident) . AS any_ident [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## USE namespaced(any_ident)
+##
+
+You are still in an import declaration. Next step: continue with as. If you are done importing, terminate this statement before starting another declaration.
+
+parse_program: USE CONSTRUCTOR_IDENT AS USE
+##
+## Ends in an error in state: 8.
+##
+## open_statement -> USE namespaced(any_ident) AS . any_ident [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## USE namespaced(any_ident) AS
+##
+
+Module path parsing is active. Next step: give the alias name after as. If you are done importing, terminate this statement before starting another declaration.
+
+parse_program: TYPE USE
+##
+## Ends in an error in state: 10.
+##
+## type_definition -> TYPE . kind_binder EQUALS type_expr [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## TYPE
+##
+
+Type parsing is active here. Next step: continue with a type name (optionally with parameters). Close any pending type delimiters (`<...>`, `(...)`, `[...]`) before moving on.
+
+parse_program: CODATA IDENT USE
+##
+## Ends in an error in state: 11.
+##
+## kind_binder -> IDENT . [ EQUALS ]
+## kind_binder -> IDENT . LANGLE loption(separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT)) RANGLE [ EQUALS ]
+##
+## The known suffix of the stack is as follows:
+## IDENT
+##
+
+This position belongs to a type declaration. Next step: continue with <. Close any pending type delimiters (`<...>`, `(...)`, `[...]`) before moving on.
+
+parse_program: CODATA IDENT LANGLE USE
+##
+## Ends in an error in state: 12.
+##
+## kind_binder -> IDENT LANGLE . loption(separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT)) RANGLE [ EQUALS ]
+##
+## The known suffix of the stack is as follows:
+## IDENT LANGLE
+##
+
+You're inside a type declaration. Next step: continue with the optional part of this construct. Close any pending type delimiters (`<...>`, `(...)`, `[...]`) before moving on.
+
+parse_program: CODATA IDENT LANGLE CONSTRUCTOR_IDENT USE
+##
+## Ends in an error in state: 13.
+##
+## separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT) -> CONSTRUCTOR_IDENT . [ RANGLE ]
+## separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT) -> CONSTRUCTOR_IDENT . COMMA separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT) [ RANGLE ]
+##
+## The known suffix of the stack is as follows:
+## CONSTRUCTOR_IDENT
+##
+
+This point is inside separated nonempty list(COMMA,CONSTRUCTOR IDENT). Next step: continue with ,. Finish the required token sequence here before moving on.
+
+parse_program: CODATA IDENT LANGLE CONSTRUCTOR_IDENT COMMA USE
+##
+## Ends in an error in state: 14.
+##
+## separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT) -> CONSTRUCTOR_IDENT COMMA . separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT) [ RANGLE ]
+##
+## The known suffix of the stack is as follows:
+## CONSTRUCTOR_IDENT COMMA
+##
+
+The parser is still in separated nonempty list(COMMA,CONSTRUCTOR IDENT). Next step: add the next comma-separated element. Finish the required token sequence here before moving on.
+
+parse_program: TYPE IDENT LANGLE RANGLE USE
+##
+## Ends in an error in state: 19.
+##
+## type_definition -> TYPE kind_binder . EQUALS type_expr [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## TYPE kind_binder
+##
+
+Type parsing is active here. Next step: put = next, then continue with the right-hand side. Type declarations are strict in this spot, so complete this part before switching constructs.
+
+parse_program: TYPE IDENT EQUALS USE
+##
+## Ends in an error in state: 20.
+##
+## type_definition -> TYPE kind_binder EQUALS . type_expr [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## TYPE kind_binder EQUALS
+##
+
+This position belongs to a type declaration. Next step: write the type expression on the right-hand side. Finish the type skeleton first; then continue with terms or declarations outside it.
+
+parse_program: LET IDENT COLON NAMESPACE_IDENT USE
+##
+## Ends in an error in state: 21.
+##
+## namespaced(IDENT) -> NAMESPACE_IDENT . namespaced(IDENT) [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE LANGLE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## NAMESPACE_IDENT
+##
+
+You're currently building namespaced(IDENT). Next step: continue with a namespaced identifier. If this was accidental, close the current form before starting a new one.
+
+parse_program: LET IDENT COLON LPAREN USE
+##
+## Ends in an error in state: 24.
+##
+## type_expr -> LPAREN . type_expr RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN
+##
+
+You're inside a type declaration. Next step: put a valid expression inside the parentheses, then close with ). Finish the type skeleton first; then continue with terms or declarations outside it.
+
+parse_program: LET IDENT COLON LPAREN IDENT USE
+##
+## Ends in an error in state: 27.
+##
+## type_expr -> LPAREN type_expr . RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN type_expr
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 52, spurious reduction of production named_type -> namespaced(IDENT)
+## In state 58, spurious reduction of production type_expr -> named_type
+##
+
+You're inside a type declaration. Next step: continue with ). Close any pending type delimiters (`<...>`, `(...)`, `[...]`) before moving on.
+
+parse_program: LET IDENT COLON CODATA USE
+##
+## Ends in an error in state: 30.
+##
+## shaped_type -> shape . mode simple_raw_type [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+## shaped_type -> shape . simple_raw_type [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## shape
+##
+
+You're inside a type declaration. Next step: continue with mode or a type expression. Type declarations are strict in this spot, so complete this part before switching constructs.
+
+parse_program: CODATA IDENT EQUALS LPAREN USE
+##
+## Ends in an error in state: 33.
+##
+## tuple_type -> LPAREN . RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+## tuple_type -> LPAREN . type_use COMMA RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+## tuple_type -> LPAREN . type_use COMMA separated_nonempty_list(COMMA,type_use) RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN
+##
+
+You are in tuple type. Next step: put a valid expression inside the parentheses, then close with ). Complete this construct first, then continue outward.
+
+parse_program: LET IDENT COLON NEG USE
+##
+## Ends in an error in state: 36.
+##
+## abstract_type -> NEG . abstract_type [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## NEG
+##
+
+You are in abstract type. Next step: continue with abstract type. If this was accidental, close the current form before starting a new one.
+
+parse_program: LET IDENT COLON ABSTRACT USE
+##
+## Ends in an error in state: 40.
+##
+## unify_type -> ABSTRACT . LBRACK separated_nonempty_list(COMMA,abstract_binder) RBRACK type_use [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## ABSTRACT
+##
+
+This point is inside unify type. Next step: continue with [. Finish the required token sequence here before moving on.
+
+parse_program: LET IDENT COLON ABSTRACT LBRACK USE
+##
+## Ends in an error in state: 41.
+##
+## unify_type -> ABSTRACT LBRACK . separated_nonempty_list(COMMA,abstract_binder) RBRACK type_use [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## ABSTRACT LBRACK
+##
+
+The parser is still in unify type. Next step: continue with another list element. Finish the required token sequence here before moving on.
+
+parse_program: LET IDENT COLON ABSTRACT LBRACK CONSTRUCTOR_IDENT USE
+##
+## Ends in an error in state: 42.
+##
+## separated_nonempty_list(COMMA,abstract_binder) -> CONSTRUCTOR_IDENT . [ RBRACK ]
+## separated_nonempty_list(COMMA,abstract_binder) -> CONSTRUCTOR_IDENT . COMMA separated_nonempty_list(COMMA,abstract_binder) [ RBRACK ]
+##
+## The known suffix of the stack is as follows:
+## CONSTRUCTOR_IDENT
+##
+
+You're currently building separated nonempty list(COMMA,abstract binder). Next step: continue with ,. Finish the required token sequence here before moving on.
+
+parse_program: LET IDENT COLON ABSTRACT LBRACK CONSTRUCTOR_IDENT COMMA USE
+##
+## Ends in an error in state: 43.
+##
+## separated_nonempty_list(COMMA,abstract_binder) -> CONSTRUCTOR_IDENT COMMA . separated_nonempty_list(COMMA,abstract_binder) [ RBRACK ]
+##
+## The known suffix of the stack is as follows:
+## CONSTRUCTOR_IDENT COMMA
+##
+
+This point is inside separated nonempty list(COMMA,abstract binder). Next step: add the next comma-separated element. Finish the required token sequence here before moving on.
+
+parse_program: LET IDENT COLON ABSTRACT LBRACK CONSTRUCTOR_IDENT RBRACK USE
+##
+## Ends in an error in state: 46.
+##
+## unify_type -> ABSTRACT LBRACK separated_nonempty_list(COMMA,abstract_binder) RBRACK . type_use [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## ABSTRACT LBRACK separated_nonempty_list(COMMA,abstract_binder) RBRACK
+##
+
+This point is inside unify type. Next step: continue with a type expression. Complete this construct first, then continue outward.
+
+parse_program: LET IDENT COLON MINUS USE
+##
+## Ends in an error in state: 50.
+##
+## polarised_type -> polarity . type_expr [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## polarity
+##
+
+This position belongs to a type declaration. Next step: continue with a type expression. Finish the type skeleton first; then continue with terms or declarations outside it.
+
+parse_program: LET IDENT COLON IDENT UNIT
+##
+## Ends in an error in state: 52.
+##
+## named_type -> namespaced(IDENT) . [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+## named_type -> namespaced(IDENT) . LANGLE loption(separated_nonempty_list(COMMA,type_use)) RANGLE [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## namespaced(IDENT)
+##
+
+Type parsing is active here. Next step: continue with <. Finish the type skeleton first; then continue with terms or declarations outside it.
+
+parse_program: LET IDENT COLON IDENT LANGLE USE
+##
+## Ends in an error in state: 53.
+##
+## named_type -> namespaced(IDENT) LANGLE . loption(separated_nonempty_list(COMMA,type_use)) RANGLE [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## namespaced(IDENT) LANGLE
+##
+
+This position belongs to a type declaration. Next step: continue with the optional part of this construct. Finish the type skeleton first; then continue with terms or declarations outside it.
+
+parse_program: CODATA IDENT EQUALS CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT UNIT
+##
+## Ends in an error in state: 54.
+##
+## separated_nonempty_list(COMMA,type_use) -> type_use . [ RPAREN RANGLE ]
+## separated_nonempty_list(COMMA,type_use) -> type_use . COMMA separated_nonempty_list(COMMA,type_use) [ RPAREN RANGLE ]
+##
+## The known suffix of the stack is as follows:
+## type_use
+##
+
+You're currently building separated nonempty list(COMMA,type use). Next step: continue with ,. If this was accidental, close the current form before starting a new one.
+
+parse_program: CODATA IDENT EQUALS CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA USE
+##
+## Ends in an error in state: 55.
+##
+## separated_nonempty_list(COMMA,type_use) -> type_use COMMA . separated_nonempty_list(COMMA,type_use) [ RPAREN RANGLE ]
+##
+## The known suffix of the stack is as follows:
+## type_use COMMA
+##
+
+This point is inside separated nonempty list(COMMA,type use). Next step: add the next comma-separated element. Finish the required token sequence here before moving on.
+
+parse_program: LET IDENT COLON IDENT LANGLE CONSTRUCTOR_IDENT RPAREN
+##
+## Ends in an error in state: 61.
+##
+## named_type -> namespaced(IDENT) LANGLE loption(separated_nonempty_list(COMMA,type_use)) . RANGLE [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## namespaced(IDENT) LANGLE loption(separated_nonempty_list(COMMA,type_use))
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 54, spurious reduction of production separated_nonempty_list(COMMA,type_use) -> type_use
+## In state 60, spurious reduction of production loption(separated_nonempty_list(COMMA,type_use)) -> separated_nonempty_list(COMMA,type_use)
+##
+
+Type parsing is active here. Next step: continue with >. Type declarations are strict in this spot, so complete this part before switching constructs.
+
+parse_program: CODATA IDENT EQUALS LPAREN CONSTRUCTOR_IDENT UNIT
+##
+## Ends in an error in state: 63.
+##
+## tuple_type -> LPAREN type_use . COMMA RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+## tuple_type -> LPAREN type_use . COMMA separated_nonempty_list(COMMA,type_use) RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN type_use
+##
+
+You are in tuple type. Next step: continue with ,. Complete this construct first, then continue outward.
+
+parse_program: CODATA IDENT EQUALS LPAREN CONSTRUCTOR_IDENT COMMA USE
+##
+## Ends in an error in state: 64.
+##
+## tuple_type -> LPAREN type_use COMMA . RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+## tuple_type -> LPAREN type_use COMMA . separated_nonempty_list(COMMA,type_use) RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN type_use COMMA
+##
+
+This point is inside tuple type. Next step: add the next comma-separated element. Complete this construct first, then continue outward.
+
+parse_program: CODATA IDENT EQUALS LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT RANGLE
+##
+## Ends in an error in state: 66.
+##
+## tuple_type -> LPAREN type_use COMMA separated_nonempty_list(COMMA,type_use) . RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN type_use COMMA separated_nonempty_list(COMMA,type_use)
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 54, spurious reduction of production separated_nonempty_list(COMMA,type_use) -> type_use
+##
+
+You are in tuple type. Next step: continue with ). If this was accidental, close the current form before starting a new one.
+
+parse_program: LET IDENT COLON CODATA LBRACK USE
+##
+## Ends in an error in state: 68.
+##
+## array_type -> LBRACK . type_use RBRACK [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+## mode -> LBRACK . CBV RBRACK [ UNIT RAW64 LPAREN LBRACK ]
+## mode -> LBRACK . CBN RBRACK [ UNIT RAW64 LPAREN LBRACK ]
+##
+## The known suffix of the stack is as follows:
+## LBRACK
+##
+
+The parser is still in array type. Next step: put a valid element inside the brackets, then close with ]. If this was accidental, close the current form before starting a new one.
+
+parse_program: CODATA LBRACK CBV USE
+##
+## Ends in an error in state: 69.
+##
+## mode -> LBRACK CBV . RBRACK [ UNIT RAW64 LPAREN LBRACK IDENT ]
+##
+## The known suffix of the stack is as follows:
+## LBRACK CBV
+##
+
+You are in mode. Next step: continue with ]. If this was accidental, close the current form before starting a new one.
+
+parse_program: CODATA LBRACK CBN USE
+##
+## Ends in an error in state: 71.
+##
+## mode -> LBRACK CBN . RBRACK [ UNIT RAW64 LPAREN LBRACK IDENT ]
+##
+## The known suffix of the stack is as follows:
+## LBRACK CBN
+##
+
+The parser is still in mode. Next step: continue with ]. Finish the required token sequence here before moving on.
+
+parse_program: CODATA IDENT EQUALS LBRACK CONSTRUCTOR_IDENT UNIT
+##
+## Ends in an error in state: 73.
+##
+## array_type -> LBRACK type_use . RBRACK [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LBRACK type_use
+##
+
+This point is inside array type. Next step: continue with ]. Finish the required token sequence here before moving on.
+
+parse_program: LET IDENT COLON CODATA LBRACK CBN RBRACK USE
+##
+## Ends in an error in state: 77.
+##
+## shaped_type -> shape mode . simple_raw_type [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## shape mode
+##
+
+This position belongs to a type declaration. Next step: continue with a type expression. Type declarations are strict in this spot, so complete this part before switching constructs.
+
+parse_program: CODATA IDENT EQUALS LBRACK USE
+##
+## Ends in an error in state: 78.
+##
+## array_type -> LBRACK . type_use RBRACK [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RTLARROW RPAREN RBRACK RBRACE RANGLE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LTRARROW LPAREN LET LBRACE IN IDENT EQUALS EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LBRACK
+##
+
+You are in array type. Next step: put a valid element inside the brackets, then close with ]. Complete this construct first, then continue outward.
+
+parse_program: PROC USE
+##
+## Ends in an error in state: 82.
+##
+## proc_definition -> PROC . untyped_binder proc_binders proc_body [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+## proc_definition -> PROC . REC untyped_binder proc_binders proc_body [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## PROC
+##
+
+You are in proc syntax. Next step: continue with a binder or rec. If parameters are complete, move into the body block next.
+
+parse_program: PROC REC USE
+##
+## Ends in an error in state: 84.
+##
+## proc_definition -> PROC REC . untyped_binder proc_binders proc_body [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## PROC REC
+##
+
+Procedure definition in progress. Next step: continue with a binder. If parameters are complete, move into the body block next.
+
+parse_program: PROC REC IDENT USE
+##
+## Ends in an error in state: 86.
+##
+## proc_definition -> PROC REC untyped_binder . proc_binders proc_body [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## PROC REC untyped_binder
+##
+
+This position belongs to a procedure declaration. Next step: continue with proc binders. Keep proc structure in order: binder list, then body.
+
+parse_program: PROC IDENT LPAREN USE
+##
+## Ends in an error in state: 87.
+##
+## proc_binders -> LPAREN . loption(separated_nonempty_list(COMMA,typed_binder)) RPAREN [ LBRACE ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN
+##
+
+Procedure definition in progress. Next step: continue with the optional part of this construct. Keep proc structure in order: binder list, then body.
+
+parse_program: LET LPAREN USE
+##
+## Ends in an error in state: 88.
+##
+## typed_binder -> LPAREN . typed_binder_aux RPAREN [ RTLARROW RPAREN LTRARROW EQUALS COMMA ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN
+##
+
+This point is inside typed binder. Next step: continue with typed binder aux. Finish the required token sequence here before moving on.
+
+parse_program: LET IDENT USE
+##
+## Ends in an error in state: 89.
+##
+## typed_binder_aux -> untyped_binder . COLON type_use [ RPAREN EQUALS COMMA ]
+##
+## The known suffix of the stack is as follows:
+## untyped_binder
+##
+
+The parser is still in typed binder aux. Next step: continue with :. Finish the required token sequence here before moving on.
+
+parse_program: LET IDENT COLON USE
+##
+## Ends in an error in state: 90.
+##
+## typed_binder_aux -> untyped_binder COLON . type_use [ RTLARROW RPAREN LTRARROW EQUALS COMMA ]
+##
+## The known suffix of the stack is as follows:
+## untyped_binder COLON
+##
+
+You are in typed binder aux. Next step: continue with a type expression. Complete this construct first, then continue outward.
+
+parse_program: LET LPAREN IDENT COLON CONSTRUCTOR_IDENT UNIT
+##
+## Ends in an error in state: 92.
+##
+## typed_binder -> LPAREN typed_binder_aux . RPAREN [ RTLARROW RPAREN LTRARROW EQUALS COMMA ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN typed_binder_aux
+##
+
+The parser is still in typed binder. Next step: continue with ). Complete this construct first, then continue outward.
+
+parse_program: PROC IDENT LPAREN IDENT COLON CONSTRUCTOR_IDENT UNIT
+##
+## Ends in an error in state: 95.
+##
+## separated_nonempty_list(COMMA,typed_binder) -> typed_binder . [ RPAREN ]
+## separated_nonempty_list(COMMA,typed_binder) -> typed_binder . COMMA separated_nonempty_list(COMMA,typed_binder) [ RPAREN ]
+##
+## The known suffix of the stack is as follows:
+## typed_binder
+##
+
+The parser is still in separated nonempty list(COMMA,typed binder). Next step: continue with ,. If this was accidental, close the current form before starting a new one.
+
+parse_program: PROC IDENT LPAREN IDENT COLON CONSTRUCTOR_IDENT COMMA USE
+##
+## Ends in an error in state: 96.
+##
+## separated_nonempty_list(COMMA,typed_binder) -> typed_binder COMMA . separated_nonempty_list(COMMA,typed_binder) [ RPAREN ]
+##
+## The known suffix of the stack is as follows:
+## typed_binder COMMA
+##
+
+You're currently building separated nonempty list(COMMA,typed binder). Next step: add the next comma-separated element. If this was accidental, close the current form before starting a new one.
+
+parse_program: PROC REC IDENT LPAREN RPAREN USE
+##
+## Ends in an error in state: 101.
+##
+## proc_definition -> PROC REC untyped_binder proc_binders . proc_body [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## PROC REC untyped_binder proc_binders
+##
+
+This position belongs to a procedure declaration. Next step: continue with proc body. Keep proc structure in order: binder list, then body.
+
+parse_program: PROC IDENT LPAREN RPAREN LBRACE USE
+##
+## Ends in an error in state: 102.
+##
+## proc_body -> LBRACE . statement RBRACE [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## LBRACE
+##
+
+Procedure definition in progress. Next step: continue with a statement. Keep proc structure in order: binder list, then body.
+
+parse_program: DO STAR USE
+##
+## Ends in an error in state: 103.
+##
+## arith_command -> STAR . LPAREN term COMMA term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## STAR
+##
+
+You are in an arithmetic command. Next step: continue with (. Close the operator parentheses once all required operands are present.
+
+parse_program: DO STAR LPAREN USE
+##
+## Ends in an error in state: 104.
+##
+## arith_command -> STAR LPAREN . term COMMA term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## STAR LPAREN
+##
+
+Numeric operator form is active. Next step: put a valid expression inside the parentheses, then close with ). Close the operator parentheses once all required operands are present.
+
+parse_program: DO CONSTRUCTOR_LPAREN NEG USE
+##
+## Ends in an error in state: 106.
+##
+## active_number_term -> NEG . term [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA BAR ]
+##
+## The known suffix of the stack is as follows:
+## NEG
+##
+
+You are in an arithmetic command. Next step: continue with a term. Keep the operand separators in order: commas and `|` matter here.
+
+parse_program: DO NAMESPACE_IDENT USE
+##
+## Ends in an error in state: 107.
+##
+## namespaced(CONSTRUCTOR_IDENT) -> NAMESPACE_IDENT . namespaced(CONSTRUCTOR_IDENT) [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET LBRACE IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+## namespaced(CONSTRUCTOR_LPAREN) -> NAMESPACE_IDENT . namespaced(CONSTRUCTOR_LPAREN) [ NUMBER NEG NAMESPACE_IDENT MINUS MATCH LPAREN LBRACK LBRACE IDENT DONE CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT ]
+## namespaced(IDENT) -> NAMESPACE_IDENT . namespaced(IDENT) [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET LBRACE IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## NAMESPACE_IDENT
+##
+
+The parser is still in namespaced(CONSTRUCTOR IDENT). Next step: continue with a namespaced identifier or a namespaced identifier. Complete this construct first, then continue outward.
+
+parse_program: DO CONSTRUCTOR_LPAREN MINUS USE
+##
+## Ends in an error in state: 112.
+##
+## active_number_term -> MINUS . term [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA BAR ]
+##
+## The known suffix of the stack is as follows:
+## MINUS
+##
+
+You are in an arithmetic command. Next step: continue with a term. Finish this operator call completely before chaining another expression.
+
+parse_program: DO CONSTRUCTOR_LPAREN MATCH USE
+##
+## Ends in an error in state: 113.
+##
+## indirect_term -> MATCH . match_body [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET LBRACE IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## MATCH
+##
+
+Pattern matching is still in progress. Next step: continue with match body. If you meant to leave this match, close the arm or the match body before continuing.
+
+parse_program: DO MATCH LBRACE USE
+##
+## Ends in an error in state: 114.
+##
+## match_body -> LBRACE . option(BAR) separated_nonempty_list(option(BAR),match_case) RBRACE [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET LBRACE IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LBRACE
+##
+
+You're matching on a pattern here. Next step: continue with the optional part of this construct. If you meant to leave this match, close the arm or the match body before continuing.
+
+parse_program: DO MATCH LBRACE BAR USE
+##
+## Ends in an error in state: 116.
+##
+## match_body -> LBRACE option(BAR) . separated_nonempty_list(option(BAR),match_case) RBRACE [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET LBRACE IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LBRACE option(BAR)
+##
+
+Pattern matching is still in progress. Next step: continue with another list element. Complete the current arm, then add another `|` arm only if needed.
+
+parse_program: DO MATCH LBRACE NAMESPACE_IDENT USE
+##
+## Ends in an error in state: 118.
+##
+## namespaced(CONSTRUCTOR_IDENT) -> NAMESPACE_IDENT . namespaced(CONSTRUCTOR_IDENT) [ LTRARROW ]
+## namespaced(CONSTRUCTOR_LPAREN) -> NAMESPACE_IDENT . namespaced(CONSTRUCTOR_LPAREN) [ UNDERSCORE LPAREN IDENT ]
+##
+## The known suffix of the stack is as follows:
+## NAMESPACE_IDENT
+##
+
+This point is inside namespaced(CONSTRUCTOR IDENT). Next step: continue with a namespaced identifier or a namespaced identifier. Finish the required token sequence here before moving on.
+
+parse_program: DO MATCH LBRACE LPAREN USE
+##
+## Ends in an error in state: 119.
+##
+## tuple_pattern -> LPAREN . RPAREN [ LTRARROW ]
+## tuple_pattern -> LPAREN . binder COMMA RPAREN [ LTRARROW ]
+## tuple_pattern -> LPAREN . binder COMMA separated_nonempty_list(COMMA,binder) RPAREN [ LTRARROW ]
+## typed_binder -> LPAREN . typed_binder_aux RPAREN [ LTRARROW COMMA ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN
+##
+
+Pattern matching is still in progress. Next step: continue with ) or a binder. Complete the current arm, then add another `|` arm only if needed.
+
+parse_program: DO LBRACE IDENT USE
+##
+## Ends in an error in state: 121.
+##
+## binder -> untyped_binder . [ RTLARROW RPAREN LTRARROW COMMA ]
+## typed_binder_aux -> untyped_binder . COLON type_use [ RTLARROW RPAREN LTRARROW COMMA ]
+##
+## The known suffix of the stack is as follows:
+## untyped_binder
+##
+
+This point is inside binder. Next step: continue with :. Complete this construct first, then continue outward.
+
+parse_program: DO MATCH LBRACE LPAREN IDENT COLON CONSTRUCTOR_IDENT UNIT
+##
+## Ends in an error in state: 122.
+##
+## typed_binder -> typed_binder_aux . [ COMMA ]
+## typed_binder -> LPAREN typed_binder_aux . RPAREN [ LTRARROW COMMA ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN typed_binder_aux
+##
+
+The parser is still in typed binder. Next step: continue with ). Complete this construct first, then continue outward.
+
+parse_program: DO MATCH LBRACE LPAREN IDENT RTLARROW
+##
+## Ends in an error in state: 124.
+##
+## tuple_pattern -> LPAREN binder . COMMA RPAREN [ LTRARROW ]
+## tuple_pattern -> LPAREN binder . COMMA separated_nonempty_list(COMMA,binder) RPAREN [ LTRARROW ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN binder
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 121, spurious reduction of production binder -> untyped_binder
+##
+
+This branch is inside a match expression. Next step: continue with ,. Think in terms of `pattern -> statement` and complete that shape first.
+
+parse_program: DO MATCH LBRACE LPAREN IDENT COMMA USE
+##
+## Ends in an error in state: 125.
+##
+## tuple_pattern -> LPAREN binder COMMA . RPAREN [ LTRARROW ]
+## tuple_pattern -> LPAREN binder COMMA . separated_nonempty_list(COMMA,binder) RPAREN [ LTRARROW ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN binder COMMA
+##
+
+Pattern matching is still in progress. Next step: add the next comma-separated element. If you meant to leave this match, close the arm or the match body before continuing.
+
+parse_program: DO MATCH LBRACE LPAREN IDENT COMMA IDENT LTRARROW
+##
+## Ends in an error in state: 127.
+##
+## tuple_pattern -> LPAREN binder COMMA separated_nonempty_list(COMMA,binder) . RPAREN [ LTRARROW ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN binder COMMA separated_nonempty_list(COMMA,binder)
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 121, spurious reduction of production binder -> untyped_binder
+## In state 129, spurious reduction of production separated_nonempty_list(COMMA,binder) -> binder
+##
+
+This branch is inside a match expression. Next step: continue with ). If you meant to leave this match, close the arm or the match body before continuing.
+
+parse_program: DO MATCH LBRACE CONSTRUCTOR_LPAREN IDENT RTLARROW
+##
+## Ends in an error in state: 129.
+##
+## separated_nonempty_list(COMMA,binder) -> binder . [ RPAREN LTRARROW ]
+## separated_nonempty_list(COMMA,binder) -> binder . COMMA separated_nonempty_list(COMMA,binder) [ RPAREN LTRARROW ]
+##
+## The known suffix of the stack is as follows:
+## binder
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 121, spurious reduction of production binder -> untyped_binder
+##
+
+You're currently building separated nonempty list(COMMA,binder). Next step: continue with ,. If this was accidental, close the current form before starting a new one.
+
+parse_program: DO MATCH LBRACE CONSTRUCTOR_LPAREN IDENT COMMA USE
+##
+## Ends in an error in state: 130.
+##
+## separated_nonempty_list(COMMA,binder) -> binder COMMA . separated_nonempty_list(COMMA,binder) [ RPAREN LTRARROW ]
+##
+## The known suffix of the stack is as follows:
+## binder COMMA
+##
+
+This point is inside separated nonempty list(COMMA,binder). Next step: add the next comma-separated element. Finish the required token sequence here before moving on.
+
+parse_program: DO MATCH LBRACE CONSTRUCTOR_IDENT USE
+##
+## Ends in an error in state: 135.
+##
+## match_case -> pattern . LTRARROW statement [ UNDERSCORE RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## pattern
+##
+
+You're matching on a pattern here. Next step: continue with <-. Think in terms of `pattern -> statement` and complete that shape first.
+
+parse_program: DO MATCH LBRACE IDENT LTRARROW USE
+##
+## Ends in an error in state: 136.
+##
+## match_case -> pattern LTRARROW . statement [ UNDERSCORE RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## pattern LTRARROW
+##
+
+This branch is inside a match expression. Next step: continue with a statement. Think in terms of `pattern -> statement` and complete that shape first.
+
+parse_program: DO SLASH USE
+##
+## Ends in an error in state: 137.
+##
+## arith_command -> SLASH . LPAREN term COMMA term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## SLASH
+##
+
+Numeric operator form is active. Next step: continue with (. Keep the operand separators in order: commas and `|` matter here.
+
+parse_program: DO SLASH LPAREN USE
+##
+## Ends in an error in state: 138.
+##
+## arith_command -> SLASH LPAREN . term COMMA term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## SLASH LPAREN
+##
+
+Arithmetic form detected. Next step: put a valid expression inside the parentheses, then close with ). Keep the operand separators in order: commas and `|` matter here.
+
+parse_program: DO CONSTRUCTOR_LPAREN LPAREN USE
+##
+## Ends in an error in state: 139.
+##
+## indirect_term -> LPAREN . term RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET LBRACE IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+## product_term -> LPAREN . RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET LBRACE IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+## product_term -> LPAREN . term COMMA RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET LBRACE IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+## product_term -> LPAREN . term COMMA separated_nonempty_list(COMMA,term) RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET LBRACE IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN
+##
+
+This point is inside indirect term. Next step: put a valid expression inside the parentheses, then close with ). Complete this construct first, then continue outward.
+
+parse_program: DO CONSTRUCTOR_LPAREN LBRACK USE
+##
+## Ends in an error in state: 141.
+##
+## array_term -> LBRACK . loption(separated_nonempty_list(COMMA,term)) RBRACK [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET LBRACE IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LBRACK
+##
+
+You are in array term. Next step: put a valid element inside the brackets, then close with ]. If this was accidental, close the current form before starting a new one.
+
+parse_program: DO LBRACE USE
+##
+## Ends in an error in state: 142.
+##
+## naked_mu_term -> LBRACE . binder LTRARROW statement RBRACE [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LBRACE
+##
+
+This point is inside naked mu term. Next step: continue with a binder. If this was accidental, close the current form before starting a new one.
+
+parse_program: DO LBRACE IDENT RTLARROW
+##
+## Ends in an error in state: 143.
+##
+## naked_mu_term -> LBRACE binder . LTRARROW statement RBRACE [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LBRACE binder
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 121, spurious reduction of production binder -> untyped_binder
+##
+
+The parser is still in naked mu term. Next step: continue with <-. If this was accidental, close the current form before starting a new one.
+
+parse_program: DO LBRACE IDENT LTRARROW USE
+##
+## Ends in an error in state: 144.
+##
+## naked_mu_term -> LBRACE binder LTRARROW . statement RBRACE [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LBRACE binder LTRARROW
+##
+
+You are in naked mu term. Next step: continue with a statement. If this was accidental, close the current form before starting a new one.
+
+parse_program: DO PLUS USE
+##
+## Ends in an error in state: 145.
+##
+## arith_command -> PLUS . LPAREN term COMMA term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## PLUS
+##
+
+You are in an arithmetic command. Next step: continue with (. Close the operator parentheses once all required operands are present.
+
+parse_program: DO PLUS LPAREN USE
+##
+## Ends in an error in state: 146.
+##
+## arith_command -> PLUS LPAREN . term COMMA term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## PLUS LPAREN
+##
+
+Numeric operator form is active. Next step: put a valid expression inside the parentheses, then close with ). Close the operator parentheses once all required operands are present.
+
+parse_program: DO PLUS LPAREN CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 148.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . STAR term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . SLASH term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . PERCENT term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
+## arith_command -> PLUS LPAREN term . COMMA term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## PLUS LPAREN term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+You are in an arithmetic command. Next step: continue with + or -. Close the operator parentheses once all required operands are present.
+
+parse_program: DO CONSTRUCTOR_IDENT STAR USE
+##
+## Ends in an error in state: 149.
+##
+## active_number_term -> term STAR . term [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA BAR ]
+##
+## The known suffix of the stack is as follows:
+## term STAR
+##
+
+Numeric operator form is active. Next step: continue with a term. Close the operator parentheses once all required operands are present.
+
+parse_program: DO CONSTRUCTOR_LPAREN USE
+##
+## Ends in an error in state: 154.
+##
+## cons_term -> namespaced(CONSTRUCTOR_LPAREN) . separated_nonempty_list(COMMA,term) RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET LBRACE IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## namespaced(CONSTRUCTOR_LPAREN)
+##
+
+This point is inside cons term. Next step: continue with another list element. Complete this construct first, then continue outward.
+
+parse_program: DO CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 155.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH RPAREN RBRACK PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . MINUS term [ STAR SLASH RPAREN RBRACK PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . STAR term [ STAR SLASH RPAREN RBRACK PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . SLASH term [ STAR SLASH RPAREN RBRACK PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . PERCENT term [ STAR SLASH RPAREN RBRACK PLUS PERCENT MINUS COMMA ]
+## separated_nonempty_list(COMMA,term) -> term . [ RPAREN RBRACK ]
+## separated_nonempty_list(COMMA,term) -> term . COMMA separated_nonempty_list(COMMA,term) [ RPAREN RBRACK ]
+##
+## The known suffix of the stack is as follows:
+## term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+Numeric operator form is active. Next step: continue with + or -. Finish this operator call completely before chaining another expression.
+
+parse_program: DO CONSTRUCTOR_IDENT SLASH USE
+##
+## Ends in an error in state: 156.
+##
+## active_number_term -> term SLASH . term [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA BAR ]
+##
+## The known suffix of the stack is as follows:
+## term SLASH
+##
+
+Arithmetic form detected. Next step: continue with a term. Finish this operator call completely before chaining another expression.
+
+parse_program: DO CONSTRUCTOR_IDENT UNIT
+##
+## Ends in an error in state: 160.
+##
+## indirect_term -> indirect_term . COLON type_use [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON BAR ]
+## term -> indirect_term . [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA BAR ]
+##
+## The known suffix of the stack is as follows:
+## indirect_term
+##
+
+This point is inside indirect term. Next step: continue with :. Finish the required token sequence here before moving on.
+
+parse_program: DO CONSTRUCTOR_IDENT COLON USE
+##
+## Ends in an error in state: 161.
+##
+## indirect_term -> indirect_term COLON . type_use [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET LBRACE IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## indirect_term COLON
+##
+
+The parser is still in indirect term. Next step: continue with a type expression. Finish the required token sequence here before moving on.
+
+parse_program: DO CONSTRUCTOR_IDENT PLUS USE
+##
+## Ends in an error in state: 166.
+##
+## active_number_term -> term PLUS . term [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA BAR ]
+##
+## The known suffix of the stack is as follows:
+## term PLUS
+##
+
+You are in an arithmetic command. Next step: continue with a term. Keep the operand separators in order: commas and `|` matter here.
+
+parse_program: DO CONSTRUCTOR_IDENT PLUS LBRACE IDENT LTRARROW CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT RBRACE USE
+##
+## Ends in an error in state: 167.
+##
+## active_number_term -> term . PLUS term [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA BAR ]
+## active_number_term -> term PLUS term . [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA BAR ]
+## active_number_term -> term . MINUS term [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA BAR ]
+## active_number_term -> term . STAR term [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA BAR ]
+## active_number_term -> term . SLASH term [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA BAR ]
+## active_number_term -> term . PERCENT term [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA BAR ]
+##
+## The known suffix of the stack is as follows:
+## term PLUS term
+##
+
+Numeric operator form is active. Next step: continue with + or -. Keep the operand separators in order: commas and `|` matter here.
+
+parse_program: DO CONSTRUCTOR_IDENT PERCENT USE
+##
+## Ends in an error in state: 168.
+##
+## active_number_term -> term PERCENT . term [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA BAR ]
+##
+## The known suffix of the stack is as follows:
+## term PERCENT
+##
+
+Arithmetic form detected. Next step: continue with a term. Keep the operand separators in order: commas and `|` matter here.
+
+parse_program: DO CONSTRUCTOR_IDENT MINUS USE
+##
+## Ends in an error in state: 170.
+##
+## active_number_term -> term MINUS . term [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA BAR ]
+##
+## The known suffix of the stack is as follows:
+## term MINUS
+##
+
+Numeric operator form is active. Next step: continue with a term. Finish this operator call completely before chaining another expression.
+
+parse_program: DO CONSTRUCTOR_IDENT MINUS LBRACE IDENT LTRARROW CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT RBRACE USE
+##
+## Ends in an error in state: 171.
+##
+## active_number_term -> term . PLUS term [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA BAR ]
+## active_number_term -> term . MINUS term [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA BAR ]
+## active_number_term -> term MINUS term . [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA BAR ]
+## active_number_term -> term . STAR term [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA BAR ]
+## active_number_term -> term . SLASH term [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA BAR ]
+## active_number_term -> term . PERCENT term [ UNDERSCORE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IN IDENT EOF DOT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA BAR ]
+##
+## The known suffix of the stack is as follows:
+## term MINUS term
+##
+
+Arithmetic form detected. Next step: continue with + or -. Finish this operator call completely before chaining another expression.
+
+parse_program: DO CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA USE
+##
+## Ends in an error in state: 172.
+##
+## separated_nonempty_list(COMMA,term) -> term COMMA . separated_nonempty_list(COMMA,term) [ RPAREN RBRACK ]
+##
+## The known suffix of the stack is as follows:
+## term COMMA
+##
+
+This point is inside separated nonempty list(COMMA,term). Next step: add the next comma-separated element. If this was accidental, close the current form before starting a new one.
+
+parse_program: DO CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT RBRACK
+##
+## Ends in an error in state: 174.
+##
+## cons_term -> namespaced(CONSTRUCTOR_LPAREN) separated_nonempty_list(COMMA,term) . RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET LBRACE IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## namespaced(CONSTRUCTOR_LPAREN) separated_nonempty_list(COMMA,term)
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+## In state 155, spurious reduction of production separated_nonempty_list(COMMA,term) -> term
+##
+
+You are in cons term. Next step: continue with ). If this was accidental, close the current form before starting a new one.
+
+parse_program: DO PLUS LPAREN CONSTRUCTOR_IDENT COMMA USE
+##
+## Ends in an error in state: 176.
+##
+## arith_command -> PLUS LPAREN term COMMA . term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## PLUS LPAREN term COMMA
+##
+
+Numeric operator form is active. Next step: add the next comma-separated element. Close the operator parentheses once all required operands are present.
+
+parse_program: DO PLUS LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 177.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS BAR ]
+## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS BAR ]
+## active_number_term -> term . STAR term [ STAR SLASH PLUS PERCENT MINUS BAR ]
+## active_number_term -> term . SLASH term [ STAR SLASH PLUS PERCENT MINUS BAR ]
+## active_number_term -> term . PERCENT term [ STAR SLASH PLUS PERCENT MINUS BAR ]
+## arith_command -> PLUS LPAREN term COMMA term . BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## PLUS LPAREN term COMMA term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+Arithmetic form detected. Next step: continue with + or -. Close the operator parentheses once all required operands are present.
+
+parse_program: DO PLUS LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR USE
+##
+## Ends in an error in state: 178.
+##
+## arith_command -> PLUS LPAREN term COMMA term BAR . term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## PLUS LPAREN term COMMA term BAR
+##
+
+You are in an arithmetic command. Next step: write the output term after |. Close the operator parentheses once all required operands are present.
+
+parse_program: DO PLUS LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 179.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . STAR term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . SLASH term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . PERCENT term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## arith_command -> PLUS LPAREN term COMMA term BAR term . RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## PLUS LPAREN term COMMA term BAR term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+Numeric operator form is active. Next step: continue with + or -. Close the operator parentheses once all required operands are present.
+
+parse_program: DO PERCENT USE
+##
+## Ends in an error in state: 181.
+##
+## arith_command -> PERCENT . LPAREN term COMMA term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## PERCENT
+##
+
+You are in an arithmetic command. Next step: continue with (. Keep the operand separators in order: commas and `|` matter here.
+
+parse_program: DO PERCENT LPAREN USE
+##
+## Ends in an error in state: 182.
+##
+## arith_command -> PERCENT LPAREN . term COMMA term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## PERCENT LPAREN
+##
+
+Numeric operator form is active. Next step: put a valid expression inside the parentheses, then close with ). Keep the operand separators in order: commas and `|` matter here.
+
+parse_program: DO PERCENT LPAREN CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 183.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . STAR term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . SLASH term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . PERCENT term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
+## arith_command -> PERCENT LPAREN term . COMMA term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## PERCENT LPAREN term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+Arithmetic form detected. Next step: continue with + or -. Keep the operand separators in order: commas and `|` matter here.
+
+parse_program: DO PERCENT LPAREN CONSTRUCTOR_IDENT COMMA USE
+##
+## Ends in an error in state: 184.
+##
+## arith_command -> PERCENT LPAREN term COMMA . term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## PERCENT LPAREN term COMMA
+##
+
+You are in an arithmetic command. Next step: add the next comma-separated element. Keep the operand separators in order: commas and `|` matter here.
+
+parse_program: DO PERCENT LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 185.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS BAR ]
+## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS BAR ]
+## active_number_term -> term . STAR term [ STAR SLASH PLUS PERCENT MINUS BAR ]
+## active_number_term -> term . SLASH term [ STAR SLASH PLUS PERCENT MINUS BAR ]
+## active_number_term -> term . PERCENT term [ STAR SLASH PLUS PERCENT MINUS BAR ]
+## arith_command -> PERCENT LPAREN term COMMA term . BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## PERCENT LPAREN term COMMA term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+Numeric operator form is active. Next step: continue with + or -. Finish this operator call completely before chaining another expression.
+
+parse_program: DO PERCENT LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR USE
+##
+## Ends in an error in state: 186.
+##
+## arith_command -> PERCENT LPAREN term COMMA term BAR . term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## PERCENT LPAREN term COMMA term BAR
+##
+
+Arithmetic form detected. Next step: write the output term after |. Finish this operator call completely before chaining another expression.
+
+parse_program: DO PERCENT LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 187.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . STAR term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . SLASH term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . PERCENT term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## arith_command -> PERCENT LPAREN term COMMA term BAR term . RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## PERCENT LPAREN term COMMA term BAR term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+You are in an arithmetic command. Next step: continue with + or -. Finish this operator call completely before chaining another expression.
+
+parse_program: DO NEG USE
+##
+## Ends in an error in state: 189.
+##
+## active_number_term -> NEG . term [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT ]
+## arith_command -> NEG . LPAREN term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## NEG
+##
+
+Arithmetic form detected. Next step: continue with a term or (. Finish this operator call completely before chaining another expression.
+
+parse_program: DO NEG LPAREN USE
+##
+## Ends in an error in state: 190.
+##
+## arith_command -> NEG LPAREN . term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## indirect_term -> LPAREN . term RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+## product_term -> LPAREN . RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+## product_term -> LPAREN . term COMMA RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+## product_term -> LPAREN . term COMMA separated_nonempty_list(COMMA,term) RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+##
+## The known suffix of the stack is as follows:
+## NEG LPAREN
+##
+
+You are in an arithmetic command. Next step: put a valid expression inside the parentheses, then close with ). Close the operator parentheses once all required operands are present.
+
+parse_program: DO NEG LPAREN CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 191.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## active_number_term -> term . STAR term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## active_number_term -> term . SLASH term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## active_number_term -> term . PERCENT term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## arith_command -> NEG LPAREN term . BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## indirect_term -> LPAREN term . RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+## product_term -> LPAREN term . COMMA RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+## product_term -> LPAREN term . COMMA separated_nonempty_list(COMMA,term) RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+##
+## The known suffix of the stack is as follows:
+## NEG LPAREN term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+Numeric operator form is active. Next step: continue with + or -. Close the operator parentheses once all required operands are present.
+
+parse_program: DO LPAREN CONSTRUCTOR_IDENT COMMA USE
+##
+## Ends in an error in state: 193.
+##
+## product_term -> LPAREN term COMMA . RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET LBRACE IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+## product_term -> LPAREN term COMMA . separated_nonempty_list(COMMA,term) RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET LBRACE IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN term COMMA
+##
+
+This point is inside product term. Next step: add the next comma-separated element. Finish the required token sequence here before moving on.
+
+parse_program: DO LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT RBRACK
+##
+## Ends in an error in state: 195.
+##
+## product_term -> LPAREN term COMMA separated_nonempty_list(COMMA,term) . RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET LBRACE IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN term COMMA separated_nonempty_list(COMMA,term)
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+## In state 155, spurious reduction of production separated_nonempty_list(COMMA,term) -> term
+##
+
+You are in product term. Next step: continue with ). Complete this construct first, then continue outward.
+
+parse_program: DO NEG LPAREN CONSTRUCTOR_IDENT BAR USE
+##
+## Ends in an error in state: 197.
+##
+## arith_command -> NEG LPAREN term BAR . term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## NEG LPAREN term BAR
+##
+
+Numeric operator form is active. Next step: write the output term after |. Keep the operand separators in order: commas and `|` matter here.
+
+parse_program: DO NEG LPAREN CONSTRUCTOR_IDENT BAR CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 198.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . STAR term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . SLASH term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . PERCENT term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## arith_command -> NEG LPAREN term BAR term . RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## NEG LPAREN term BAR term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+Arithmetic form detected. Next step: continue with + or -. Keep the operand separators in order: commas and `|` matter here.
+
+parse_program: DO MINUS USE
+##
+## Ends in an error in state: 201.
+##
+## active_number_term -> MINUS . term [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT ]
+## arith_command -> MINUS . LPAREN term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## arith_command -> MINUS . LPAREN term COMMA term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## MINUS
+##
+
+Arithmetic form detected. Next step: continue with a term or (. Finish this operator call completely before chaining another expression.
+
+parse_program: DO MINUS LPAREN USE
+##
+## Ends in an error in state: 202.
+##
+## arith_command -> MINUS LPAREN . term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## arith_command -> MINUS LPAREN . term COMMA term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## indirect_term -> LPAREN . term RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+## product_term -> LPAREN . RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+## product_term -> LPAREN . term COMMA RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+## product_term -> LPAREN . term COMMA separated_nonempty_list(COMMA,term) RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+##
+## The known suffix of the stack is as follows:
+## MINUS LPAREN
+##
+
+You are in an arithmetic command. Next step: put a valid expression inside the parentheses, then close with ). Finish this operator call completely before chaining another expression.
+
+parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 203.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## active_number_term -> term . STAR term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## active_number_term -> term . SLASH term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## active_number_term -> term . PERCENT term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## arith_command -> MINUS LPAREN term . BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## arith_command -> MINUS LPAREN term . COMMA term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## indirect_term -> LPAREN term . RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+## product_term -> LPAREN term . COMMA RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+## product_term -> LPAREN term . COMMA separated_nonempty_list(COMMA,term) RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+##
+## The known suffix of the stack is as follows:
+## MINUS LPAREN term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+Numeric operator form is active. Next step: continue with + or -. Finish this operator call completely before chaining another expression.
+
+parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT COMMA USE
+##
+## Ends in an error in state: 204.
+##
+## arith_command -> MINUS LPAREN term COMMA . term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## product_term -> LPAREN term COMMA . RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+## product_term -> LPAREN term COMMA . separated_nonempty_list(COMMA,term) RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+##
+## The known suffix of the stack is as follows:
+## MINUS LPAREN term COMMA
+##
+
+Arithmetic form detected. Next step: add the next comma-separated element. Finish this operator call completely before chaining another expression.
+
+parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 205.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## active_number_term -> term . STAR term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## active_number_term -> term . SLASH term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## active_number_term -> term . PERCENT term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## arith_command -> MINUS LPAREN term COMMA term . BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## separated_nonempty_list(COMMA,term) -> term . [ RPAREN ]
+## separated_nonempty_list(COMMA,term) -> term . COMMA separated_nonempty_list(COMMA,term) [ RPAREN ]
+##
+## The known suffix of the stack is as follows:
+## MINUS LPAREN term COMMA term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+You are in an arithmetic command. Next step: continue with + or -. Close the operator parentheses once all required operands are present.
+
+parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR USE
+##
+## Ends in an error in state: 206.
+##
+## arith_command -> MINUS LPAREN term COMMA term BAR . term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## MINUS LPAREN term COMMA term BAR
+##
+
+Numeric operator form is active. Next step: write the output term after |. Close the operator parentheses once all required operands are present.
+
+parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 207.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . STAR term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . SLASH term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . PERCENT term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## arith_command -> MINUS LPAREN term COMMA term BAR term . RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## MINUS LPAREN term COMMA term BAR term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+Arithmetic form detected. Next step: continue with + or -. Close the operator parentheses once all required operands are present.
+
+parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT BAR USE
+##
+## Ends in an error in state: 209.
+##
+## arith_command -> MINUS LPAREN term BAR . term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## MINUS LPAREN term BAR
+##
+
+Numeric operator form is active. Next step: write the output term after |. Close the operator parentheses once all required operands are present.
+
+parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT BAR CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 210.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . STAR term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . SLASH term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . PERCENT term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## arith_command -> MINUS LPAREN term BAR term . RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## MINUS LPAREN term BAR term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+Arithmetic form detected. Next step: continue with + or -. Keep the operand separators in order: commas and `|` matter here.
+
+parse_program: DO MATCH USE
+##
+## Ends in an error in state: 213.
+##
+## cutlet -> MATCH . indirect_term match_body [ UNDERSCORE RPAREN RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## indirect_term -> MATCH . match_body [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+##
+## The known suffix of the stack is as follows:
+## MATCH
+##
+
+You're matching on a pattern here. Next step: continue with a term or match body. Think in terms of `pattern -> statement` and complete that shape first.
+
+parse_program: DO MATCH CONSTRUCTOR_IDENT UNIT
+##
+## Ends in an error in state: 215.
+##
+## cutlet -> MATCH indirect_term . match_body [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## indirect_term -> indirect_term . COLON type_use [ LBRACE COLON ]
+##
+## The known suffix of the stack is as follows:
+## MATCH indirect_term
+##
+
+Pattern matching is still in progress. Next step: continue with match body or :. If you meant to leave this match, close the arm or the match body before continuing.
+
+parse_program: DO LPAREN USE
+##
+## Ends in an error in state: 217.
+##
+## indirect_term -> LPAREN . term RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+## non_fork_statement -> LPAREN . statement RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## product_term -> LPAREN . RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+## product_term -> LPAREN . term COMMA RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+## product_term -> LPAREN . term COMMA separated_nonempty_list(COMMA,term) RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN
+##
+
+This point is inside indirect term. Next step: put a valid expression inside the parentheses, then close with ). If this was accidental, close the current form before starting a new one.
+
+parse_program: DO LBRACK NEG USE
+##
+## Ends in an error in state: 218.
+##
+## active_number_term -> NEG . term [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA ]
+## arith_command -> NEG . LPAREN term BAR term RPAREN [ UNDERSCORE RPAREN RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## NEG
+##
+
+Numeric operator form is active. Next step: continue with a term or (. Finish this operator call completely before chaining another expression.
+
+parse_program: DO LBRACK NEG LPAREN USE
+##
+## Ends in an error in state: 219.
+##
+## arith_command -> NEG LPAREN . term BAR term RPAREN [ UNDERSCORE RPAREN RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## indirect_term -> LPAREN . term RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+## product_term -> LPAREN . RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+## product_term -> LPAREN . term COMMA RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+## product_term -> LPAREN . term COMMA separated_nonempty_list(COMMA,term) RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+##
+## The known suffix of the stack is as follows:
+## NEG LPAREN
+##
+
+Arithmetic form detected. Next step: put a valid expression inside the parentheses, then close with ). Finish this operator call completely before chaining another expression.
+
+parse_program: DO LBRACK NEG LPAREN CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 220.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## active_number_term -> term . STAR term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## active_number_term -> term . SLASH term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## active_number_term -> term . PERCENT term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## arith_command -> NEG LPAREN term . BAR term RPAREN [ UNDERSCORE RPAREN RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## indirect_term -> LPAREN term . RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+## product_term -> LPAREN term . COMMA RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+## product_term -> LPAREN term . COMMA separated_nonempty_list(COMMA,term) RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+##
+## The known suffix of the stack is as follows:
+## NEG LPAREN term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+You are in an arithmetic command. Next step: continue with + or -. Close the operator parentheses once all required operands are present.
+
+parse_program: DO LBRACK MINUS USE
+##
+## Ends in an error in state: 221.
+##
+## active_number_term -> MINUS . term [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA ]
+## arith_command -> MINUS . LPAREN term BAR term RPAREN [ UNDERSCORE RPAREN RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## arith_command -> MINUS . LPAREN term COMMA term BAR term RPAREN [ UNDERSCORE RPAREN RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## MINUS
+##
+
+Numeric operator form is active. Next step: continue with a term or (. Close the operator parentheses once all required operands are present.
+
+parse_program: DO LBRACK MINUS LPAREN USE
+##
+## Ends in an error in state: 222.
+##
+## arith_command -> MINUS LPAREN . term BAR term RPAREN [ UNDERSCORE RPAREN RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## arith_command -> MINUS LPAREN . term COMMA term BAR term RPAREN [ UNDERSCORE RPAREN RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## indirect_term -> LPAREN . term RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+## product_term -> LPAREN . RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+## product_term -> LPAREN . term COMMA RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+## product_term -> LPAREN . term COMMA separated_nonempty_list(COMMA,term) RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+##
+## The known suffix of the stack is as follows:
+## MINUS LPAREN
+##
+
+Arithmetic form detected. Next step: put a valid expression inside the parentheses, then close with ). Close the operator parentheses once all required operands are present.
+
+parse_program: DO LBRACK MINUS LPAREN CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 223.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## active_number_term -> term . STAR term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## active_number_term -> term . SLASH term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## active_number_term -> term . PERCENT term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
+## arith_command -> MINUS LPAREN term . BAR term RPAREN [ UNDERSCORE RPAREN RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## arith_command -> MINUS LPAREN term . COMMA term BAR term RPAREN [ UNDERSCORE RPAREN RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## indirect_term -> LPAREN term . RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+## product_term -> LPAREN term . COMMA RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+## product_term -> LPAREN term . COMMA separated_nonempty_list(COMMA,term) RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+##
+## The known suffix of the stack is as follows:
+## MINUS LPAREN term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+You are in an arithmetic command. Next step: continue with + or -. Close the operator parentheses once all required operands are present.
+
+parse_program: DO LBRACK MINUS LPAREN CONSTRUCTOR_IDENT COMMA USE
+##
+## Ends in an error in state: 224.
+##
+## arith_command -> MINUS LPAREN term COMMA . term BAR term RPAREN [ UNDERSCORE RPAREN RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## product_term -> LPAREN term COMMA . RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+## product_term -> LPAREN term COMMA . separated_nonempty_list(COMMA,term) RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+##
+## The known suffix of the stack is as follows:
+## MINUS LPAREN term COMMA
+##
+
+Numeric operator form is active. Next step: add the next comma-separated element. Close the operator parentheses once all required operands are present.
+
+parse_program: DO LBRACK LPAREN USE
+##
+## Ends in an error in state: 225.
+##
+## indirect_term -> LPAREN . term RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+## non_fork_statement -> LPAREN . statement RPAREN [ UNDERSCORE RPAREN RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## product_term -> LPAREN . RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+## product_term -> LPAREN . term COMMA RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+## product_term -> LPAREN . term COMMA separated_nonempty_list(COMMA,term) RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN
+##
+
+You are in indirect term. Next step: put a valid expression inside the parentheses, then close with ). Complete this construct first, then continue outward.
+
+parse_program: DO LET USE
+##
+## Ends in an error in state: 226.
+##
+## cutlet -> LET . binder RTLARROW term IN statement [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## cutlet -> LET . REC binder RTLARROW term IN statement [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## LET
+##
+
+You are inside a let-form. Next step: continue with a binder or rec. Complete the binder and right-hand side before starting a new construct.
+
+parse_program: DO LET REC USE
+##
+## Ends in an error in state: 227.
+##
+## cutlet -> LET REC . binder RTLARROW term IN statement [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## LET REC
+##
+
+This point is part of a let declaration. Next step: continue with a binder. Complete the binder and right-hand side before starting a new construct.
+
+parse_program: DO LET REC IDENT RPAREN
+##
+## Ends in an error in state: 228.
+##
+## cutlet -> LET REC binder . RTLARROW term IN statement [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## LET REC binder
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 121, spurious reduction of production binder -> untyped_binder
+##
+
+Let-binding syntax is active. Next step: continue with ->. Complete the binder and right-hand side before starting a new construct.
+
+parse_program: DO LET REC IDENT RTLARROW USE
+##
+## Ends in an error in state: 229.
+##
+## cutlet -> LET REC binder RTLARROW . term IN statement [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## LET REC binder RTLARROW
+##
+
+You are inside a let-form. Next step: provide the term that should come after ->. Complete the binder and right-hand side before starting a new construct.
+
+parse_program: DO LET REC IDENT RTLARROW CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 230.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS IN ]
+## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS IN ]
+## active_number_term -> term . STAR term [ STAR SLASH PLUS PERCENT MINUS IN ]
+## active_number_term -> term . SLASH term [ STAR SLASH PLUS PERCENT MINUS IN ]
+## active_number_term -> term . PERCENT term [ STAR SLASH PLUS PERCENT MINUS IN ]
+## cutlet -> LET REC binder RTLARROW term . IN statement [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## LET REC binder RTLARROW term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+Numeric operator form is active. Next step: continue with + or -. Finish this operator call completely before chaining another expression.
+
+parse_program: DO LET REC IDENT RTLARROW CONSTRUCTOR_IDENT IN USE
+##
+## Ends in an error in state: 231.
+##
+## cutlet -> LET REC binder RTLARROW term IN . statement [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## LET REC binder RTLARROW term IN
+##
+
+Let-binding syntax is active. Next step: continue with the statement that follows in. For let-cut forms, keep `let ... -> ... in ...` in that exact order.
+
+parse_program: DO CONSTRUCTOR_IDENT SEMICOLON MATCH USE
+##
+## Ends in an error in state: 232.
+##
+## cutlet -> MATCH . indirect_term match_body [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## indirect_term -> MATCH . match_body [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
+##
+## The known suffix of the stack is as follows:
+## MATCH
+##
+
+This branch is inside a match expression. Next step: continue with a term or match body. If you meant to leave this match, close the arm or the match body before continuing.
+
+parse_program: DO LBRACK USE
+##
+## Ends in an error in state: 233.
+##
+## array_term -> LBRACK . loption(separated_nonempty_list(COMMA,term)) RBRACK [ STAR SLASH SEMICOLON RPAREN PLUS PERCENT MINUS DOT COMMA COLON ]
+## fork_command -> LBRACK . non_fork_statement BAR non_fork_statement RBRACK [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## LBRACK
+##
+
+The parser is still in a fork command. Next step: put a valid element inside the brackets, then close with ]. If this was accidental, close the current form before starting a new one.
+
+parse_program: DO LBRACK CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 234.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH SEMICOLON RBRACK PLUS PERCENT MINUS DOT COMMA ]
+## active_number_term -> term . MINUS term [ STAR SLASH SEMICOLON RBRACK PLUS PERCENT MINUS DOT COMMA ]
+## active_number_term -> term . STAR term [ STAR SLASH SEMICOLON RBRACK PLUS PERCENT MINUS DOT COMMA ]
+## active_number_term -> term . SLASH term [ STAR SLASH SEMICOLON RBRACK PLUS PERCENT MINUS DOT COMMA ]
+## active_number_term -> term . PERCENT term [ STAR SLASH SEMICOLON RBRACK PLUS PERCENT MINUS DOT COMMA ]
+## command -> term . DOT term [ BAR ]
+## cutlet -> term . SEMICOLON statement [ BAR ]
+## separated_nonempty_list(COMMA,term) -> term . [ RBRACK ]
+## separated_nonempty_list(COMMA,term) -> term . COMMA separated_nonempty_list(COMMA,term) [ RBRACK ]
+##
+## The known suffix of the stack is as follows:
+## term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+Arithmetic form detected. Next step: continue with + or -. Finish this operator call completely before chaining another expression.
+
+parse_program: DO CONSTRUCTOR_IDENT SEMICOLON USE
+##
+## Ends in an error in state: 235.
+##
+## cutlet -> term SEMICOLON . statement [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## term SEMICOLON
+##
+
+You are inside a let-form. Next step: continue with a statement. Finish this binding first, then continue with the next statement.
+
+parse_program: DO CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 236.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT ]
+## active_number_term -> term . MINUS term [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT ]
+## active_number_term -> term . STAR term [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT ]
+## active_number_term -> term . SLASH term [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT ]
+## active_number_term -> term . PERCENT term [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT ]
+## command -> term . DOT term [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## cutlet -> term . SEMICOLON statement [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+Numeric operator form is active. Next step: continue with + or -. Close the operator parentheses once all required operands are present.
+
+parse_program: DO CONSTRUCTOR_IDENT DOT USE
+##
+## Ends in an error in state: 237.
+##
+## command -> term DOT . term [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## term DOT
+##
+
+You are in command. Next step: continue with a term. Finish the required token sequence here before moving on.
+
+parse_program: DO CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT SEMICOLON
+##
+## Ends in an error in state: 238.
+##
+## active_number_term -> term . PLUS term [ UNDERSCORE STAR SLASH RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## active_number_term -> term . MINUS term [ UNDERSCORE STAR SLASH RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## active_number_term -> term . STAR term [ UNDERSCORE STAR SLASH RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## active_number_term -> term . SLASH term [ UNDERSCORE STAR SLASH RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## active_number_term -> term . PERCENT term [ UNDERSCORE STAR SLASH RPAREN RBRACK RBRACE PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+## command -> term DOT term . [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## term DOT term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+You are in an arithmetic command. Next step: continue with + or -. Close the operator parentheses once all required operands are present.
+
+parse_program: DO LBRACK CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 246.
+##
+## fork_command -> LBRACK non_fork_statement . BAR non_fork_statement RBRACK [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## LBRACK non_fork_statement
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+## In state 238, spurious reduction of production command -> term DOT term
+## In state 243, spurious reduction of production non_fork_statement -> command
+##
+
+You're currently building a fork command. Next step: continue with |. If this was accidental, close the current form before starting a new one.
+
+parse_program: DO LBRACK CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT BAR USE
+##
+## Ends in an error in state: 247.
+##
+## fork_command -> LBRACK non_fork_statement BAR . non_fork_statement RBRACK [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## LBRACK non_fork_statement BAR
+##
+
+This point is inside a fork command. Next step: continue with non fork statement. If this was accidental, close the current form before starting a new one.
+
+parse_program: DO LBRACK CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT BAR CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 248.
+##
+## fork_command -> LBRACK non_fork_statement BAR non_fork_statement . RBRACK [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## LBRACK non_fork_statement BAR non_fork_statement
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+## In state 238, spurious reduction of production command -> term DOT term
+## In state 243, spurious reduction of production non_fork_statement -> command
+##
+
+The parser is still in a fork command. Next step: continue with ]. If this was accidental, close the current form before starting a new one.
+
+parse_program: DO CONSTRUCTOR_LPAREN LBRACK CONSTRUCTOR_IDENT RPAREN
+##
+## Ends in an error in state: 250.
+##
+## array_term -> LBRACK loption(separated_nonempty_list(COMMA,term)) . RBRACK [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET LBRACE IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LBRACK loption(separated_nonempty_list(COMMA,term))
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+## In state 155, spurious reduction of production separated_nonempty_list(COMMA,term) -> term
+## In state 245, spurious reduction of production loption(separated_nonempty_list(COMMA,term)) -> separated_nonempty_list(COMMA,term)
+##
+
+This point is inside array term. Next step: continue with ]. Finish the required token sequence here before moving on.
+
+parse_program: DO LET IDENT RPAREN
+##
+## Ends in an error in state: 253.
+##
+## cutlet -> LET binder . RTLARROW term IN statement [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## LET binder
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 121, spurious reduction of production binder -> untyped_binder
+##
+
+You are inside a let-form. Next step: continue with ->. Finish this binding first, then continue with the next statement.
+
+parse_program: DO LET IDENT RTLARROW USE
+##
+## Ends in an error in state: 254.
+##
+## cutlet -> LET binder RTLARROW . term IN statement [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## LET binder RTLARROW
+##
+
+This point is part of a let declaration. Next step: provide the term that should come after ->. Finish this binding first, then continue with the next statement.
+
+parse_program: DO LET IDENT RTLARROW CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 255.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS IN ]
+## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS IN ]
+## active_number_term -> term . STAR term [ STAR SLASH PLUS PERCENT MINUS IN ]
+## active_number_term -> term . SLASH term [ STAR SLASH PLUS PERCENT MINUS IN ]
+## active_number_term -> term . PERCENT term [ STAR SLASH PLUS PERCENT MINUS IN ]
+## cutlet -> LET binder RTLARROW term . IN statement [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## LET binder RTLARROW term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+Arithmetic form detected. Next step: continue with + or -. Keep the operand separators in order: commas and `|` matter here.
+
+parse_program: DO LET IDENT RTLARROW CONSTRUCTOR_IDENT IN USE
+##
+## Ends in an error in state: 256.
+##
+## cutlet -> LET binder RTLARROW term IN . statement [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## LET binder RTLARROW term IN
+##
+
+You are inside a let-form. Next step: continue with the statement that follows in. Complete the binder and right-hand side before starting a new construct.
+
+parse_program: DO LPAREN CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 258.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH SEMICOLON RPAREN PLUS PERCENT MINUS DOT COMMA ]
+## active_number_term -> term . MINUS term [ STAR SLASH SEMICOLON RPAREN PLUS PERCENT MINUS DOT COMMA ]
+## active_number_term -> term . STAR term [ STAR SLASH SEMICOLON RPAREN PLUS PERCENT MINUS DOT COMMA ]
+## active_number_term -> term . SLASH term [ STAR SLASH SEMICOLON RPAREN PLUS PERCENT MINUS DOT COMMA ]
+## active_number_term -> term . PERCENT term [ STAR SLASH SEMICOLON RPAREN PLUS PERCENT MINUS DOT COMMA ]
+## command -> term . DOT term [ RPAREN ]
+## cutlet -> term . SEMICOLON statement [ RPAREN ]
+## indirect_term -> LPAREN term . RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+## product_term -> LPAREN term . COMMA RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+## product_term -> LPAREN term . COMMA separated_nonempty_list(COMMA,term) RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+Arithmetic form detected. Next step: continue with + or -. Keep the operand separators in order: commas and `|` matter here.
+
+parse_program: DO LPAREN CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 259.
+##
+## non_fork_statement -> LPAREN statement . RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN statement
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+## In state 238, spurious reduction of production command -> term DOT term
+## In state 243, spurious reduction of production non_fork_statement -> command
+## In state 240, spurious reduction of production statement -> non_fork_statement
+##
+
+This point is inside non fork statement. Next step: continue with ). Complete this construct first, then continue outward.
+
+parse_program: DO LBRACE IDENT LTRARROW CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 261.
+##
+## naked_mu_term -> LBRACE binder LTRARROW statement . RBRACE [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LBRACE binder LTRARROW statement
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+## In state 238, spurious reduction of production command -> term DOT term
+## In state 243, spurious reduction of production non_fork_statement -> command
+## In state 240, spurious reduction of production statement -> non_fork_statement
+##
+
+You are in naked mu term. Next step: continue with }. If this was accidental, close the current form before starting a new one.
+
+parse_program: DO CONSTRUCTOR_LPAREN LPAREN CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 263.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . STAR term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . SLASH term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . PERCENT term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA ]
+## indirect_term -> LPAREN term . RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET LBRACE IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+## product_term -> LPAREN term . COMMA RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET LBRACE IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+## product_term -> LPAREN term . COMMA separated_nonempty_list(COMMA,term) RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MODULE MINUS LPAREN LET LBRACE IN IDENT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+Numeric operator form is active. Next step: continue with + or -. Finish this operator call completely before chaining another expression.
+
+parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 264.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . STAR term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . SLASH term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . PERCENT term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
+## arith_command -> SLASH LPAREN term . COMMA term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## SLASH LPAREN term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+Arithmetic form detected. Next step: continue with + or -. Finish this operator call completely before chaining another expression.
+
+parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT COMMA USE
+##
+## Ends in an error in state: 265.
+##
+## arith_command -> SLASH LPAREN term COMMA . term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## SLASH LPAREN term COMMA
+##
+
+You are in an arithmetic command. Next step: add the next comma-separated element. Close the operator parentheses once all required operands are present.
+
+parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 266.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS BAR ]
+## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS BAR ]
+## active_number_term -> term . STAR term [ STAR SLASH PLUS PERCENT MINUS BAR ]
+## active_number_term -> term . SLASH term [ STAR SLASH PLUS PERCENT MINUS BAR ]
+## active_number_term -> term . PERCENT term [ STAR SLASH PLUS PERCENT MINUS BAR ]
+## arith_command -> SLASH LPAREN term COMMA term . BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## SLASH LPAREN term COMMA term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+Numeric operator form is active. Next step: continue with + or -. Close the operator parentheses once all required operands are present.
+
+parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR USE
+##
+## Ends in an error in state: 267.
+##
+## arith_command -> SLASH LPAREN term COMMA term BAR . term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## SLASH LPAREN term COMMA term BAR
+##
+
+Arithmetic form detected. Next step: write the output term after |. Close the operator parentheses once all required operands are present.
+
+parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 268.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . STAR term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . SLASH term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . PERCENT term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## arith_command -> SLASH LPAREN term COMMA term BAR term . RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## SLASH LPAREN term COMMA term BAR term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+You are in an arithmetic command. Next step: continue with + or -. Close the operator parentheses once all required operands are present.
+
+parse_program: DO MATCH LBRACE CONSTRUCTOR_LPAREN USE
+##
+## Ends in an error in state: 271.
+##
+## pattern -> namespaced(CONSTRUCTOR_LPAREN) . separated_nonempty_list(COMMA,binder) RPAREN [ LTRARROW ]
+##
+## The known suffix of the stack is as follows:
+## namespaced(CONSTRUCTOR_LPAREN)
+##
+
+This branch is inside a match expression. Next step: continue with another list element. Think in terms of `pattern -> statement` and complete that shape first.
+
+parse_program: DO MATCH LBRACE CONSTRUCTOR_LPAREN IDENT LTRARROW
+##
+## Ends in an error in state: 272.
+##
+## pattern -> namespaced(CONSTRUCTOR_LPAREN) separated_nonempty_list(COMMA,binder) . RPAREN [ LTRARROW ]
+##
+## The known suffix of the stack is as follows:
+## namespaced(CONSTRUCTOR_LPAREN) separated_nonempty_list(COMMA,binder)
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 121, spurious reduction of production binder -> untyped_binder
+## In state 129, spurious reduction of production separated_nonempty_list(COMMA,binder) -> binder
+##
+
+Pattern matching is still in progress. Next step: continue with ). Think in terms of `pattern -> statement` and complete that shape first.
+
+parse_program: DO MATCH LBRACE IDENT LTRARROW CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT RPAREN
+##
+## Ends in an error in state: 275.
+##
+## separated_nonempty_list(option(BAR),match_case) -> match_case . [ RBRACE ]
+## separated_nonempty_list(option(BAR),match_case) -> match_case . option(BAR) separated_nonempty_list(option(BAR),match_case) [ RBRACE ]
+##
+## The known suffix of the stack is as follows:
+## match_case
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+## In state 238, spurious reduction of production command -> term DOT term
+## In state 243, spurious reduction of production non_fork_statement -> command
+## In state 240, spurious reduction of production statement -> non_fork_statement
+## In state 270, spurious reduction of production match_case -> pattern LTRARROW statement
+##
+
+Pattern matching is still in progress. Next step: continue with the optional part of this construct. If you meant to leave this match, close the arm or the match body before continuing.
+
+parse_program: DO MATCH LBRACE IDENT LTRARROW CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT BAR USE
+##
+## Ends in an error in state: 276.
+##
+## separated_nonempty_list(option(BAR),match_case) -> match_case option(BAR) . separated_nonempty_list(option(BAR),match_case) [ RBRACE ]
+##
+## The known suffix of the stack is as follows:
+## match_case option(BAR)
+##
+
+You're matching on a pattern here. Next step: continue with another list element. If you meant to leave this match, close the arm or the match body before continuing.
+
+parse_program: DO MATCH LBRACE IDENT RTLARROW
+##
+## Ends in an error in state: 278.
+##
+## pattern -> binder . [ LTRARROW ]
+## tuple_pattern -> binder . COMMA separated_nonempty_list(COMMA,binder) [ LTRARROW ]
+##
+## The known suffix of the stack is as follows:
+## binder
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 121, spurious reduction of production binder -> untyped_binder
+##
+
+Pattern matching is still in progress. Next step: continue with ,. If you meant to leave this match, close the arm or the match body before continuing.
+
+parse_program: DO MATCH LBRACE IDENT COMMA USE
+##
+## Ends in an error in state: 279.
+##
+## tuple_pattern -> binder COMMA . separated_nonempty_list(COMMA,binder) [ LTRARROW ]
+##
+## The known suffix of the stack is as follows:
+## binder COMMA
+##
+
+You're matching on a pattern here. Next step: add the next comma-separated element. If you meant to leave this match, close the arm or the match body before continuing.
+
+parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 281.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . STAR term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . SLASH term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
+## active_number_term -> term . PERCENT term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
+## arith_command -> STAR LPAREN term . COMMA term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## STAR LPAREN term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+Numeric operator form is active. Next step: continue with + or -. Close the operator parentheses once all required operands are present.
+
+parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT COMMA USE
+##
+## Ends in an error in state: 282.
+##
+## arith_command -> STAR LPAREN term COMMA . term BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## STAR LPAREN term COMMA
+##
+
+Arithmetic form detected. Next step: add the next comma-separated element. Close the operator parentheses once all required operands are present.
+
+parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 283.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS BAR ]
+## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS BAR ]
+## active_number_term -> term . STAR term [ STAR SLASH PLUS PERCENT MINUS BAR ]
+## active_number_term -> term . SLASH term [ STAR SLASH PLUS PERCENT MINUS BAR ]
+## active_number_term -> term . PERCENT term [ STAR SLASH PLUS PERCENT MINUS BAR ]
+## arith_command -> STAR LPAREN term COMMA term . BAR term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## STAR LPAREN term COMMA term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+You are in an arithmetic command. Next step: continue with + or -. Close the operator parentheses once all required operands are present.
+
+parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR USE
+##
+## Ends in an error in state: 284.
+##
+## arith_command -> STAR LPAREN term COMMA term BAR . term RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## STAR LPAREN term COMMA term BAR
+##
+
+Numeric operator form is active. Next step: write the output term after |. Close the operator parentheses once all required operands are present.
+
+parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 285.
+##
+## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . STAR term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . SLASH term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## active_number_term -> term . PERCENT term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
+## arith_command -> STAR LPAREN term COMMA term BAR term . RPAREN [ UNDERSCORE RPAREN RBRACK RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT EOF CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
+##
+## The known suffix of the stack is as follows:
+## STAR LPAREN term COMMA term BAR term
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+##
+
+Arithmetic form detected. Next step: continue with + or -. Keep the operand separators in order: commas and `|` matter here.
+
+parse_program: PROC IDENT LPAREN RPAREN LBRACE CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT UNDERSCORE
+##
+## Ends in an error in state: 287.
+##
+## proc_body -> LBRACE statement . RBRACE [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## LBRACE statement
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 160, spurious reduction of production term -> indirect_term
+## In state 238, spurious reduction of production command -> term DOT term
+## In state 243, spurious reduction of production non_fork_statement -> command
+## In state 240, spurious reduction of production statement -> non_fork_statement
+##
+
+This position belongs to a procedure declaration. Next step: continue with }. Finish binders first, then provide the `{ ... }` body.
+
+parse_program: PROC IDENT USE
+##
+## Ends in an error in state: 290.
+##
+## proc_definition -> PROC untyped_binder . proc_binders proc_body [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## PROC untyped_binder
+##
+
+This position belongs to a procedure declaration. Next step: continue with proc binders. If parameters are complete, move into the body block next.
+
+parse_program: PROC IDENT LPAREN RPAREN USE
+##
+## Ends in an error in state: 291.
+##
+## proc_definition -> PROC untyped_binder proc_binders . proc_body [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## PROC untyped_binder proc_binders
+##
+
+Procedure definition in progress. Next step: continue with proc body. If parameters are complete, move into the body block next.
+
+parse_program: OPEN USE
+##
+## Ends in an error in state: 293.
+##
+## open_statement -> OPEN . namespaced(any_ident) [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## OPEN
+##
+
+Module path parsing is active. Next step: write the module path to open. If you are done importing, terminate this statement before starting another declaration.
+
+parse_program: MODULE USE
+##
+## Ends in an error in state: 295.
+##
+## module_definition -> MODULE . any_ident LBRACE program RBRACE [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## MODULE
+##
+
+Module declaration parsing is active. Next step: continue with any ident. Close the module before continuing at the outer scope.
+
+parse_program: MODULE CONSTRUCTOR_IDENT USE
+##
+## Ends in an error in state: 296.
+##
+## module_definition -> MODULE any_ident . LBRACE program RBRACE [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## MODULE any_ident
+##
+
+You are building a module block. Next step: open the body with { before adding declarations. Close the module before continuing at the outer scope.
+
+parse_program: MODULE CONSTRUCTOR_IDENT LBRACE UNIT
+##
+## Ends in an error in state: 297.
+##
+## module_definition -> MODULE any_ident LBRACE . program RBRACE [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## MODULE any_ident LBRACE
+##
+
+This location is inside a module construct. Next step: add declarations inside the braces, or close the block with } if you are done. Close the module before continuing at the outer scope.
+
+parse_program: LET USE
+##
+## Ends in an error in state: 298.
+##
+## let_definition -> LET . typed_binder EQUALS def_term [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+## let_definition -> LET . REC typed_binder EQUALS def_term [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## LET
+##
+
+You are inside a let-form. Next step: continue with a binder or rec. Finish this binding first, then continue with the next statement.
+
+parse_program: LET REC USE
+##
+## Ends in an error in state: 299.
+##
+## let_definition -> LET REC . typed_binder EQUALS def_term [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## LET REC
+##
+
+This point is part of a let declaration. Next step: continue with a binder. Finish this binding first, then continue with the next statement.
+
+parse_program: LET REC IDENT COLON CONSTRUCTOR_IDENT UNIT
+##
+## Ends in an error in state: 300.
+##
+## let_definition -> LET REC typed_binder . EQUALS def_term [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## LET REC typed_binder
+##
+
+Let-binding syntax is active. Next step: put = next, then continue with the right-hand side. Complete the binder and right-hand side before starting a new construct.
+
+parse_program: LET REC IDENT COLON CONSTRUCTOR_IDENT EQUALS USE
+##
+## Ends in an error in state: 301.
+##
+## let_definition -> LET REC typed_binder EQUALS . def_term [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## LET REC typed_binder EQUALS
+##
+
+You are inside a let-form. Next step: continue with a term. Complete the binder and right-hand side before starting a new construct.
+
+parse_program: LET IDENT COLON CONSTRUCTOR_IDENT EQUALS CONSTRUCTOR_IDENT UNIT
+##
+## Ends in an error in state: 303.
+##
+## def_term -> indirect_term . [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+## indirect_term -> indirect_term . COLON type_use [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA COLON CODATA ]
+##
+## The known suffix of the stack is as follows:
+## indirect_term
+##
+
+You are in def term. Next step: continue with :. Complete this construct first, then continue outward.
+
+parse_program: LET IDENT COLON CONSTRUCTOR_IDENT UNIT
+##
+## Ends in an error in state: 305.
+##
+## let_definition -> LET typed_binder . EQUALS def_term [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## LET typed_binder
+##
+
+This point is part of a let declaration. Next step: put = next, then continue with the right-hand side. For let-cut forms, keep `let ... -> ... in ...` in that exact order.
+
+parse_program: LET IDENT COLON CONSTRUCTOR_IDENT EQUALS USE
+##
+## Ends in an error in state: 306.
+##
+## let_definition -> LET typed_binder EQUALS . def_term [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## LET typed_binder EQUALS
+##
+
+Let-binding syntax is active. Next step: continue with a term. For let-cut forms, keep `let ... -> ... in ...` in that exact order.
+
+parse_program: OPEN CONSTRUCTOR_IDENT UNIT
+##
+## Ends in an error in state: 309.
+##
+## maybe_delimited(top_level_item(top_level_definition)) -> top_level_item(top_level_definition) . option(DELIMITER) [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## top_level_item(top_level_definition)
+##
+
+You're currently building maybe delimited(top level item(top level definition)). Next step: continue with the optional part of this construct. If this was accidental, close the current form before starting a new one.
+
+parse_program: CODATA USE
+##
+## Ends in an error in state: 314.
+##
+## type_definition -> shape . mode kind_binder EQUALS full_raw_type [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+## type_definition -> shape . kind_binder EQUALS full_raw_type [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## shape
+##
+
+This position belongs to a type declaration. Next step: continue with mode or a type name (optionally with parameters). Close any pending type delimiters (`<...>`, `(...)`, `[...]`) before moving on.
+
+parse_program: CODATA LBRACK USE
+##
+## Ends in an error in state: 315.
+##
+## mode -> LBRACK . CBV RBRACK [ IDENT ]
+## mode -> LBRACK . CBN RBRACK [ IDENT ]
+##
+## The known suffix of the stack is as follows:
+## LBRACK
+##
+
+You are in mode. Next step: continue with cbv or cbn. Complete this construct first, then continue outward.
+
+parse_program: CODATA LBRACK CBN RBRACK USE
+##
+## Ends in an error in state: 316.
+##
+## type_definition -> shape mode . kind_binder EQUALS full_raw_type [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## shape mode
+##
+
+Type parsing is active here. Next step: continue with a type name (optionally with parameters). Type declarations are strict in this spot, so complete this part before switching constructs.
+
+parse_program: CODATA LBRACK CBN RBRACK IDENT LANGLE RANGLE USE
+##
+## Ends in an error in state: 317.
+##
+## type_definition -> shape mode kind_binder . EQUALS full_raw_type [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## shape mode kind_binder
+##
+
+This position belongs to a type declaration. Next step: put = next, then continue with the right-hand side. Type declarations are strict in this spot, so complete this part before switching constructs.
+
+parse_program: CODATA LBRACK CBN RBRACK IDENT EQUALS USE
+##
+## Ends in an error in state: 318.
+##
+## type_definition -> shape mode kind_binder EQUALS . full_raw_type [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## shape mode kind_binder EQUALS
+##
+
+You're inside a type declaration. Next step: write the type expression on the right-hand side. Type declarations are strict in this spot, so complete this part before switching constructs.
+
+parse_program: CODATA IDENT EQUALS BAR USE
+##
+## Ends in an error in state: 321.
+##
+## variant_raw_type -> option(BAR) . separated_nonempty_list(BAR,variant) [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## option(BAR)
+##
+
+You're inside a type declaration. Next step: continue with another list element. Finish the type skeleton first; then continue with terms or declarations outside it.
+
+parse_program: CODATA IDENT EQUALS CONSTRUCTOR_LPAREN USE
+##
+## Ends in an error in state: 322.
+##
+## variant -> CONSTRUCTOR_LPAREN . separated_nonempty_list(COMMA,type_use) RPAREN [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## CONSTRUCTOR_LPAREN
+##
+
+This point is inside variant. Next step: continue with another list element. If this was accidental, close the current form before starting a new one.
+
+parse_program: CODATA IDENT EQUALS CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT RANGLE
+##
+## Ends in an error in state: 323.
+##
+## variant -> CONSTRUCTOR_LPAREN separated_nonempty_list(COMMA,type_use) . RPAREN [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## CONSTRUCTOR_LPAREN separated_nonempty_list(COMMA,type_use)
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 54, spurious reduction of production separated_nonempty_list(COMMA,type_use) -> type_use
+##
+
+The parser is still in variant. Next step: continue with ). If this was accidental, close the current form before starting a new one.
+
+parse_program: CODATA IDENT EQUALS CONSTRUCTOR_IDENT UNIT
+##
+## Ends in an error in state: 326.
+##
+## separated_nonempty_list(BAR,variant) -> variant . [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+## separated_nonempty_list(BAR,variant) -> variant . BAR separated_nonempty_list(BAR,variant) [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## variant
+##
+
+The parser is still in separated nonempty list(BAR,variant). Next step: continue with |. Finish the required token sequence here before moving on.
+
+parse_program: CODATA IDENT EQUALS CONSTRUCTOR_IDENT BAR USE
+##
+## Ends in an error in state: 327.
+##
+## separated_nonempty_list(BAR,variant) -> variant BAR . separated_nonempty_list(BAR,variant) [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## variant BAR
+##
+
+You're currently building separated nonempty list(BAR,variant). Next step: continue with another list element. Finish the required token sequence here before moving on.
+
+parse_program: CODATA IDENT LANGLE RANGLE USE
+##
+## Ends in an error in state: 331.
+##
+## type_definition -> shape kind_binder . EQUALS full_raw_type [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## shape kind_binder
+##
+
+Type parsing is active here. Next step: put = next, then continue with the right-hand side. Type declarations are strict in this spot, so complete this part before switching constructs.
+
+parse_program: CODATA IDENT EQUALS USE
+##
+## Ends in an error in state: 332.
+##
+## type_definition -> shape kind_binder EQUALS . full_raw_type [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## shape kind_binder EQUALS
+##
+
+This position belongs to a type declaration. Next step: write the type expression on the right-hand side. Type declarations are strict in this spot, so complete this part before switching constructs.
+
+parse_program: MODULE CONSTRUCTOR_IDENT LBRACE OPEN CONSTRUCTOR_IDENT EOF
+##
+## Ends in an error in state: 334.
+##
+## module_definition -> MODULE any_ident LBRACE program . RBRACE [ USE TYPE RBRACE PROC OPEN MODULE LET EOF DO DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## MODULE any_ident LBRACE program
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 309, spurious reduction of production option(DELIMITER) ->
+## In state 311, spurious reduction of production maybe_delimited(top_level_item(top_level_definition)) -> top_level_item(top_level_definition) option(DELIMITER)
+## In state 339, spurious reduction of production list(maybe_delimited(top_level_item(top_level_definition))) ->
+## In state 340, spurious reduction of production list(maybe_delimited(top_level_item(top_level_definition))) -> maybe_delimited(top_level_item(top_level_definition)) list(maybe_delimited(top_level_item(top_level_definition)))
+## In state 342, spurious reduction of production option(top_level_command) ->
+## In state 346, spurious reduction of production program -> list(maybe_delimited(top_level_item(top_level_definition))) option(top_level_command)
+##
+
+Module declaration parsing is active. Next step: continue with }. Balance the braces so the module body is structurally complete.
+
+parse_program: OPEN CONSTRUCTOR_IDENT DELIMITER UNIT
+##
+## Ends in an error in state: 339.
+##
+## list(maybe_delimited(top_level_item(top_level_definition))) -> maybe_delimited(top_level_item(top_level_definition)) . list(maybe_delimited(top_level_item(top_level_definition))) [ RBRACE EOF DO ]
+##
+## The known suffix of the stack is as follows:
+## maybe_delimited(top_level_item(top_level_definition))
+##
+
+You're currently building list(maybe delimited(top level item(top level definition))). Next step: continue with list(maybe delimited(top level item(top level definition))). If this was accidental, close the current form before starting a new one.
+
+parse_program: DO USE
+##
+## Ends in an error in state: 343.
+##
+## top_level_command -> DO . statement [ RBRACE EOF ]
+##
+## The known suffix of the stack is as follows:
+## DO
+##
+
+This point is inside top level command. Next step: continue with a statement. Finish the required token sequence here before moving on.
+
+parse_program: OPEN CONSTRUCTOR_IDENT RBRACE
+##
+## Ends in an error in state: 347.
+##
+## parse_program -> program . EOF [ # ]
+##
+## The known suffix of the stack is as follows:
+## program
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 309, spurious reduction of production option(DELIMITER) ->
+## In state 311, spurious reduction of production maybe_delimited(top_level_item(top_level_definition)) -> top_level_item(top_level_definition) option(DELIMITER)
+## In state 339, spurious reduction of production list(maybe_delimited(top_level_item(top_level_definition))) ->
+## In state 340, spurious reduction of production list(maybe_delimited(top_level_item(top_level_definition))) -> maybe_delimited(top_level_item(top_level_definition)) list(maybe_delimited(top_level_item(top_level_definition)))
+## In state 342, spurious reduction of production option(top_level_command) ->
+## In state 346, spurious reduction of production program -> list(maybe_delimited(top_level_item(top_level_definition))) option(top_level_command)
+##
+
+This location expects a complete program structure. Next step: start with a top-level form like open, module, let, proc, type, data, codata, or do. Begin with a valid top-level declaration and keep nested constructs balanced.
+
+parse_signature: UNIT
+##
+## Ends in an error in state: 350.
+##
+## parse_signature' -> . parse_signature [ # ]
+##
+## The known suffix of the stack is as follows:
+##
+##
+
+This location expects a complete signature structure. Next step: start with a signature item like open, module, let, data, or codata. If you intended to close the file, ensure this grammar form is fully closed first.
+
+parse_signature: MODULE USE
+##
+## Ends in an error in state: 351.
+##
+## module_signature -> MODULE . any_ident LBRACE interface RBRACE [ USE RBRACE OPEN MODULE LET EOF DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## MODULE
+##
+
+This location is inside a module construct. Next step: continue with any ident. Put declarations inside the module body, not beside the opening tokens.
+
+parse_signature: MODULE CONSTRUCTOR_IDENT USE
+##
+## Ends in an error in state: 352.
+##
+## module_signature -> MODULE any_ident . LBRACE interface RBRACE [ USE RBRACE OPEN MODULE LET EOF DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## MODULE any_ident
+##
+
+Module declaration parsing is active. Next step: open the body with { before adding declarations. Put declarations inside the module body, not beside the opening tokens.
+
+parse_signature: MODULE CONSTRUCTOR_IDENT LBRACE UNIT
+##
+## Ends in an error in state: 353.
+##
+## module_signature -> MODULE any_ident LBRACE . interface RBRACE [ USE RBRACE OPEN MODULE LET EOF DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## MODULE any_ident LBRACE
+##
+
+You are building a module block. Next step: add declarations inside the braces, or close the block with } if you are done. Put declarations inside the module body, not beside the opening tokens.
+
+parse_signature: LET USE
+##
+## Ends in an error in state: 354.
+##
+## term_signature -> LET . untyped_binder EQUALS type_use [ USE RBRACE OPEN MODULE LET EOF DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## LET
+##
+
+You are in term signature. Next step: continue with a binder. If this was accidental, close the current form before starting a new one.
+
+parse_signature: LET IDENT USE
+##
+## Ends in an error in state: 355.
+##
+## term_signature -> LET untyped_binder . EQUALS type_use [ USE RBRACE OPEN MODULE LET EOF DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## LET untyped_binder
+##
+
+This point is inside term signature. Next step: put = next, then continue with the right-hand side. Finish the required token sequence here before moving on.
+
+parse_signature: LET IDENT EQUALS USE
+##
+## Ends in an error in state: 356.
+##
+## term_signature -> LET untyped_binder EQUALS . type_use [ USE RBRACE OPEN MODULE LET EOF DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## LET untyped_binder EQUALS
+##
+
+The parser is still in term signature. Next step: write the type expression on the right-hand side. Finish the required token sequence here before moving on.
+
+parse_signature: OPEN CONSTRUCTOR_IDENT UNIT
+##
+## Ends in an error in state: 360.
+##
+## maybe_delimited(top_level_item(top_level_signature_definition)) -> top_level_item(top_level_signature_definition) . option(DELIMITER) [ USE RBRACE OPEN MODULE LET EOF DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## top_level_item(top_level_signature_definition)
+##
+
+You're currently building maybe delimited(top level item(top level signature definition)). Next step: continue with the optional part of this construct. Complete this construct first, then continue outward.
+
+parse_signature: CODATA USE
+##
+## Ends in an error in state: 363.
+##
+## type_signature -> shape . mode kind_binder EQUALS full_raw_type [ USE RBRACE OPEN MODULE LET EOF DELIMITER DATA CODATA ]
+## type_signature -> shape . kind_binder EQUALS full_raw_type [ USE RBRACE OPEN MODULE LET EOF DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## shape
+##
+
+You're inside a type declaration. Next step: continue with mode or a type name (optionally with parameters). Type declarations are strict in this spot, so complete this part before switching constructs.
+
+parse_signature: CODATA LBRACK CBN RBRACK USE
+##
+## Ends in an error in state: 364.
+##
+## type_signature -> shape mode . kind_binder EQUALS full_raw_type [ USE RBRACE OPEN MODULE LET EOF DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## shape mode
+##
+
+Type parsing is active here. Next step: continue with a type name (optionally with parameters). Type declarations are strict in this spot, so complete this part before switching constructs.
+
+parse_signature: CODATA LBRACK CBN RBRACK IDENT LANGLE RANGLE USE
+##
+## Ends in an error in state: 365.
+##
+## type_signature -> shape mode kind_binder . EQUALS full_raw_type [ USE RBRACE OPEN MODULE LET EOF DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## shape mode kind_binder
+##
+
+This position belongs to a type declaration. Next step: put = next, then continue with the right-hand side. Finish the type skeleton first; then continue with terms or declarations outside it.
+
+parse_signature: CODATA LBRACK CBN RBRACK IDENT EQUALS USE
+##
+## Ends in an error in state: 366.
+##
+## type_signature -> shape mode kind_binder EQUALS . full_raw_type [ USE RBRACE OPEN MODULE LET EOF DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## shape mode kind_binder EQUALS
+##
+
+You're inside a type declaration. Next step: write the type expression on the right-hand side. Finish the type skeleton first; then continue with terms or declarations outside it.
+
+parse_signature: CODATA IDENT LANGLE RANGLE USE
+##
+## Ends in an error in state: 368.
+##
+## type_signature -> shape kind_binder . EQUALS full_raw_type [ USE RBRACE OPEN MODULE LET EOF DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## shape kind_binder
+##
+
+This position belongs to a type declaration. Next step: put = next, then continue with the right-hand side. Finish the type skeleton first; then continue with terms or declarations outside it.
+
+parse_signature: CODATA IDENT EQUALS USE
+##
+## Ends in an error in state: 369.
+##
+## type_signature -> shape kind_binder EQUALS . full_raw_type [ USE RBRACE OPEN MODULE LET EOF DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## shape kind_binder EQUALS
+##
+
+You're inside a type declaration. Next step: write the type expression on the right-hand side. Finish the type skeleton first; then continue with terms or declarations outside it.
+
+parse_signature: OPEN CONSTRUCTOR_IDENT DELIMITER UNIT
+##
+## Ends in an error in state: 373.
+##
+## list(maybe_delimited(top_level_item(top_level_signature_definition))) -> maybe_delimited(top_level_item(top_level_signature_definition)) . list(maybe_delimited(top_level_item(top_level_signature_definition))) [ RBRACE EOF ]
+##
+## The known suffix of the stack is as follows:
+## maybe_delimited(top_level_item(top_level_signature_definition))
+##
+
+This point is inside list(maybe delimited(top level item(top level signature definition))). Next step: continue with list(maybe delimited(top level item(top level signature definition))). Finish the required token sequence here before moving on.
+
+parse_signature: MODULE CONSTRUCTOR_IDENT LBRACE OPEN CONSTRUCTOR_IDENT EOF
+##
+## Ends in an error in state: 376.
+##
+## module_signature -> MODULE any_ident LBRACE interface . RBRACE [ USE RBRACE OPEN MODULE LET EOF DELIMITER DATA CODATA ]
+##
+## The known suffix of the stack is as follows:
+## MODULE any_ident LBRACE interface
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 360, spurious reduction of production option(DELIMITER) ->
+## In state 361, spurious reduction of production maybe_delimited(top_level_item(top_level_signature_definition)) -> top_level_item(top_level_signature_definition) option(DELIMITER)
+## In state 373, spurious reduction of production list(maybe_delimited(top_level_item(top_level_signature_definition))) ->
+## In state 374, spurious reduction of production list(maybe_delimited(top_level_item(top_level_signature_definition))) -> maybe_delimited(top_level_item(top_level_signature_definition)) list(maybe_delimited(top_level_item(top_level_signature_definition)))
+## In state 375, spurious reduction of production interface -> list(maybe_delimited(top_level_item(top_level_signature_definition)))
+##
+
+Module declaration parsing is active. Next step: continue with }. Balance the braces so the module body is structurally complete.
+
+parse_signature: OPEN CONSTRUCTOR_IDENT RBRACE
+##
+## Ends in an error in state: 379.
+##
+## parse_signature -> interface . EOF [ # ]
+##
+## The known suffix of the stack is as follows:
+## interface
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 360, spurious reduction of production option(DELIMITER) ->
+## In state 361, spurious reduction of production maybe_delimited(top_level_item(top_level_signature_definition)) -> top_level_item(top_level_signature_definition) option(DELIMITER)
+## In state 373, spurious reduction of production list(maybe_delimited(top_level_item(top_level_signature_definition))) ->
+## In state 374, spurious reduction of production list(maybe_delimited(top_level_item(top_level_signature_definition))) -> maybe_delimited(top_level_item(top_level_signature_definition)) list(maybe_delimited(top_level_item(top_level_signature_definition)))
+## In state 375, spurious reduction of production interface -> list(maybe_delimited(top_level_item(top_level_signature_definition)))
+##
+
+Top-level parsing for a complete signature is active. Next step: start with a signature item like open, module, let, data, or codata. Begin with a valid top-level declaration and keep nested constructs balanced.
+
