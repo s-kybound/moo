@@ -32,6 +32,7 @@
       ("module",  MODULE);
       ("use",     USE);
       ("as",      AS);
+      ("abstract",ABSTRACT);
       ("_",       UNDERSCORE);
       (* ("unpack",  UNPACK);
       ("pack",    PACK);

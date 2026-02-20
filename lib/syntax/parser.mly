@@ -83,6 +83,7 @@
 %token CBV CBN
 %token PLUS MINUS NEG STAR SLASH PERCENT
 %token BAR
+%token ABSTRACT
 
 (* base datatypes, along with tuples and the rest *)
 %token RAW64 UNIT
@@ -402,6 +403,13 @@ shape:
 type_use:
   | polarised_type                                      { $1 }
   | abstract_type                                       { let (name, negated) = $1 in Abstract { name; negated } }
+  | unify_type                                          { $1 }
+
+unify_type:
+  | ABSTRACT 
+    LBRACK names=separated_nonempty_list(COMMA, abstract_binder) RBRACK 
+    t=type_use
+      { AbstractIntroducer (names, t) }
 
 abstract_type:
   | name=abstract_binder                                { (name, false) }

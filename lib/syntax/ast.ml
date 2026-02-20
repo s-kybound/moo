@@ -12,6 +12,7 @@ type unresolved_tyu_state =
 
 and ty_use =
   | Polarised of polarity * ty
+  | AbstractIntroducer of string * ty_use
   | Abstract of
       { negated : bool
       ; name : string

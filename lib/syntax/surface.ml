@@ -35,6 +35,7 @@ type shape =
 
 type ty_use =
   | Polarised of polarity * ty
+  | AbstractIntroducer of string list * ty_use
   | Abstract of
       { negated : bool
       ; name : string

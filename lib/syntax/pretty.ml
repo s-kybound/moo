@@ -56,6 +56,8 @@ let rec show_ty_use tyu =
     Printf.sprintf
       "~linked(%s)"
       (show_unresolved_tyu ~destructor:true unresolved_tyu raw_ty)
+  | AbstractIntroducer (name, ty_use) ->
+    Printf.sprintf "abstract[%s] %s" name (show_ty_use ty_use)
 
 and show_unresolved_tyu ~destructor { mode; shape } raw_ty =
   let inferred_polarity =

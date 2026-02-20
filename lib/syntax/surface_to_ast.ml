@@ -35,6 +35,11 @@ let rec surface_ty_use_to_ast_ty_use (tyu : Surface.ty_use) : Ast.ty_use =
   match tyu with
   | Surface.Polarised (pol, ty) -> Ast.Polarised (pol, surface_ty_to_ast_ty ty)
   | Surface.Abstract { negated; name } -> Ast.Abstract { negated; name }
+  | Surface.AbstractIntroducer (names, ty_use) ->
+    List.fold_left
+      (fun acc name -> Ast.AbstractIntroducer (name, acc))
+      (surface_ty_use_to_ast_ty_use ty_use)
+      (List.rev names)
 
 and surface_ty_to_ast_ty (ty : Surface.ty) : Ast.ty =
   match ty with

@@ -21,13 +21,14 @@ let lookup (name : name) (tydef_env : tydef_env) : ty * string list =
   | Namespaced _ -> failwith "lookup: namespaced types not supported"
 ;;
 
-let negate_tyu (ty_use : ty_use) : ty_use =
+let rec negate_tyu (ty_use : ty_use) : ty_use =
   match ty_use with
   | Polarised (Plus, mty) -> Polarised (Minus, mty)
   | Polarised (Minus, mty) -> Polarised (Plus, mty)
   | Abstract { negated; name } -> Abstract { negated = not negated; name }
   | Constructor (unresolved_tyu_state, raw_ty) -> Destructor (unresolved_tyu_state, raw_ty)
   | Destructor (unresolved_tyu_state, raw_ty) -> Constructor (unresolved_tyu_state, raw_ty)
+  | AbstractIntroducer (name, ty_use) -> AbstractIntroducer (name, negate_tyu ty_use)
 ;;
 
 let rec tyu_replace (bindings : (string * ty_use) list) (target : ty_use) : ty_use =
@@ -37,6 +38,9 @@ let rec tyu_replace (bindings : (string * ty_use) list) (target : ty_use) : ty_u
     Constructor (unresolved_tyu_state, raw_ty_replace bindings raw_ty)
   | Destructor (unresolved_tyu_state, raw_ty) ->
     Destructor (unresolved_tyu_state, raw_ty_replace bindings raw_ty)
+  | AbstractIntroducer (name, ty_use) ->
+    let new_bindings = List.remove_assoc name bindings in
+    AbstractIntroducer (name, tyu_replace new_bindings ty_use)
   | Abstract { negated; name } ->
   match List.assoc_opt name bindings with
   | Some ty_use -> if negated then negate_tyu ty_use else ty_use
@@ -86,6 +90,8 @@ let ty_to_raw_ty (ty : ty) (tydef_env : tydef_env) : mode * shape * raw_ty =
 let rec tyu_is_resolved (tyu : ty_use) : bool =
   match tyu with
   | Polarised (_, ty) -> ty_is_resolved ty
+  | AbstractIntroducer _ ->
+    failwith "TODO: get resolver to ignore introduced abstract names"
   | Abstract _ -> false
   | Constructor (state, raw_ty) | Destructor (state, raw_ty) ->
     !(state.mode) <> None && !(state.shape) <> None && raw_ty_is_resolved raw_ty
@@ -114,6 +120,7 @@ let tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env)
     let mode, shape, raw_ty = ty_to_raw_ty ty tydef_env in
     mode, polarity, shape, raw_ty
   | Abstract _ -> assert false (* should not be called on abstract types *)
+  | AbstractIntroducer _ -> failwith "TODO"
   | Constructor (state, raw_ty) | Destructor (state, raw_ty) ->
     if not (tyu_is_resolved tyu)
     then assert false (* should only be called on resolved tyu's *)
@@ -123,11 +130,12 @@ let tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env)
       | _ -> assert false)
 ;;
 
-let is_constructor_tyu (tyu : ty_use) (tydef_env : tydef_env) : bool =
+let rec is_constructor_tyu (tyu : ty_use) (tydef_env : tydef_env) : bool =
   match tyu with
   | Constructor _ -> true
   | Destructor _ -> false
   | Abstract _ -> assert false (* should not be called on abstract types *)
+  | AbstractIntroducer (_, tyu) -> is_constructor_tyu tyu tydef_env
   | Polarised (pol, ty) ->
     let _, shape, _ = ty_to_raw_ty ty tydef_env in
     (match pol, shape with
@@ -337,6 +345,8 @@ let most_specific_tyu (tyu1 : ty_use) (tyu2 : ty_use) (tydef_env : tydef_env) : 
     | Constructor _, Constructor _ | Destructor _, Destructor _ ->
       tyu1
       (* tyu_equal ensures that both states are compatible, so we can return either *)
-    | Constructor _, Destructor _ | Destructor _, Constructor _ -> assert false)
+    | Constructor _, Destructor _ | Destructor _, Constructor _ -> assert false
+    | AbstractIntroducer _, _ | _, AbstractIntroducer _ ->
+      failwith "TODO: most_specific_tyu does not yet support abstract introducers")
 ;;
 (* should never be equal *)
