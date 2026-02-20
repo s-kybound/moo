@@ -82,7 +82,9 @@ type pattern =
       }
   | Numeral of int64
 
-type term =
+type term = term_node Loc.located
+
+and term_node =
   | Mu of binder * command (* mu and mu tilde *)
   | Variable of name
   | Construction of
@@ -97,7 +99,9 @@ type term =
   | Ann of term * ty_use
   | Done
 
-and command =
+and command = command_node Loc.located
+
+and command_node =
   | Core of
       { l_term : term
       ; r_term : term

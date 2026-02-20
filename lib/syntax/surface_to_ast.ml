@@ -1,21 +1,31 @@
-let mk_term (node : unit Ast.term_node) : unit Ast.term = (), node
-let mk_command (node : unit Ast.command_node) : unit Ast.command = (), node
+let default_ann : Ast.core_ann = Ast.empty_core_ann
+let ann_of_surface_loc (loc : Loc.span) : Ast.core_ann = { Ast.loc = Some loc }
 
-let mk_core (l_term : unit Ast.term) (r_term : unit Ast.term) : unit Ast.command =
+let mk_term (node : Ast.core_ann Ast.term_node) : Ast.core_ann Ast.term =
+  default_ann, node
+;;
+
+let mk_command (node : Ast.core_ann Ast.command_node) : Ast.core_ann Ast.command =
+  default_ann, node
+;;
+
+let mk_core (l_term : Ast.core_ann Ast.term) (r_term : Ast.core_ann Ast.term)
+  : Ast.core_ann Ast.command
+  =
   mk_command (Ast.Core { l_term; r_term })
 ;;
 
-let mk_ann (term : unit Ast.term) (tyu : Ast.ty_use) : unit Ast.term =
+let mk_ann (term : Ast.core_ann Ast.term) (tyu : Ast.ty_use) : Ast.core_ann Ast.term =
   mk_term (Ast.Ann (term, tyu))
 ;;
 
-let mk_var (name : Ast.name) : unit Ast.term = mk_term (Ast.Variable name)
+let mk_var (name : Ast.name) : Ast.core_ann Ast.term = mk_term (Ast.Variable name)
 
 let cutlet_let
-      (name : unit Ast.binder)
-      (l_term : unit Ast.term)
-      (command : unit Ast.command)
-  : unit Ast.command
+      (name : Ast.core_ann Ast.binder)
+      (l_term : Ast.core_ann Ast.term)
+      (command : Ast.core_ann Ast.command)
+  : Ast.core_ann Ast.command
   =
   let r_term = mk_term (Ast.Mu (name, command)) in
   mk_core l_term r_term
@@ -57,10 +67,11 @@ let gensym =
     name
 ;;
 
-let surface_binder_name_to_ast_binder (bn : Surface.binder_name) : unit Ast.binder =
+let surface_binder_name_to_ast_binder (bn : Surface.binder_name) : Ast.core_ann Ast.binder
+  =
   match bn with
-  | Surface.Var s -> Ast.Var ((), s)
-  | Surface.Wildcard -> Ast.Wildcard ()
+  | Surface.Var s -> Ast.Var (default_ann, s)
+  | Surface.Wildcard -> Ast.Wildcard default_ann
 ;;
 
 (*
@@ -70,7 +81,7 @@ let surface_binder_name_to_ast_binder (bn : Surface.binder_name) : unit Ast.bind
   so that the caller can insert the appropriate let-bindings for each binder.
  *)
 let surface_pattern_to_ast_pattern (pat : Surface.pattern)
-  : unit Ast.pattern * (Ast.name * unit Ast.binder * Ast.ty_use) list
+  : Ast.core_ann Ast.pattern * (Ast.name * Ast.core_ann Ast.binder * Ast.ty_use) list
   =
   let binder_fold (acc_binders, acc_ty_uses) (binder : Surface.binder) =
     let name = surface_binder_name_to_ast_binder binder.name in
@@ -81,7 +92,8 @@ let surface_pattern_to_ast_pattern (pat : Surface.pattern)
       let binding_triple =
         Ast.Base binder_name, name, surface_ty_use_to_ast_ty_use ty_use
       in
-      acc_binders @ [ Ast.Var ((), binder_name) ], acc_ty_uses @ [ binding_triple ]
+      ( acc_binders @ [ Ast.Var (default_ann, binder_name) ]
+      , acc_ty_uses @ [ binding_triple ] )
   in
   match pat with
   | Surface.Binder { name; typ = Some ty_use } ->
@@ -90,7 +102,7 @@ let surface_pattern_to_ast_pattern (pat : Surface.pattern)
     let binding_triple =
       Ast.Base binder_name, name, surface_ty_use_to_ast_ty_use ty_use
     in
-    Ast.Binder (Ast.Var ((), binder_name)), [ binding_triple ]
+    Ast.Binder (Ast.Var (default_ann, binder_name)), [ binding_triple ]
   | Surface.Binder { name; typ = None } ->
     Ast.Binder (surface_binder_name_to_ast_binder name), []
   | Surface.Tup binders ->
@@ -102,11 +114,12 @@ let surface_pattern_to_ast_pattern (pat : Surface.pattern)
   | Surface.Numeral n -> Ast.Numeral n, []
 ;;
 
-let rec surface_term_to_ast_term (t : Surface.term) : unit Ast.term =
-  mk_term (surface_term_to_ast_term_node t)
+let rec surface_term_to_ast_term (t : Surface.term) : Ast.core_ann Ast.term =
+  let node = surface_term_to_ast_term_node t in
+  ann_of_surface_loc t.loc, node
 
-and surface_term_to_ast_term_node (t : Surface.term) : unit Ast.term_node =
-  match t with
+and surface_term_to_ast_term_node (t : Surface.term) : Ast.core_ann Ast.term_node =
+  match t.it with
   | Surface.Mu ({ name; typ = Some ty_use }, command) ->
     (*
       { x : tyu -> command } is syntactic sugar for either
@@ -120,7 +133,7 @@ and surface_term_to_ast_term_node (t : Surface.term) : unit Ast.term_node =
     *)
     let gensym_name = gensym "gensym" in
     let gensym_var = mk_var (Base gensym_name) in
-    let gensym_binder = Ast.Var ((), gensym_name) in
+    let gensym_binder = Ast.Var (default_ann, gensym_name) in
     let term = mk_ann gensym_var (surface_ty_use_to_ast_ty_use ty_use) in
     Ast.Mu
       ( gensym_binder
@@ -186,11 +199,14 @@ and surface_term_to_ast_term_node (t : Surface.term) : unit Ast.term_node =
     Ast.Ann (surface_term_to_ast_term term, surface_ty_use_to_ast_ty_use ty_use)
   | Surface.Done -> Ast.Done
 
-and surface_command_to_ast_command (cmd : Surface.command) : unit Ast.command =
-  mk_command (surface_command_to_ast_command_node cmd)
+and surface_command_to_ast_command (cmd : Surface.command) : Ast.core_ann Ast.command =
+  let node = surface_command_to_ast_command_node cmd in
+  ann_of_surface_loc cmd.loc, node
 
-and surface_command_to_ast_command_node (cmd : Surface.command) : unit Ast.command_node =
-  match cmd with
+and surface_command_to_ast_command_node (cmd : Surface.command)
+  : Ast.core_ann Ast.command_node
+  =
+  match cmd.it with
   | Surface.Core { l_term; r_term } ->
     Ast.Core
       { l_term = surface_term_to_ast_term l_term
@@ -226,7 +242,7 @@ let surface_top_level_item_to_ast_top_level_item
 ;;
 
 let rec surface_definition_to_ast_definition (def : Surface.definition)
-  : unit Ast.definition
+  : Ast.core_ann Ast.definition
   =
   match def with
   | Surface.TermDef ({ name; typ = None }, term) ->
@@ -235,7 +251,7 @@ let rec surface_definition_to_ast_definition (def : Surface.definition)
     let term_node =
       Ast.Ann (surface_term_to_ast_term term, surface_ty_use_to_ast_ty_use ty_use)
     in
-    let term = (), term_node in
+    let term = default_ann, term_node in
     Ast.TermDef (surface_binder_name_to_ast_binder name, term)
   | Surface.TypeDef (kind_binder, ty) -> Ast.TypeDef (kind_binder, surface_ty_to_ast_ty ty)
   | Surface.ModuleDef module_def ->
@@ -244,7 +260,7 @@ let rec surface_definition_to_ast_definition (def : Surface.definition)
       ; program = surface_module_to_ast_module module_def.program
       }
 
-and surface_module_to_ast_module (m : Surface.module_) : unit Ast.module_ =
+and surface_module_to_ast_module (m : Surface.module_) : Ast.core_ann Ast.module_ =
   let defs, cmd_opt = m in
   let ast_defs =
     List.map

@@ -3,7 +3,8 @@ open Type
 (* a cocontextual typechecker that analyses a given program *)
 
 type tycheck_ann =
-  { ty : Ast.ty_use option
+  { loc : Loc.span option
+  ; ty : Ast.ty_use option
   ; unique_id : int option
   ; binder_ids : int list option
   }
@@ -17,7 +18,7 @@ type typed_arith_command = typed_ann Ast.arith_command
 type typed_definition = typed_ann Ast.definition
 type typed_module = typed_ann Ast.module_
 
-let empty_ann : typed_ann = { ty = None; unique_id = None; binder_ids = None }
+let empty_ann : typed_ann = { loc = None; ty = None; unique_id = None; binder_ids = None }
 let ann_with_unique_id (id : int) : typed_ann = { empty_ann with unique_id = Some id }
 
 let ann_with_binder_ids (ids : int list) : typed_ann =
@@ -41,15 +42,17 @@ let mk_command (ann : typed_ann) (node : typed_ann Ast.command_node) : typed_com
   ann, node
 ;;
 
-let binder_with_ids (b : unit Ast.binder) (ids : int list option) : typed_binder =
-  let ann =
+let typed_ann_of_core (ann : Ast.core_ann) : typed_ann = { empty_ann with loc = ann.loc }
+
+let binder_with_ids (b : Ast.core_ann Ast.binder) (ids : int list option) : typed_binder =
+  let ann_of_ids base_ann =
     match ids with
-    | None -> empty_ann
-    | Some ids -> { empty_ann with binder_ids = Some ids }
+    | None -> base_ann
+    | Some ids -> { base_ann with binder_ids = Some ids }
   in
   match b with
-  | Ast.Var (_ann, name) -> Ast.Var (ann, name)
-  | Ast.Wildcard _ann -> Ast.Wildcard ann
+  | Ast.Var (src_ann, name) -> Ast.Var (ann_of_ids (typed_ann_of_core src_ann), name)
+  | Ast.Wildcard src_ann -> Ast.Wildcard (ann_of_ids (typed_ann_of_core src_ann))
 ;;
 
 let set_binder_ids (b : typed_binder) (ids : int list) : typed_binder =
@@ -58,7 +61,7 @@ let set_binder_ids (b : typed_binder) (ids : int list) : typed_binder =
   | Ast.Wildcard _ann -> Ast.Wildcard { empty_ann with binder_ids = Some ids }
 ;;
 
-let pattern_with_empty_ids (pat : unit Ast.pattern) : typed_pattern =
+let pattern_with_empty_ids (pat : Ast.core_ann Ast.pattern) : typed_pattern =
   match pat with
   | Ast.Numeral n -> Ast.Numeral n
   | Ast.Binder binder -> Ast.Binder (binder_with_ids binder None)
@@ -144,13 +147,13 @@ let get_usages_of_hole (frame : tycheck_hole_environment_frame) (var : 'a Ast.bi
 ;;
 
 (* perform a co-debrujin conversion on a module *)
-let tycheck_module_of_ast (modu : unit Ast.module_) : typed_module =
+let tycheck_module_of_ast (modu : Ast.core_ann Ast.module_) : typed_module =
   let rec tycheck_module_of_ast_aux
-            ((top_level_defs, top_level_command) : unit Ast.module_)
+            ((top_level_defs, top_level_command) : Ast.core_ann Ast.module_)
             env
     : typed_module
     =
-    let rec tycheck_definition_of_ast (def : unit Ast.definition) env
+    let rec tycheck_definition_of_ast (def : Ast.core_ann Ast.definition) env
       : typed_definition * tycheck_hole_environment_frame
       =
       match def with
@@ -165,8 +168,9 @@ let tycheck_module_of_ast (modu : unit Ast.module_) : typed_module =
       | Ast.ModuleDef { name; program } ->
         let tprogram = tycheck_module_of_ast_aux program env in
         Ast.ModuleDef { name; program = tprogram }, env
-    and tycheck_term_of_ast (term : unit Ast.term) env : typed_term =
-      let _, node = term in
+    and tycheck_term_of_ast (term : Ast.core_ann Ast.term) env : typed_term =
+      let src_ann, node = term in
+      let ann = typed_ann_of_core src_ann in
       match node with
       | Ast.Mu (binder, command) ->
         let temp_binder = binder_with_ids binder None in
@@ -174,17 +178,19 @@ let tycheck_module_of_ast (modu : unit Ast.module_) : typed_module =
         let tcommand = tycheck_command_of_ast command new_env in
         let unique_ids = get_usages_of_hole new_env temp_binder in
         let tbinder = binder_with_ids binder (Some unique_ids) in
-        mk_term empty_ann (Ast.Mu (tbinder, tcommand))
+        mk_term ann (Ast.Mu (tbinder, tcommand))
       | Ast.Variable original_name ->
         let unique_id = gen_int () in
         add_usage_to_hole env original_name unique_id;
-        mk_term (ann_with_unique_id unique_id) (Ast.Variable original_name)
+        mk_term
+          { (ann_with_unique_id unique_id) with loc = ann.loc }
+          (Ast.Variable original_name)
       | Ast.Construction { cons_name; cons_args } ->
         let tcons_args = List.map (fun arg -> tycheck_term_of_ast arg env) cons_args in
-        mk_term empty_ann (Ast.Construction { cons_name; cons_args = tcons_args })
+        mk_term ann (Ast.Construction { cons_name; cons_args = tcons_args })
       | Ast.Tuple terms ->
         let tterms = List.map (fun term -> tycheck_term_of_ast term env) terms in
-        mk_term empty_ann (Ast.Tuple tterms)
+        mk_term ann (Ast.Tuple tterms)
       | Ast.Matcher branches ->
         let tbranches =
           List.map
@@ -196,8 +202,8 @@ let tycheck_module_of_ast (modu : unit Ast.module_) : typed_module =
                tpat, tcmd)
             branches
         in
-        mk_term empty_ann (Ast.Matcher tbranches)
-      | Ast.Num n -> mk_term empty_ann (Ast.Num n)
+        mk_term ann (Ast.Matcher tbranches)
+      | Ast.Num n -> mk_term ann (Ast.Num n)
       | Ast.Rec (binder, term) ->
         let temp_binder = binder_with_ids binder None in
         let new_env = extend_hole_frame env temp_binder in
@@ -213,42 +219,43 @@ let tycheck_module_of_ast (modu : unit Ast.module_) : typed_module =
           failwith msg)
         else (
           let tbinder = binder_with_ids binder (Some unique_ids) in
-          mk_term empty_ann (Ast.Rec (tbinder, tterm)))
+          mk_term ann (Ast.Rec (tbinder, tterm)))
       | Ast.Arr terms ->
         let tterms = List.map (fun term -> tycheck_term_of_ast term env) terms in
-        mk_term empty_ann (Ast.Arr tterms)
+        mk_term ann (Ast.Arr tterms)
       | Ast.Ann (term, ty_use) ->
         let tterm = tycheck_term_of_ast term env in
-        mk_term empty_ann (Ast.Ann (tterm, ty_use))
-      | Ast.Done -> mk_term empty_ann Ast.Done
-    and tycheck_command_of_ast (command : unit Ast.command) env : typed_command =
-      let _, node = command in
+        mk_term ann (Ast.Ann (tterm, ty_use))
+      | Ast.Done -> mk_term ann Ast.Done
+    and tycheck_command_of_ast (command : Ast.core_ann Ast.command) env : typed_command =
+      let src_ann, node = command in
+      let ann = typed_ann_of_core src_ann in
       match node with
       | Ast.Core { l_term; r_term } ->
         let tl_term = tycheck_term_of_ast l_term env in
         let tr_term = tycheck_term_of_ast r_term env in
-        mk_command empty_ann (Ast.Core { l_term = tl_term; r_term = tr_term })
+        mk_command ann (Ast.Core { l_term = tl_term; r_term = tr_term })
       | Ast.Arith arith_cmd ->
         (match arith_cmd with
          | Ast.Unop { op; in_term; out_term } ->
            let tin_term = tycheck_term_of_ast in_term env in
            let tout_term = tycheck_term_of_ast out_term env in
            mk_command
-             empty_ann
+             ann
              (Ast.Arith (Ast.Unop { op; in_term = tin_term; out_term = tout_term }))
          | Ast.Bop { op; l_term; r_term; out_term } ->
            let tl_term = tycheck_term_of_ast l_term env in
            let tr_term = tycheck_term_of_ast r_term env in
            let tout_term = tycheck_term_of_ast out_term env in
            mk_command
-             empty_ann
+             ann
              (Ast.Arith
                 (Ast.Bop { op; l_term = tl_term; r_term = tr_term; out_term = tout_term })))
       | Ast.Fork (cmd1, cmd2) ->
         let tcmd1 = tycheck_command_of_ast cmd1 env in
         let tcmd2 = tycheck_command_of_ast cmd2 env in
-        mk_command empty_ann (Ast.Fork (tcmd1, tcmd2))
-    and tycheck_pattern_of_ast (pat : unit Ast.pattern) env : typed_pattern =
+        mk_command ann (Ast.Fork (tcmd1, tcmd2))
+    and tycheck_pattern_of_ast (pat : Ast.core_ann Ast.pattern) env : typed_pattern =
       match pat with
       | Ast.Numeral n -> Ast.Numeral n
       | Ast.Binder binder ->
@@ -275,7 +282,9 @@ let tycheck_module_of_ast (modu : unit Ast.module_) : typed_module =
             pat_args
         in
         Ast.Constr { pat_name; pat_args = tpat_args }
-    and tycheck_top_level_item_of_ast (tli : unit Ast.definition Ast.top_level_item) env
+    and tycheck_top_level_item_of_ast
+          (tli : Ast.core_ann Ast.definition Ast.top_level_item)
+          env
       : typed_definition Ast.top_level_item * tycheck_hole_environment_frame
       =
       match tli with
@@ -851,7 +860,7 @@ and tycheck_module
     (new_top_level_items, Some newcmd), command_knowledge, after_defs_tydef_env
 ;;
 
-let tycheck_program (modu : unit Ast.module_) : typed_module * tydef_env =
+let tycheck_program (modu : Ast.core_ann Ast.module_) : typed_module * tydef_env =
   let modu = tycheck_module_of_ast modu in
   let out, _, env = tycheck_module IMap.empty modu Top in
   out, env

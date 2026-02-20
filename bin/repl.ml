@@ -161,7 +161,8 @@ let add_to_history line =
 ;;
 
 (* If there is some context waiting (a checkpoint), we resume parsing from that point *)
-let rec repl_loop (kont : (Error.kont * (Ast.module_ -> 'a) * string) option) =
+let rec repl_loop (kont : (Error.kont * (Ast.core_ann Ast.module_ -> 'a) * string) option)
+  =
   let attempt_eval ?(previous_input = "") ?k input f =
     let full_input =
       previous_input ^ "\n" ^ input

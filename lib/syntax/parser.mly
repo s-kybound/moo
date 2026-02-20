@@ -1,5 +1,20 @@
 %{
   open Surface
+  open Loc
+
+  let loc_of_lexing_pos (p : Lexing.position) : Loc.position =
+    let file = if p.pos_fname = "" then None else Some p.pos_fname in
+    { file; line = p.pos_lnum; col = p.pos_cnum - p.pos_bol + 1 }
+  ;;
+
+  let span_of (startp : Lexing.position) (endp : Lexing.position) : Loc.span =
+    { start_pos = loc_of_lexing_pos startp; end_pos = loc_of_lexing_pos endp }
+  ;;
+
+  let mk_term startp endp (it : term_node) : term = Loc.mk (span_of startp endp) it
+  let mk_command startp endp (it : command_node) : command =
+    Loc.mk (span_of startp endp) it
+  ;;
 
   module Gensym : sig
     val make : string -> string
@@ -11,17 +26,21 @@
       sym
   end
 
-  let term_binop op l_term r_term =
+  let term_binop startp endp op l_term r_term =
     let name = Gensym.make "binop_out" in
-    let arith_cmd = Bop { op; l_term; r_term; out_term = Variable (Base name) } in
+    let out_term = mk_term startp endp (Variable (Base name)) in
+    let arith_cmd = Bop { op; l_term; r_term; out_term } in
     let out_binder = { name = Var name; typ = None } in
-    Mu (out_binder, Arith arith_cmd)
+    let cmd = mk_command startp endp (Arith arith_cmd) in
+    mk_term startp endp (Mu (out_binder, cmd))
 
-  let term_unop op in_term =
+  let term_unop startp endp op in_term =
     let name = Gensym.make "unop_out" in
-    let arith_cmd = Unop { op; in_term; out_term = Variable (Base name) } in
+    let out_term = mk_term startp endp (Variable (Base name)) in
+    let arith_cmd = Unop { op; in_term; out_term } in
     let out_binder = { name = Var name; typ = None } in
-    Mu (out_binder, Arith arith_cmd)
+    let cmd = mk_command startp endp (Arith arith_cmd) in
+    mk_term startp endp (Mu (out_binder, cmd))
 
   let infer_mode shape =
     match shape with
@@ -29,10 +48,10 @@
     | Codata -> By_name
 
   (* desugars procedures into pattern matchers *)
-  let make_proc binders body =
-    Matcher [
+  let make_proc startp endp binders body =
+    mk_term startp endp (Matcher [
       (Tup binders, body)
-    ]
+    ])
 %}
 
 %token <string> IDENT
@@ -187,16 +206,19 @@ type_signature:
 
 let_definition:
   | LET b=typed_binder EQUALS t=def_term                { TermDef (b, t) }
-  | LET REC b=typed_binder EQUALS t=def_term            { TermDef (b, Rec (b, t)) }
+  | LET REC b=typed_binder EQUALS t=def_term            { TermDef (b, mk_term $startpos $endpos (Rec (b, t))) }
 
 (* procedures are sugar over matchers,
  * they are useful enough to be granted
  * native representation *)
 proc_definition:
   | PROC b=untyped_binder params=proc_binders body=proc_body
-      { TermDef (b, make_proc params body) }
+      { TermDef (b, make_proc $startpos $endpos params body) }
   | PROC REC b=untyped_binder params=proc_binders body=proc_body
-      { TermDef (b, Rec (b, make_proc params body)) }
+      {
+        let proc = make_proc $startpos $endpos params body in
+        TermDef (b, mk_term $startpos $endpos (Rec (b, proc)))
+      }
 
 proc_binders:
   | LPAREN separated_list(COMMA, typed_binder) RPAREN   { $2 }
@@ -222,22 +244,31 @@ non_fork_statement:
  * > 2 commands at a time *)
 fork_command:
   | LBRACK l_cmd=non_fork_statement BAR r_cmd=non_fork_statement RBRACK
-      { Fork (l_cmd, r_cmd) }
+      { mk_command $startpos $endpos (Fork (l_cmd, r_cmd)) }
 
 (* sugared commands *)
 cutlet:
-  | MATCH l_term=indirect_term r_term=match_body        { Core { l_term; r_term } }
-  | LET b=binder RTLARROW l_term=term IN s=statement    { let r_term = Mu (b, s) in Core { l_term; r_term } }
+  | MATCH l_term=indirect_term r_term=match_body
+      { mk_command $startpos $endpos (Core { l_term; r_term }) }
+  | LET b=binder RTLARROW l_term=term IN s=statement
+      {
+        let r_term = mk_term $startpos $endpos (Mu (b, s)) in
+        mk_command $startpos $endpos (Core { l_term; r_term })
+      }
   (* let rec... itself sugar over fixpoint terms *)
-  | LET REC b=binder RTLARROW t=term IN s=statement     { let l_term = Rec (b, t) in
-                                                          let r_term = Mu (b, s) in
-                                                          Core { l_term; r_term }
-                                                        }
+  | LET REC b=binder RTLARROW t=term IN s=statement
+      {
+        let l_term = mk_term $startpos $endpos (Rec (b, t)) in
+        let r_term = mk_term $startpos $endpos (Mu (b, s)) in
+        mk_command $startpos $endpos (Core { l_term; r_term })
+      }
 
 (* core commands and arithmetic operations *)
 command:
-  | l_term=term DOT r_term=term                         { Core { l_term; r_term } }
-  | arith_command                                       { Arith $1 }
+  | l_term=term DOT r_term=term
+      { mk_command $startpos $endpos (Core { l_term; r_term }) }
+  | arith_command
+      { mk_command $startpos $endpos (Arith $1) }
 
 (* base operations over numeric data types.
  * may be extended in the future to support other
@@ -261,41 +292,41 @@ def_term:
   | naked_mu_term                                       { $1 }
 
 indirect_term:
-  | namespaced(IDENT)                                   { Variable $1 }
+  | namespaced(IDENT)                                   { mk_term $startpos $endpos (Variable $1) }
   | MATCH match_body                                    { $2 }
   | product_term                                        { $1 }
   | cons_term                                           { $1 }
   | simple_number_term                                  { $1 }
   | array_term                                          { $1 }
-  | DONE                                                { Done }
-  | t=indirect_term COLON ty=type_use                   { Ann (t, ty) }
+  | DONE                                                { mk_term $startpos $endpos Done }
+  | t=indirect_term COLON ty=type_use                   { mk_term $startpos $endpos (Ann (t, ty)) }
 (*| MU naked_mu_term                                    { $2 }*)
   | LPAREN t=term RPAREN                                { t }
 
 array_term:
-  | LBRACK r_terms=separated_list(COMMA, term) RBRACK   { Arr r_terms }
+  | LBRACK r_terms=separated_list(COMMA, term) RBRACK   { mk_term $startpos $endpos (Arr r_terms) }
 
 naked_mu_term:
-  | LBRACE b=binder LTRARROW t=statement RBRACE         { Mu (b, t) }
+  | LBRACE b=binder LTRARROW t=statement RBRACE         { mk_term $startpos $endpos (Mu (b, t)) }
 
 product_term:
   | LPAREN RPAREN
-      { Tuple [] }
+    { mk_term $startpos $endpos (Tuple []) }
   | LPAREN t=term COMMA RPAREN
-      { Tuple [t] }
+    { mk_term $startpos $endpos (Tuple [t]) }
   | LPAREN t=term COMMA ts=separated_nonempty_list(COMMA, term) RPAREN
-      { Tuple (t :: ts) }
+    { mk_term $startpos $endpos (Tuple (t :: ts)) }
 
 (* direct numbers *)
 simple_number_term:
-  | NUMBER                                              { Num $1 }
+  | NUMBER                                              { mk_term $startpos $endpos (Num $1) }
 
 (* computations of numbers. these are syntactic sugar for
  * commands of numbers. For example,
  * 1 + 1 => { k -> +(1, 1 | k) } *)
 active_number_term:
-  | op=unop t=term %prec UNARY                          { term_unop op t }
-  | l=term op=bop r=term                                { term_binop op l r }
+  | op=unop t=term %prec UNARY                          { term_unop $startpos $endpos op t }
+  | l=term op=bop r=term                                { term_binop $startpos $endpos op l r }
 
 %inline unop:
   | MINUS                                               { Neg }
@@ -317,7 +348,7 @@ active_number_term:
 
 match_body:
   | LBRACE BAR? matches=separated_nonempty_list(BAR?, match_case) RBRACE
-      { Matcher matches }
+      { mk_term $startpos $endpos (Matcher matches) }
 
 match_case:
   | p=pattern LTRARROW t=statement                      { (p, t) }
@@ -347,9 +378,9 @@ tuple_pattern:
 
 cons_term:
   | cons_name=namespaced(CONSTRUCTOR_IDENT)
-      { Construction { cons_name; cons_args = [] } }
+      { mk_term $startpos $endpos (Construction { cons_name; cons_args = [] }) }
   | cons_name=namespaced(CONSTRUCTOR_LPAREN) cons_args=separated_nonempty_list(COMMA, term) RPAREN
-      { Construction { cons_name; cons_args } }
+      { mk_term $startpos $endpos (Construction { cons_name; cons_args }) }
 
 (* TYPES *)
 

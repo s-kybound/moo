@@ -1,5 +1,9 @@
 include Surface
 
+type core_ann = { loc : Loc.span option }
+
+let empty_core_ann : core_ann = { loc = None }
+
 (* from shape, one can discover polarity *)
 type unresolved_tyu_state =
   { mode : mode option ref
@@ -100,7 +104,7 @@ type sig_module = sig_definition top_level_item list
 
 and sig_definition =
   | TypeSigDef of kind_binder * shape * ty option
-  | TermSigDef of unit binder * ty_use
+  | TermSigDef of core_ann binder * ty_use
   | ModuleSigDef of module_sig_def
 
 and module_sig_def =
