@@ -68,6 +68,21 @@ end
 let print_ast ast = Printf.printf "%s\n%!" (Pretty.show_program ast)
 let print_error msg = Printf.eprintf "Error: %s\n%!" msg
 
+let print_exception_with_context source exn =
+  match exn with
+  | Error.Syntax_error { span = Some span; message } ->
+    let snippet = Utils.display_span source span in
+    Printf.eprintf "%s\nSyntax Error: %s\n%!" snippet message
+  | Error.Syntax_error { span = None; message } ->
+    Printf.eprintf "Syntax Error: %s\n%!" message
+  | Typechecker.Bidir.TypeError { loc = Some loc; message } ->
+    let snippet = Utils.display_span source loc in
+    Printf.eprintf "%s\nType Error: %s\n%!" snippet message
+  | Typechecker.Bidir.TypeError { loc = None; message } ->
+    Printf.eprintf "Type Error: %s\n%!" message
+  | _ -> print_error (Printexc.to_string exn)
+;;
+
 let parse_to_core_ast ?k input =
   input
   |> Reader.of_string ?k ~filename:"REPL"
@@ -75,16 +90,13 @@ let parse_to_core_ast ?k input =
 ;;
 
 let eval_module input =
-  try
-    let tychecked, _ = Typechecker.Bidir.tycheck_program input in
-    let converted =
-      Core.Tycheck_to_ir.tycheck_command_of_module tychecked
-      |> Core.Tycheck_to_ir.tycheck_to_ir_command
-    in
-    let converted = Core.Runner.state_of_command converted in
-    ignore (Core.Runner.eval_program converted)
-  with
-  | exn -> print_error (Printexc.to_string exn)
+  let tychecked, _ = Typechecker.Bidir.tycheck_program input in
+  let converted =
+    Core.Tycheck_to_ir.tycheck_command_of_module tychecked
+    |> Core.Tycheck_to_ir.tycheck_to_ir_command
+  in
+  let converted = Core.Runner.state_of_command converted in
+  ignore (Core.Runner.eval_program converted)
 ;;
 
 let step_module input =
@@ -103,14 +115,14 @@ let step_module input =
     | [] -> Printf.printf "No more states to step through.\n%!"
     | Step state :: rest ->
       show_state state;
-      (match LNoise.linenoise "step> " with
+      (match LNoise.linenoise "STEP> " with
        | None -> ()
        | Some s ->
-         (match String.trim s with
-          | "q" | "quit" | "exit" -> ()
-          | _ ->
-            let next_state = eval_state state in
-            step_loop (rest @ [ next_state ])))
+       match String.trim s with
+       | "\\q" | "\\quit" | "\\exit" -> ()
+       | _ ->
+         let next_state = eval_state state in
+         step_loop (rest @ [ next_state ]))
     | Stop :: rest -> step_loop rest
     | Split (state1, state2) :: rest ->
       Printf.printf "Program split into two concurrent states.\n%!";
@@ -121,17 +133,14 @@ let step_module input =
       print_error "Step-through for Receive not implemented."
     | Error exn :: _ -> print_error (Printexc.to_string exn)
   in
-  try
-    let tychecked, _ = Typechecker.Bidir.tycheck_program input in
-    let converted =
-      Core.Tycheck_to_ir.tycheck_command_of_module tychecked
-      |> Core.Tycheck_to_ir.tycheck_to_ir_command
-    in
-    let converted = Core.Runner.state_of_command converted in
-    Printf.printf "press any key to step through the program, q to quit\n%!";
-    step_loop [ Step converted ]
-  with
-  | exn -> print_error (Printexc.to_string exn)
+  let tychecked, _ = Typechecker.Bidir.tycheck_program input in
+  let converted =
+    Core.Tycheck_to_ir.tycheck_command_of_module tychecked
+    |> Core.Tycheck_to_ir.tycheck_to_ir_command
+  in
+  let converted = Core.Runner.state_of_command converted in
+  Printf.printf "Stepping through program. Press any key to step through the program, \\q to quit\n%!";
+  step_loop [ Step converted ]
 ;;
 
 let init_repl () =
@@ -156,8 +165,11 @@ let init_repl () =
 ;;
 
 let add_to_history line =
-  ignore (LNoise.history_add line);
-  History.add line (State.get_history ())
+  let trim_input =
+    line |> String.split_on_char '\n' |> List.map String.trim |> String.concat " "
+  in
+  ignore (LNoise.history_add trim_input);
+  History.add trim_input (State.get_history ())
 ;;
 
 (* If there is some context waiting (a checkpoint), we resume parsing from that point *)
@@ -165,10 +177,7 @@ let rec repl_loop (kont : (Error.kont * (Ast.core_ann Ast.module_ -> 'a) * strin
   =
   let attempt_eval ?(previous_input = "") ?k input f =
     let full_input =
-      previous_input ^ "\n" ^ input
-      |> String.split_on_char '\n'
-      |> String.concat " "
-      |> String.trim
+      if String.trim previous_input = "" then input else previous_input ^ "\n" ^ input
     in
     try
       f (parse_to_core_ast ?k input);
@@ -176,13 +185,13 @@ let rec repl_loop (kont : (Error.kont * (Ast.core_ann Ast.module_ -> 'a) * strin
     with
     | Error.Early_eof k -> repl_loop (Some (k, f, full_input))
     | e ->
-      print_error (Printexc.to_string e);
+      print_exception_with_context full_input e;
       repl_loop None
   in
   let prompt =
     match kont with
-    | Some _ -> "....> "
-    | None -> "moo2> "
+    | Some _ -> "... "
+    | None -> ">>> "
   in
   match LNoise.linenoise prompt with
   | None ->
@@ -191,7 +200,11 @@ let rec repl_loop (kont : (Error.kont * (Ast.core_ann Ast.module_ -> 'a) * strin
   | Some line ->
     let trimmed = String.trim line in
     (match trimmed, kont with
-     | "", _ -> repl_loop kont
+     | "", None -> repl_loop kont
+     | "", Some (k, f, previous_input) ->
+       (* we need to consider the newlines here for correctness *)
+       attempt_eval ~previous_input ~k line f;
+       repl_loop None
      | "\\q", _ | "\\quit", _ | "\\exit", _ ->
        print_endline "Goodbye!";
        exit 0

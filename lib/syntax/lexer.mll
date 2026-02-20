@@ -5,9 +5,9 @@
   let raisef lexbuf fmt =
     Printf.ksprintf
       (fun message ->
-        let position = Some (Utils.get_lexing_position lexbuf) in
+        let span = Some (Utils.get_lexing_span lexbuf) in
         raise (Syntax_error 
-                { position
+                { span
                 ; message
                 })) 
       fmt

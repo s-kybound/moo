@@ -356,9 +356,16 @@ let type_of_usages (ids : int list) (ctx : context) (tydef_env : tydef_env)
 ;;
 
 exception TypeMismatch of Ast.ty_use * Ast.ty_use * string
-exception TypeError of string
+
+exception
+  TypeError of
+    { loc : Loc.span option
+    ; message : string
+    }
+
 exception Underspecified of string
 
+let type_error ?loc message = raise (TypeError { loc; message })
 let annotate (term : typed_term) (tyu : Ast.ty_use) : typed_term = set_term_ty term tyu
 
 (* Workflow - synthesize takes in a set of invariants, and determines the type of an expression.
@@ -374,15 +381,15 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
     (match ann.unique_id with
      | None -> assert false
      | Some unique_id ->
-       (match IMap.find_opt unique_id knowledge with
-        | Some ty_use -> annotate_with ty_use, ty_use, knowledge
-        | None ->
-          let msg =
-            Printf.sprintf
-              "synthesize: variable %s not found in context"
-              (Syntax.Pretty.show_name original_name)
-          in
-          raise (Underspecified msg)))
+     match IMap.find_opt unique_id knowledge with
+     | Some ty_use -> annotate_with ty_use, ty_use, knowledge
+     | None ->
+       let msg =
+         Printf.sprintf
+           "synthesize: variable %s not found in context"
+           (Syntax.Pretty.show_name original_name)
+       in
+       raise (Underspecified msg))
   | Ast.Num _ ->
     let tyu = Type.new_constructor_tyu Raw64 in
     annotate_with tyu, tyu, knowledge
@@ -413,7 +420,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
     let relevant_ids = binder_ids_of_binder tbinder in
     (match type_of_usages relevant_ids demands tydef_env with
      | Ok None -> raise (Underspecified "synthesize: no demands found for rec binder")
-     | Error msg -> raise (TypeError msg)
+     | Error msg -> type_error ?loc:ann.loc msg
      | Ok (Some ty_use) ->
        let tyu = most_specific_tyu inferred_ty ty_use tydef_env in
        annotate_with tyu, tyu, demands)
@@ -422,7 +429,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
     let relevant_ids = binder_ids_of_binder tbinder in
     (match type_of_usages relevant_ids new_knowledge tydef_env with
      | Ok None -> raise (Underspecified "synthesize: no demands found for mu binder")
-     | Error msg -> raise (TypeError msg)
+     | Error msg -> type_error ?loc:ann.loc msg
      | Ok (Some ty_use) ->
        let tyu = Type.negate_tyu ty_use in
        let expr = ann, Ast.Mu (tbinder, tcommand) in
@@ -442,12 +449,12 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
                let unique_ids = binder_ids_of_binder binder in
                let cmd, command_knowledge = typecheck_command demands command tydef_env in
                (match type_of_usages unique_ids command_knowledge tydef_env with
-                | Error msg -> raise (TypeError msg)
+                | Error msg -> type_error ?loc:ann.loc msg
                 | Ok None -> cmd, None, command_knowledge
                 | Ok (Some result) ->
                   (* make sure that the variable is a constructed item *)
                   if not (Type.is_constructor_tyu result tydef_env)
-                  then raise (TypeError "variable is not a constructed item")
+                  then type_error ?loc:ann.loc "variable is not a constructed item"
                   else cmd, Some (Type.negate_tyu result), command_knowledge)
              | Ast.Tup subpats ->
                let cmd, command_knowledge = typecheck_command demands command tydef_env in
@@ -456,7 +463,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
                  List.map
                    (fun ids ->
                       match type_of_usages ids command_knowledge tydef_env with
-                      | Error msg -> raise (TypeError msg)
+                      | Error msg -> type_error ?loc:ann.loc msg
                       | Ok (Some result) -> result
                       | Ok None -> failwith "TODO: need to implement typeholes")
                    unique_ids
@@ -466,68 +473,66 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
                    (Type.negate_tyu (Type.new_constructor_tyu (Product types_of_binders)))
                , command_knowledge )
              | Ast.Constr { pat_name; pat_args } ->
-               (match
-                  type_of_namespaced_constructor pat_name (List.length pat_args) tydef_env
-                with
-                | None ->
-                  let msg =
-                    Printf.sprintf
-                      "synthesize: type for variant %s with arity %d not found"
-                      (Syntax.Pretty.show_name pat_name)
-                      (List.length pat_args)
-                  in
-                  raise (TypeError msg)
-                | Some (_ty_name, ty, polarity) ->
-                  (* TODO - abstract type inference *)
-                  let cmd, command_knowledge =
-                    typecheck_command demands command tydef_env
-                  in
-                  let unique_ids = List.map binder_ids_of_binder pat_args in
-                  let types_of_binders =
-                    List.map
-                      (fun ids ->
-                         match type_of_usages ids command_knowledge tydef_env with
-                         | Error msg -> raise (TypeError msg)
-                         | Ok (Some result) -> result
-                         | Ok None -> failwith "TODO: need to implement typeholes")
-                      unique_ids
-                  in
-                  let expected_arg_types = args_of_namespaced_variant pat_name ty in
-                  if List.length expected_arg_types <> List.length types_of_binders
-                  then (
-                    let msg =
-                      Printf.sprintf
-                        "synthesize: arity mismatch for pattern constructor %s: expected \
-                         %d but got %d"
-                        (Syntax.Pretty.show_name pat_name)
-                        (List.length expected_arg_types)
-                        (List.length types_of_binders)
-                    in
-                    raise (TypeError msg))
-                  else if
-                    not
-                      (List.for_all2
-                         (fun expected_ty actual_ty ->
-                            tyu_equal expected_ty actual_ty tydef_env)
-                         expected_arg_types
-                         types_of_binders)
-                  then (
-                    let msg =
-                      Printf.sprintf
-                        "synthesize: type mismatch for pattern constructor %s: expected \
-                         argument types %s but got %s"
-                        (Syntax.Pretty.show_name pat_name)
-                        (String.concat
-                           ", "
-                           (List.map Syntax.Pretty.show_ty_use expected_arg_types))
-                        (String.concat
-                           ", "
-                           (List.map Syntax.Pretty.show_ty_use types_of_binders))
-                    in
-                    raise (TypeError msg))
-                  else
-                    (* we have the polarity and the type. output it. *)
-                    cmd, Some (Polarised (polarity, ty)), command_knowledge)
+             match
+               type_of_namespaced_constructor pat_name (List.length pat_args) tydef_env
+             with
+             | None ->
+               let msg =
+                 Printf.sprintf
+                   "synthesize: type for variant %s with arity %d not found"
+                   (Syntax.Pretty.show_name pat_name)
+                   (List.length pat_args)
+               in
+               type_error ?loc:ann.loc msg
+             | Some (_ty_name, ty, polarity) ->
+               (* TODO - abstract type inference *)
+               let cmd, command_knowledge = typecheck_command demands command tydef_env in
+               let unique_ids = List.map binder_ids_of_binder pat_args in
+               let types_of_binders =
+                 List.map
+                   (fun ids ->
+                      match type_of_usages ids command_knowledge tydef_env with
+                      | Error msg -> type_error ?loc:ann.loc msg
+                      | Ok (Some result) -> result
+                      | Ok None -> failwith "TODO: need to implement typeholes")
+                   unique_ids
+               in
+               let expected_arg_types = args_of_namespaced_variant pat_name ty in
+               if List.length expected_arg_types <> List.length types_of_binders
+               then (
+                 let msg =
+                   Printf.sprintf
+                     "synthesize: arity mismatch for pattern constructor %s: expected %d \
+                      but got %d"
+                     (Syntax.Pretty.show_name pat_name)
+                     (List.length expected_arg_types)
+                     (List.length types_of_binders)
+                 in
+                 type_error ?loc:ann.loc msg)
+               else if
+                 not
+                   (List.for_all2
+                      (fun expected_ty actual_ty ->
+                         tyu_equal expected_ty actual_ty tydef_env)
+                      expected_arg_types
+                      types_of_binders)
+               then (
+                 let msg =
+                   Printf.sprintf
+                     "synthesize: type mismatch for pattern constructor %s: expected \
+                      argument types %s but got %s"
+                     (Syntax.Pretty.show_name pat_name)
+                     (String.concat
+                        ", "
+                        (List.map Syntax.Pretty.show_ty_use expected_arg_types))
+                     (String.concat
+                        ", "
+                        (List.map Syntax.Pretty.show_ty_use types_of_binders))
+                 in
+                 type_error ?loc:ann.loc msg)
+               else
+                 (* we have the polarity and the type. output it. *)
+                 cmd, Some (Polarised (polarity, ty)), command_knowledge
            in
            match most_specific_type, tyu_of_pattern_opt with
            | continue, None | None, continue ->
@@ -543,7 +548,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
                    (Syntax.Pretty.show_ty_use most_specific)
                    (Syntax.Pretty.show_ty_use new_ty)
                in
-               raise (TypeError msg))
+               type_error ?loc:ann.loc msg)
              else
                ( (pattern, new_command) :: branches_acc
                , Some (Type.most_specific_tyu most_specific new_ty tydef_env)
@@ -568,7 +573,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
            (Syntax.Pretty.show_name tcons_name)
            (List.length tcons_args)
        in
-       raise (TypeError msg)
+       type_error ?loc:ann.loc msg
      | Some (_ty_name, ty, polarity) ->
        (* TODO - abstract type inference *)
        let tyu = Ast.Polarised (polarity, ty) in
@@ -751,7 +756,7 @@ and typecheck_command
            (Syntax.Pretty.show_ty_use actual)
            msg
        in
-       failwith msg
+       type_error ?loc:ann.loc msg
      | e -> raise e)
   | Ast.Arith
       (Ast.Bop { op = top; l_term = tl_term; r_term = tr_term; out_term = tout_term }) ->

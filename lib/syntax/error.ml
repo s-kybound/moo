@@ -5,7 +5,7 @@ type kont = Surface.module_ I.checkpoint * Lexing.position
 
 exception
   Syntax_error of
-    { position : position option
+    { span : span option
     ; message : string
     }
 

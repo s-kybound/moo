@@ -22,10 +22,14 @@ let of_channel ~filename ic =
 ;;
 
 let of_string ?(k : Error.kont option) ?(filename = "<string>") s =
-  let lb = with_filename (Lexing.from_string s) filename in
   match k with
-  | None -> parse lb
-  | Some (k, resume_pos) -> resume_parse (with_position lb resume_pos) k
+  | None ->
+    let lb = with_filename (Lexing.from_string s) filename in
+    parse lb
+  | Some (k, resume_pos) ->
+    let resumed = "\n" ^ s in
+    let lb = with_filename (Lexing.from_string resumed) filename in
+    resume_parse (with_position lb resume_pos) k
 ;;
 
 let of_file filename =
