@@ -26,66 +26,90 @@ let rec negate_tyu (ty_use : ty_use) : ty_use =
   | Polarised (Plus, mty) -> Polarised (Minus, mty)
   | Polarised (Minus, mty) -> Polarised (Plus, mty)
   | Abstract { negated; name } -> Abstract { negated = not negated; name }
-  | Constructor (unresolved_tyu_state, raw_ty) -> Destructor (unresolved_tyu_state, raw_ty)
-  | Destructor (unresolved_tyu_state, raw_ty) -> Constructor (unresolved_tyu_state, raw_ty)
   | AbstractIntroducer (name, ty_use) -> AbstractIntroducer (name, negate_tyu ty_use)
+  | Weak { negated; meta } -> Weak { negated = not negated; meta }
 ;;
 
-let rec tyu_replace (bindings : (string * ty_use) list) (target : ty_use) : ty_use =
-  match target with
-  | Polarised (polarity, ty) -> Polarised (polarity, ty_replace bindings ty)
-  | Constructor (unresolved_tyu_state, raw_ty) ->
-    Constructor (unresolved_tyu_state, raw_ty_replace bindings raw_ty)
-  | Destructor (unresolved_tyu_state, raw_ty) ->
-    Destructor (unresolved_tyu_state, raw_ty_replace bindings raw_ty)
-  | AbstractIntroducer (name, ty_use) ->
-    let new_bindings = List.remove_assoc name bindings in
-    AbstractIntroducer (name, tyu_replace new_bindings ty_use)
-  | Abstract { negated; name } ->
-  match List.assoc_opt name bindings with
-  | Some ty_use -> if negated then negate_tyu ty_use else ty_use
-  | None -> target
+(*
+ * An inferred weak type variable.
+ * Since our inference system will default to data[cbv], we only
+ * need to keep track of whether the type is a constructor or destructor.
+ * If it is ever compared against a more specific type, it adopts that
+ * type's mode and shape information.
+ *)
+module WeakTyu = struct
+  let new_meta_var : unit -> meta_var =
+    let counter = ref 0 in
+    fun () ->
+      let id = !counter in
+      counter := id + 1;
+      { id; cell = Inferred { constructor = None; raw_lower_bound = None } }
+  ;;
 
-and ty_replace (bindings : (string * ty_use) list) (target : ty) : ty =
-  match target with
-  | Named (name, ty_uses) -> Named (name, List.map (tyu_replace bindings) ty_uses)
-  | Raw (mode, shape, raw_ty) -> Raw (mode, shape, raw_ty_replace bindings raw_ty)
+  let new_unknown_tyu () : ty_use =
+    let meta = new_meta_var () in
+    Weak { negated = false; meta }
+  ;;
 
-and raw_ty_replace (bindings : (string * ty_use) list) (target : raw_ty) : raw_ty =
-  match target with
-  | Raw64 -> Raw64
-  | Product ty_uses -> Product (List.map (tyu_replace bindings) ty_uses)
-  | Array ty_use -> Array (tyu_replace bindings ty_use)
-  | Variant variants ->
-    Variant
-      (List.map
-         (fun { constr_name; constr_args } ->
-            { constr_name; constr_args = List.map (tyu_replace bindings) constr_args })
-         variants)
-;;
+  let new_constructor_tyu raw : ty_use =
+    let meta = new_meta_var () in
+    meta.cell <- Inferred { constructor = Some true; raw_lower_bound = Some raw };
+    Weak { negated = false; meta }
+  ;;
 
-let resolve_parameterized_ty (ty : ty) (tydef_env : tydef_env) : ty =
-  match ty with
-  | Named (name, ty_uses) ->
-    let found_ty, abstracts = lookup name tydef_env in
-    if List.length abstracts <> List.length ty_uses
-    then failwith "resolve_parameterized_ty: type parameter length mismatch"
-    else (
-      let bindings = List.combine abstracts ty_uses in
-      ty_replace bindings found_ty)
-  | Raw _ -> ty
-;;
+  let new_destructor_tyu raw : ty_use =
+    let constructor_tyu = new_constructor_tyu raw in
+    negate_tyu constructor_tyu
+  ;;
+end
 
-let ty_to_raw_ty (ty : ty) (tydef_env : tydef_env) : mode * shape * raw_ty =
-  let rec aux ty =
+module Substitute = struct
+  let rec tyu_replace (bindings : (string * ty_use) list) (target : ty_use) : ty_use =
+    match target with
+    | Polarised (polarity, ty) -> Polarised (polarity, ty_replace bindings ty)
+    | AbstractIntroducer (name, ty_use) ->
+      let new_bindings = List.remove_assoc name bindings in
+      AbstractIntroducer (name, tyu_replace new_bindings ty_use)
+    | Abstract { negated; name } -> begin
+      match List.assoc_opt name bindings with
+      | Some ty_use -> if negated then negate_tyu ty_use else ty_use
+      | None -> target
+    end
+    | Weak _ ->
+      (* weak type variables are an artifact of our type inference system.
+       * they do not exist in the type definitions that these replace functions are used for *)
+      assert false
+
+  and ty_replace (bindings : (string * ty_use) list) (target : ty) : ty =
+    match target with
+    | Named (name, ty_uses) -> Named (name, List.map (tyu_replace bindings) ty_uses)
+    | Raw (mode, shape, raw_ty) -> Raw (mode, shape, raw_ty_replace bindings raw_ty)
+
+  and raw_ty_replace (bindings : (string * ty_use) list) (target : raw_ty) : raw_ty =
+    match target with
+    | Raw64 -> Raw64
+    | Product ty_uses -> Product (List.map (tyu_replace bindings) ty_uses)
+    | Array ty_use -> Array (tyu_replace bindings ty_use)
+    | Variant variants ->
+      Variant
+        (List.map
+           (fun { constr_name; constr_args } ->
+              { constr_name; constr_args = List.map (tyu_replace bindings) constr_args })
+           variants)
+  ;;
+
+  let resolve_parameterized_ty (ty : ty) (tydef_env : tydef_env) : ty =
     match ty with
-    | Raw (mode, shape, raw_ty) -> mode, shape, raw_ty
-    | _ ->
-      let resolved_ty = resolve_parameterized_ty ty tydef_env in
-      aux resolved_ty
-  in
-  aux ty
-;;
+    | Named (name, ty_uses) ->
+      let found_ty, abstracts = lookup name tydef_env in
+      if List.length abstracts <> List.length ty_uses
+      then failwith "resolve_parameterized_ty: type parameter length mismatch"
+      else (
+        let bindings = List.combine abstracts ty_uses in
+        ty_replace bindings found_ty)
+    | Raw _ -> ty
+  ;;
+end
 
 let rec tyu_is_resolved (tyu : ty_use) : bool =
   match tyu with
@@ -93,8 +117,20 @@ let rec tyu_is_resolved (tyu : ty_use) : bool =
   | AbstractIntroducer _ ->
     failwith "TODO: get resolver to ignore introduced abstract names"
   | Abstract _ -> false
-  | Constructor (state, raw_ty) | Destructor (state, raw_ty) ->
-    !(state.mode) <> None && !(state.shape) <> None && raw_ty_is_resolved raw_ty
+  | Weak { meta; _ } -> meta_var_is_resolved meta
+
+and meta_var_is_resolved m : bool =
+  match m.cell with
+  | Inferred constraints ->
+    (* a meta var is unresolved if it has any unsolved constraints *)
+    begin match constraints.constructor, constraints.raw_lower_bound with
+    | Some _, Some raw_ty ->
+      (* if this doesn't resolve further against another ty_use, it will 
+       * stay an instantiation of data[cbv] raw type *)
+      raw_ty_is_resolved raw_ty
+    | _ -> false
+    end
+  | Unified tyu -> tyu_is_resolved tyu
 
 and ty_is_resolved (ty : ty) : bool =
   match ty with
@@ -112,7 +148,19 @@ and raw_ty_is_resolved (raw_ty : raw_ty) : bool =
       variants
 ;;
 
-let tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env)
+let ty_to_raw_ty (ty : ty) (tydef_env : tydef_env) : mode * shape * raw_ty =
+  let rec aux ty =
+    match ty with
+    | Raw (mode, shape, raw_ty) -> mode, shape, raw_ty
+    | _ ->
+      let resolved_ty = Substitute.resolve_parameterized_ty ty tydef_env in
+      aux resolved_ty
+  in
+  aux ty
+;;
+
+(* invariant: this is only ever called on resolved tyus *)
+let rec tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env)
   : mode * polarity * shape * raw_ty
   =
   match tyu with
@@ -121,64 +169,50 @@ let tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env)
     mode, polarity, shape, raw_ty
   | Abstract _ -> assert false (* should not be called on abstract types *)
   | AbstractIntroducer _ -> failwith "TODO"
-  | Constructor (state, raw_ty) | Destructor (state, raw_ty) ->
-    if not (tyu_is_resolved tyu)
-    then assert false (* should only be called on resolved tyu's *)
-    else (
-      match !(state.mode), !(state.shape) with
-      | Some mode, Some shape -> mode, Plus, shape, raw_ty
-      | _ -> assert false)
+  | Weak { negated; meta } ->
+  match meta.cell with
+  | Unified tyu ->
+    let m, p, s, r = tyu_to_raw_ty tyu tydef_env in
+    if negated
+    then (
+      let neg_p =
+        match p with
+        | Plus -> Minus
+        | Minus -> Plus
+      in
+      m, neg_p, s, r)
+    else m, p, s, r
+  | Inferred constraints ->
+  match constraints.constructor, constraints.raw_lower_bound with
+  | Some is_constructor, Some raw_ty ->
+    if is_constructor then By_value, Plus, Data, raw_ty else By_value, Minus, Data, raw_ty
+  | _ -> assert false
 ;;
 
 let rec is_constructor_tyu (tyu : ty_use) (tydef_env : tydef_env) : bool =
   match tyu with
-  | Constructor _ -> true
-  | Destructor _ -> false
-  | Abstract _ -> assert false (* should not be called on abstract types *)
+  (* TODO: semantics of abstract need to be redone due to abstract introducer *)
+  | Abstract _ -> assert false
   | AbstractIntroducer (_, tyu) -> is_constructor_tyu tyu tydef_env
   | Polarised (pol, ty) ->
     let _, shape, _ = ty_to_raw_ty ty tydef_env in
     (match pol, shape with
      | Plus, Data | Minus, Codata -> true
      | Plus, Codata | Minus, Data -> false)
-;;
-
-let new_constructor_tyu raw : ty_use =
-  Constructor ({ mode = ref None; shape = ref None }, raw)
-;;
-
-(* compare both the modes and shapes. if all is compatible, collapse both states into the most informational state *)
-let state_equal (state1 : unresolved_tyu_state) (state2 : unresolved_tyu_state) : bool =
-  match !(state1.mode), !(state2.mode) with
-  | Some m1, Some m2 when m1 <> m2 -> false
-  | _ ->
-  match !(state1.shape), !(state2.shape) with
-  | Some s1, Some s2 when s1 <> s2 -> false
-  | _ ->
-    (* if one state has more information, promote the other *)
-    (match !(state1.mode), !(state2.mode) with
-     | Some m, None -> state2.mode := Some m
-     | None, Some m -> state1.mode := Some m
-     | _ -> ());
-    (match !(state1.shape), !(state2.shape) with
-     | Some s, None -> state2.shape := Some s
-     | None, Some s -> state1.shape := Some s
-     | _ -> ());
-    true
-;;
-
-let state_equal_to_mode_shape (state : unresolved_tyu_state) (mode : mode) (shape : shape)
-  : bool
-  =
-  match !(state.mode) with
-  | Some m when m <> mode -> false
-  | _ ->
-  match !(state.shape) with
-  | Some s when s <> shape -> false
-  | _ ->
-    (* promote state to have this information *)
-    state.mode := Some mode;
-    state.shape := Some shape;
+  | Weak { negated; meta } ->
+  match meta.cell with
+  | Unified tyu ->
+    if negated
+    then not (is_constructor_tyu tyu tydef_env)
+    else is_constructor_tyu tyu tydef_env
+  | Inferred constraints ->
+  (* be loose - if the constraint doesn't have a constructor flag, assume it's a constructor *)
+  match constraints.constructor with
+  | Some is_constructor -> if negated then not is_constructor else is_constructor
+  | None ->
+    if negated
+    then meta.cell <- Inferred { constraints with constructor = Some false }
+    else meta.cell <- Inferred { constraints with constructor = Some true };
     true
 ;;
 
@@ -197,33 +231,47 @@ let rec tyu_equal (tyu1 : Syntax.Ast.ty_use) (tyu2 : Syntax.Ast.ty_use) tydef_en
     | Abstract { negated = neg1; name = name1 }, Abstract { negated = neg2; name = name2 }
       -> neg1 = neg2 && name1 = name2
     | Abstract _, _ | _, Abstract _ -> false
-    | Constructor (state1, raw_ty1), Constructor (state2, raw_ty2)
-    | Destructor (state1, raw_ty1), Destructor (state2, raw_ty2) ->
-      (* TODO: attempt promotion as much as possible, if not fail *)
-      if not (raw_ty_equal raw_ty1 raw_ty2 tydef_env)
-      then false
-      else state_equal state1 state2
-    | Constructor _, Destructor _ | Destructor _, Constructor _ ->
-      false (* should never be equal *)
-    | Constructor (state, raw_ty1), resolved_tyu
-    | resolved_tyu, Constructor (state, raw_ty1) ->
-      let mode, polarity, chirality, raw_ty2 = tyu_to_raw_ty resolved_tyu tydef_env in
-      begin match polarity, chirality with
-      | Plus, Codata | Minus, Data -> false
-      | Plus, Data | Minus, Codata ->
-        if not (raw_ty_equal raw_ty1 raw_ty2 tydef_env)
-        then false
-        else state_equal_to_mode_shape state mode chirality
-      end
-    | Destructor (state, raw_ty1), resolved_tyu | resolved_tyu, Destructor (state, raw_ty1)
-      ->
-      let mode, polarity, chirality, raw_ty2 = tyu_to_raw_ty resolved_tyu tydef_env in
-      (match polarity, chirality with
-       | Plus, Data | Minus, Codata -> false
-       | Plus, Codata | Minus, Data ->
-         if not (raw_ty_equal raw_ty1 raw_ty2 tydef_env)
-         then false
-         else state_equal_to_mode_shape state mode chirality)
+    | AbstractIntroducer _, AbstractIntroducer _ ->
+      (* check if the abstractIntroducers are alpha-equivalent, and if not if one is a subtype of the other *)
+      failwith "TODO: tyu_equal does not yet support abstract introducers"
+    | AbstractIntroducer _, _ | _, AbstractIntroducer _ ->
+      failwith "TODO: tyu_equal does not yet support abstract introducers"
+    | Weak { negated = neg1; meta = meta1 }, Weak { negated = neg2; meta = meta2 } ->
+      (* check if they are the same meta var, if so check if the negation flags match 
+       * 3 cases to consider, since fully resolved tyus are handled above:
+       * 1. they are the same meta var - then they are equal iff their negation flags match
+       * 2. they are different meta vars, but at least one is fully unsolved
+       * 3. both are partially solved - in this case we can attempt to unify the constraints and
+       *    complain if not possible
+       *)
+      if meta1.id = meta2.id
+      then neg1 = neg2
+      else (
+        match meta1.cell, meta2.cell with
+        | Unified _, Unified _ ->
+          assert false (* should have been caught by the resolved check above *)
+        | Unified sol1, Inferred _ ->
+          let compared_sol1 = if neg1 then negate_tyu sol1 else sol1 in
+          unify_weak_with_tyu neg2 meta2 compared_sol1 tydef_env
+        | Inferred _, Unified sol2 ->
+          let compared_sol2 = if neg2 then negate_tyu sol2 else sol2 in
+          unify_weak_with_tyu neg1 meta1 compared_sol2 tydef_env
+        | Inferred cons1, Inferred cons2 ->
+          (* in this case, there is a chance both cells are updated *)
+          let negate = neg1 <> neg2 in
+          let unify_result = unify_constraints ~negate cons1 cons2 tydef_env in
+          begin match unify_result with
+          | Ok (new_cons1, _) ->
+            (* unify the first tyu with the second*)
+            let new_tyu2 = if negate then negate_tyu tyu1 else tyu1 in
+            meta1.cell <- Inferred new_cons1;
+            meta2.cell <- Unified new_tyu2;
+            true
+          | Error _ -> false
+          end)
+    | Weak { negated; meta }, other_tyu | other_tyu, Weak { negated; meta } ->
+      (* if the weak tyu is fully unsolved, we can just unify it with the other tyu *)
+      unify_weak_with_tyu negated meta other_tyu tydef_env
     | _ ->
       if (not (tyu_is_resolved tyu1)) || not (tyu_is_resolved tyu2)
       then assert false (* everything here should be resolved *)
@@ -267,6 +315,74 @@ and raw_ty_equal
                  args2)
          variants1
          variants2
+
+and unify_weak_with_tyu
+      (negated : bool)
+      (meta : meta_var)
+      (tyu : ty_use)
+      (tydef_env : tydef_env)
+  : bool
+  =
+  let compared_tyu = if negated then negate_tyu tyu else tyu in
+  match meta.cell with
+  | Unified sol -> tyu_equal sol compared_tyu tydef_env
+  | Inferred constraints ->
+    let unifiable =
+      match constraints.constructor, constraints.raw_lower_bound with
+      | None, None -> true
+      | Some is_constructor, None ->
+        is_constructor == is_constructor_tyu compared_tyu tydef_env
+      | None, Some raw_ty ->
+        let _, _, _, ty_raw_ty = tyu_to_raw_ty compared_tyu tydef_env in
+        raw_ty_equal raw_ty ty_raw_ty tydef_env
+      | Some is_constructor, Some raw_ty ->
+        let _, _, _, ty_raw_ty = tyu_to_raw_ty compared_tyu tydef_env in
+        is_constructor == is_constructor_tyu compared_tyu tydef_env
+        && raw_ty_equal raw_ty ty_raw_ty tydef_env
+    in
+    if unifiable then meta.cell <- Unified compared_tyu;
+    unifiable
+
+and unify_constraints
+      ~(negate : bool)
+      (cons1 : meta_core_constraints)
+      (cons2 : meta_core_constraints)
+      (tydef_env : tydef_env)
+  : (meta_core_constraints * meta_core_constraints, unit) result
+  =
+  let constructor_check c1 c2 = c1 = c2 <> negate in
+  let constructor_assign c = c <> negate in
+  let cons_results =
+    match cons1.constructor, cons2.constructor with
+    | Some c1, Some c2 ->
+      if constructor_check c1 c2 then Ok (Some c1, Some c2) else Error ()
+    | Some c, None -> Ok (Some c, Some (constructor_assign c))
+    | None, Some c -> Ok (Some (constructor_assign c), Some c)
+    | None, None -> Ok (None, None)
+  in
+  match cons_results with
+  | Error () -> Error ()
+  | Ok (new_con1, new_con2) ->
+  match cons1.raw_lower_bound, cons2.raw_lower_bound with
+  | Some r1, Some r2 ->
+    if raw_ty_equal r1 r2 tydef_env
+    then
+      Ok
+        ( { constructor = new_con1; raw_lower_bound = Some r1 }
+        , { constructor = new_con2; raw_lower_bound = Some r2 } )
+    else Error ()
+  | Some r, None ->
+    Ok
+      ( { constructor = new_con1; raw_lower_bound = Some r }
+      , { constructor = new_con2; raw_lower_bound = Some r } )
+  | None, Some r ->
+    Ok
+      ( { constructor = new_con1; raw_lower_bound = Some r }
+      , { constructor = new_con2; raw_lower_bound = Some r } )
+  | None, None ->
+    Ok
+      ( { constructor = new_con1; raw_lower_bound = None }
+      , { constructor = new_con2; raw_lower_bound = None } )
 ;;
 
 (* Given a constructor's name and arity, look up the first matching type 
@@ -339,14 +455,9 @@ let most_specific_tyu (tyu1 : ty_use) (tyu2 : ty_use) (tydef_env : tydef_env) : 
     match tyu1, tyu2 with
     | Abstract _, Abstract _ -> tyu1 (* tyu_equal ensures that both are equal *)
     | Abstract _, tyu | tyu, Abstract _ -> tyu
-    | (Polarised _ as tyu), _ | _, (Polarised _ as tyu) ->
-      tyu
-      (* 2 equal polarized types have the same specificity, and are all more specific than everything else *)
-    | Constructor _, Constructor _ | Destructor _, Destructor _ ->
-      tyu1
-      (* tyu_equal ensures that both states are compatible, so we can return either *)
-    | Constructor _, Destructor _ | Destructor _, Constructor _ -> assert false
+    | (Polarised _ as tyu), _ | _, (Polarised _ as tyu) -> tyu
     | AbstractIntroducer _, _ | _, AbstractIntroducer _ ->
-      failwith "TODO: most_specific_tyu does not yet support abstract introducers")
+      failwith "TODO: most_specific_tyu does not yet support abstract introducers"
+    | Weak _, tyu -> tyu)
 ;;
 (* should never be equal *)

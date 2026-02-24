@@ -4,10 +4,26 @@ type core_ann = { loc : Loc.span option }
 
 let empty_core_ann : core_ann = { loc = None }
 
-(* from shape, one can discover polarity *)
-type unresolved_tyu_state =
-  { mode : mode option ref
-  ; shape : shape option ref
+(*
+ * An inferred weak type variable.
+ * Since our inference system will default to data[cbv], we only
+ * need to keep track of whether the type is a constructor or destructor.
+ * If it is ever compared against a more specific type, it adopts that
+ * type's mode and shape information.
+ *)
+type meta_core_constraints =
+  { constructor : bool option
+  ; raw_lower_bound : raw_ty option
+  }
+
+and meta_core_cell =
+  | Inferred of meta_core_constraints
+    (* if left like this, will be inferred to data[cbv] in the future *)
+  | Unified of ty_use
+
+and meta_var =
+  { id : int
+  ; mutable cell : meta_core_cell (* a meta var's state can be upgraded bit by bit *)
   }
 
 and ty_use =
@@ -18,8 +34,10 @@ and ty_use =
       ; name : string
       }
   (* for type inference *)
-  | Constructor of unresolved_tyu_state * raw_ty
-  | Destructor of unresolved_tyu_state * raw_ty
+  | Weak of
+      { negated : bool
+      ; meta : meta_var
+      }
 
 and ty =
   | Named of name * ty_use list

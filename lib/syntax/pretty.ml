@@ -48,41 +48,21 @@ let rec show_ty_use tyu =
   match tyu with
   | Polarised (pol, t) -> Printf.sprintf "%s%s" (show_polarity pol) (show_ty t)
   | Abstract { negated; name } -> if negated then Printf.sprintf "~%s" name else name
-  | Constructor (unresolved_tyu, raw_ty) ->
-    Printf.sprintf
-      "linked(%s)"
-      (show_unresolved_tyu ~destructor:false unresolved_tyu raw_ty)
-  | Destructor (unresolved_tyu, raw_ty) ->
-    Printf.sprintf
-      "~linked(%s)"
-      (show_unresolved_tyu ~destructor:true unresolved_tyu raw_ty)
   | AbstractIntroducer (name, ty_use) -> Printf.sprintf "[%s]%s" name (show_ty_use ty_use)
+  | Weak { negated; meta } ->
+    if negated then Printf.sprintf "~%s" (show_meta_var meta) else show_meta_var meta
 
-and show_unresolved_tyu ~destructor { mode; shape } raw_ty =
-  let inferred_polarity =
-    match !shape, destructor with
-    | Some Data, true | Some Codata, false -> Some Surface.Minus
-    | Some Data, false | Some Codata, true -> Some Surface.Plus
-    | None, _ -> None
-  in
-  match !mode, inferred_polarity with
-  | Some mode, Some pol ->
-    show_ty_use (Polarised (pol, Raw (mode, Option.get !shape, raw_ty)))
-  | None, Some pol ->
-    Printf.sprintf
-      "%s(%s[???] %s)"
-      (show_polarity pol)
-      (show_shape (Option.get !shape))
-      (show_raw_ty raw_ty)
-  | _, None ->
-    let mode_str =
-      match !mode with
-      | Some m -> show_mode m
-      | None -> "???"
-    in
-    if destructor
-    then Printf.sprintf "[%s]destructor(%s)" mode_str (show_raw_ty raw_ty)
-    else Printf.sprintf "[%s]%s" mode_str (show_raw_ty raw_ty)
+and show_meta_var { id; cell } =
+  match cell with
+  | Inferred { constructor; raw_lower_bound } ->
+    (* only case that matters is when we have enough information to 
+     * say what type it's meant to be *)
+    begin match constructor, raw_lower_bound with
+    | Some cons, Some raw ->
+      if cons then show_raw_ty raw else Printf.sprintf "destructor(%s)" (show_raw_ty raw)
+    | _, _ -> Printf.sprintf "?%d" id
+    end
+  | Unified tyu -> Printf.sprintf "%s" (show_ty_use tyu)
 
 and show_ty ty =
   match ty with
