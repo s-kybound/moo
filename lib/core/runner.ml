@@ -119,7 +119,7 @@ let eval_state (state : state) : program_step =
         List.map (fun t -> T t) terms @ [ I (Arr_instr (List.length terms)) ]
       in
       Step (term_eval_sequence @ c', s, e)
-    | Done -> Step (c', VDone :: s, e)
+    | Exit -> Step (c', VExit :: s, e)
   end
   (* instructions *)
   | I Force :: c', VMu (name, mu_c, mu_s, mu_e) :: s', e ->
@@ -139,15 +139,15 @@ let eval_state (state : state) : program_step =
        Step (mu_c, mu_s, new_e)
      (* invalid states - self matching
       * these should have been handled in the typechecking *)
-     | VDone, VDone -> raise (AssertionError "cannot cut two done values")
+     | VExit, VExit -> raise (AssertionError "cannot cut two exit values")
      | VArr _, VArr _ -> raise (AssertionError "cannot cut two array values")
      | VTuple _, VTuple _ -> raise (AssertionError "cannot cut two tuple values")
      | VConstruction _, VConstruction _ ->
        raise (AssertionError "cannot cut two construction values")
      | VNum _, VNum _ -> raise (AssertionError "cannot cut two numeric values")
      | VMatcher _, VMatcher _ -> raise (AssertionError "cannot cut two matcher values")
-     (* done semantics *)
-     | VDone, VTuple [] | VTuple [], VDone -> Stop
+     (* exit semantics *)
+     | VExit, VTuple [] | VTuple [], VExit -> Stop
      (* | VExit, VNum n | VNum n, VExit -> Error (Exit n) *)
      (* array semantics -- TODO *)
      (* match semantics *)
@@ -159,8 +159,8 @@ let eval_state (state : state) : program_step =
         (* failure to pattern match should not happen *)
         | None -> raise (AssertionError "no matching pattern found"))
      (* invalid states - attempt to match value to non-mu value *)
-     | VDone, _ | _, VDone ->
-       raise (AssertionError "cannot cut done value with non-numeric value")
+     | VExit, _ | _, VExit ->
+       raise (AssertionError "cannot cut exit value with non-numeric value")
      | VArr _, _ -> raise (AssertionError "attempt to cut array value with value")
      | VTuple _, _ -> raise (AssertionError "attempt to cut tuple value with value")
      | VConstruction _, _ ->

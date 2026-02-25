@@ -248,7 +248,7 @@ let tycheck_module_of_ast (modu : Ast.core_ann Ast.module_) : typed_module =
       | Ast.Ann (term, ty_use) ->
         let tterm = tycheck_term_of_ast term env in
         mk_term ann (Ast.Ann (tterm, ty_use))
-      | Ast.Done -> mk_term ann Ast.Done
+      | Ast.Exit -> mk_term ann Ast.Exit
     and tycheck_command_of_ast (command : Ast.core_ann Ast.command) env : typed_command =
       let src_ann, node = command in
       let ann = typed_ann_of_core src_ann in
@@ -404,8 +404,8 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
   | Ast.Num _ ->
     let tyu = WeakTyu.new_constructor_tyu Raw64 in
     annotate_with tyu, tyu, knowledge
-  | Ast.Done ->
-    let tyu = WeakTyu.new_destructor_tyu (Product []) in
+  | Ast.Exit ->
+    let tyu = WeakTyu.new_destructor_tyu Raw64 in
     annotate_with tyu, tyu, knowledge
   | Ast.Tuple [] ->
     let tyu = WeakTyu.new_constructor_tyu (Product []) in
@@ -678,11 +678,11 @@ and check
     if tyu_equal expected_type tyu tydef_env
     then annotate_with_tyu expr, knowledge
     else raise (TypeMismatch (expected_type, tyu, "check: TNum expected type mismatch"))
-  | Ast.Done ->
+  | Ast.Exit ->
     let _, tyu, knowledge = synthesize knowledge expr tydef_env in
     if tyu_equal expected_type tyu tydef_env
     then annotate_with_tyu expr, knowledge
-    else raise (TypeMismatch (expected_type, tyu, "check: TDone expected type mismatch"))
+    else raise (TypeMismatch (expected_type, tyu, "check: TExit expected type mismatch"))
   | Ast.Mu (tbinder, tcommand) ->
     let tbinder_ty = Type.negate_tyu expected_type in
     let new_demands =

@@ -21,7 +21,7 @@
       ("match",     MATCH);
       ("data",      DATA);
       ("codata",    CODATA);
-      ("done",      DONE);
+      ("exit",      EXIT);
       ("proc",      PROC); 
       ("cbv",       CBV);
       ("cbn",       CBN);   

@@ -142,7 +142,7 @@ let rec show_term (_, term) =
     let terms_str = terms |> List.map show_term |> String.concat ", " in
     Printf.sprintf "[%s]" terms_str
   | Ann (term, tyu) -> Printf.sprintf "(%s : %s)" (show_term term) (show_ty_use tyu)
-  | Done -> "done"
+  | Exit -> "exit"
 
 and show_command (_, cmd) =
   match cmd with

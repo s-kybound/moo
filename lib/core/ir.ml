@@ -42,7 +42,7 @@ type term =
   | Num of int64
   | Rec of string * term (* TODO - recursive terms have yet to be figured out *)
   | Arr of term list
-  | Done
+  | Exit
 
 and command =
   | Core of
@@ -99,7 +99,7 @@ and value =
   | VArr of value array
   | VMatcher of (form * command) list * environment_frame
   | VNum of int64
-  | VDone
+  | VExit
 
 let empty_environment : environment_frame = Top
 

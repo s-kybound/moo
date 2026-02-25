@@ -52,7 +52,7 @@ let rec show_term term =
   | Num n -> Int64.to_string n
   | Rec (name, t) -> Printf.sprintf "[rec %s] %s" name (show_term t)
   | Arr terms -> Printf.sprintf "[%s]" (String.concat ", " (List.map show_term terms))
-  | Done -> "done"
+  | Exit -> "exit"
 
 and show_command command =
   match command with
@@ -108,5 +108,5 @@ let rec show_value v =
     Printf.sprintf "[%s]" args_str
   | VMatcher _ -> "<match>"
   | VNum n -> Int64.to_string n
-  | VDone -> "done"
+  | VExit -> "exit"
 ;;

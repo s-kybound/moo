@@ -82,7 +82,7 @@ and 'ann term_node =
   | Rec of 'ann binder * 'ann term (* fixpoint term *)
   | Arr of 'ann term list
   | Ann of 'ann term * ty_use
-  | Done
+  | Exit
 
 and 'ann command = 'ann * 'ann command_node
 

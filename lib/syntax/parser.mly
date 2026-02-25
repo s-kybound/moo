@@ -92,7 +92,7 @@
 %token DOT
 %token COMMA
 
-%token DONE
+%token EXIT
 %token EOF
 
 (* token associativities and precedences *)
@@ -306,7 +306,7 @@ indirect_term:
   | cons_term                                           { $1 }
   | simple_number_term                                  { $1 }
   | array_term                                          { $1 }
-  | DONE                                                { mk_term $startpos $endpos Done }
+  | EXIT                                                { mk_term $startpos $endpos Exit }
   | t=indirect_term COLON ty=type_use                   { mk_term $startpos $endpos (Ann (t, ty)) }
 (*| MU naked_mu_term                                    { $2 }*)
   | LPAREN t=term RPAREN                                { t }

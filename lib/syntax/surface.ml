@@ -98,7 +98,7 @@ and term_node =
   | Rec of binder * term (* fixpoint term *)
   | Arr of term list
   | Ann of term * ty_use
-  | Done
+  | Exit
 
 and command = command_node Loc.located
 

@@ -202,7 +202,7 @@ and surface_term_to_ast_term_node (t : Surface.term) : Ast.core_ann Ast.term_nod
   | Surface.Arr terms -> Ast.Arr (List.map surface_term_to_ast_term terms)
   | Surface.Ann (term, ty_use) ->
     Ast.Ann (surface_term_to_ast_term term, surface_ty_use_to_ast_ty_use ty_use)
-  | Surface.Done -> Ast.Done
+  | Surface.Exit -> Ast.Exit
 
 and surface_command_to_ast_command (cmd : Surface.command) : Ast.core_ann Ast.command =
   let node = surface_command_to_ast_command_node cmd in
