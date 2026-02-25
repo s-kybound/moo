@@ -51,6 +51,7 @@ and command =
       }
   | Arith of arith_command
   | Fork of command * command
+  | ModEndHole (* module end command *)
 
 and arith_command =
   | Unop of

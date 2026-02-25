@@ -1,5 +1,13 @@
 open Syntax
 
+type typed_ann = Typechecker.Bidir.tycheck_ann
+type typed_binder = typed_ann Ast.binder
+type typed_pattern = typed_ann Ast.pattern
+type typed_term = typed_ann Ast.term
+type typed_command = typed_ann Ast.command
+type typed_mod_tli = typed_ann Ast.mod_tli
+type typed_module = typed_ann Ast.module_
+
 let tycheck_to_ir_unop (op : Ast.unop) : Ir.unop =
   match op with
   | Ast.Neg -> Ir.Neg
@@ -34,71 +42,71 @@ let gensym =
     name
 ;;
 
-let tycheck_binder_to_ir_binder (b : Typechecker.Bidir.tycheck_binder) : Ir.name =
-  match b.original_binder with
-  | Ast.Var name -> name
-  | Ast.Wildcard -> gensym "wildcard"
+let binder_to_ir_name (b : typed_binder) : Ir.name =
+  match b with
+  | Ast.Var (_ann, name) -> name
+  | Ast.Wildcard _ann -> gensym "wildcard"
 ;;
 
-let tycheck_var_to_ir_name (v : Typechecker.Bidir.tycheck_var) : Ir.name =
-  match v.original_name with
-  | Base n -> n
-  | Namespaced _ -> failwith "TODO: namespacing in typechecked AST to IR conversion"
-;;
-
-let tycheck_to_ir_form (f : Typechecker.Bidir.tycheck_pattern) : Ir.form =
+let tycheck_to_ir_form (f : typed_pattern) : Ir.form =
   match f with
-  | Typechecker.Bidir.TNumeral n -> Ir.Numeral n
-  | Typechecker.Bidir.TPatVariable pb -> Ir.Binder (tycheck_binder_to_ir_binder pb)
-  | Typechecker.Bidir.TTup names ->
-    let names = List.map tycheck_binder_to_ir_binder names in
-    Ir.Tuple names
-  | Typechecker.Bidir.TConstr { tpat_name; tpat_args } ->
+  | Ast.Numeral n -> Ir.Numeral n
+  | Ast.Binder pb -> Ir.Binder (binder_to_ir_name pb)
+  | Ast.Tup names -> Ir.Tuple (List.map binder_to_ir_name names)
+  | Ast.Constr { pat_name; pat_args } ->
     Ir.Constr
-      { form_name = ast_name_to_ir_name tpat_name
-      ; form_args = List.map tycheck_binder_to_ir_binder tpat_args
+      { form_name = ast_name_to_ir_name pat_name
+      ; form_args = List.map binder_to_ir_name pat_args
       }
 ;;
 
-let should_focus_left (tyu : Ast.ty_use) : bool =
+let rec should_focus_left (tyu : Ast.ty_use) : bool =
   match tyu with
-  | Ast.Polarised (pol, Ast.Raw (mode, _shape, _raw_ty)) ->
-    (match pol, mode with
-     | Plus, By_value | Minus, By_name -> true
-     | Plus, By_name | Minus, By_value -> false)
-  | _ -> true
+  | Ast.Polarised (pol, Ast.Raw (mode, _shape, _raw_ty)) -> begin
+    match pol, mode with
+    | Plus, By_value | Minus, By_name -> true
+    | Plus, By_name | Minus, By_value -> false
+  end
+  | Ast.Polarised (_, Ast.Named _) -> failwith "TODO: named shapes not supported yet"
+  | Ast.AbstractIntroducer (_, tyu) -> should_focus_left tyu
+  | Ast.Abstract _ -> failwith "TODO: abstract types not supported yet"
+  | Ast.Weak { negated; meta } ->
+  match meta.cell with
+  | Unified tyu -> should_focus_left tyu <> negated
+  | Inferred { constructor = Some cons; _ } -> cons <> negated
+  | Inferred { constructor = None; _ } -> assert false
 ;;
 
-(* invariant: terms should be annotated with their types *)
-let rec tycheck_to_ir_command (c : Typechecker.Bidir.tycheck_command) : Ir.command =
-  match c with
-  | Typechecker.Bidir.TCore { tl_term = Typechecker.Bidir.TAnn (l_term, l_tyu); tr_term }
-    ->
-    if should_focus_left l_tyu
+let rec tycheck_to_ir_command (c : typed_command) : Ir.command =
+  let _ann, node = c in
+  match node with
+  | Ast.Core { l_term; r_term } ->
+    let focus_left =
+      let l_ann, _ = l_term in
+      match l_ann.ty with
+      | Some tyu -> should_focus_left tyu
+      | None -> assert false
+    in
+    if focus_left
     then
       Ir.Core
         { focus_term = tycheck_to_ir_term l_term
-        ; unfocus_term = tycheck_to_ir_term tr_term
+        ; unfocus_term = tycheck_to_ir_term r_term
         }
     else
       Ir.Core
-        { focus_term = tycheck_to_ir_term tr_term
+        { focus_term = tycheck_to_ir_term r_term
         ; unfocus_term = tycheck_to_ir_term l_term
         }
-  | Typechecker.Bidir.TCore { tl_term; tr_term } ->
-    Ir.Core
-      { focus_term = tycheck_to_ir_term tl_term
-      ; unfocus_term = tycheck_to_ir_term tr_term
-      }
-  | Typechecker.Bidir.TArith (Typechecker.Bidir.TUnop { top; tin_term; tout_term }) ->
+  | Ast.Arith (Ast.Unop { op = top; in_term = tin_term; out_term = tout_term }) ->
     Ir.Arith
       (Ir.Unop
          { op = tycheck_to_ir_unop top
          ; in_focus_term = tycheck_to_ir_term tin_term
          ; out_unfocus_term = tycheck_to_ir_term tout_term
          })
-  | Typechecker.Bidir.TArith (Typechecker.Bidir.TBop { top; tl_term; tr_term; tout_term })
-    ->
+  | Ast.Arith
+      (Ast.Bop { op = top; l_term = tl_term; r_term = tr_term; out_term = tout_term }) ->
     Ir.Arith
       (Ir.Bop
          { op = tycheck_to_ir_bop top
@@ -106,21 +114,20 @@ let rec tycheck_to_ir_command (c : Typechecker.Bidir.tycheck_command) : Ir.comma
          ; r_focus_term = tycheck_to_ir_term tr_term
          ; out_unfocus_term = tycheck_to_ir_term tout_term
          })
-  | Typechecker.Bidir.TFork (c1, c2) ->
-    Ir.Fork (tycheck_to_ir_command c1, tycheck_to_ir_command c2)
+  | Ast.Fork (c1, c2) -> Ir.Fork (tycheck_to_ir_command c1, tycheck_to_ir_command c2)
 
-and tycheck_to_ir_term (t : Typechecker.Bidir.tycheck_term) : Ir.term =
-  match t with
-  | Typechecker.Bidir.TMu (name, command) ->
-    Ir.Mu (tycheck_binder_to_ir_binder name, tycheck_to_ir_command command)
-  | Typechecker.Bidir.TVariable name -> Ir.Variable (tycheck_var_to_ir_name name)
-  | Typechecker.Bidir.TConstruction { tcons_name; tcons_args } ->
+and tycheck_to_ir_term (t : typed_term) : Ir.term =
+  let _ann, node = t in
+  match node with
+  | Ast.Mu (name, command) -> Ir.Mu (binder_to_ir_name name, tycheck_to_ir_command command)
+  | Ast.Variable name -> Ir.Variable (ast_name_to_ir_name name)
+  | Ast.Construction { cons_name; cons_args } ->
     Ir.Construction
-      { cons_name = ast_name_to_ir_name tcons_name
-      ; cons_args = List.map tycheck_to_ir_term tcons_args
+      { cons_name = ast_name_to_ir_name cons_name
+      ; cons_args = List.map tycheck_to_ir_term cons_args
       }
-  | Typechecker.Bidir.TTuple terms -> Ir.Tuple (List.map tycheck_to_ir_term terms)
-  | Typechecker.Bidir.TMatcher branches ->
+  | Ast.Tuple terms -> Ir.Tuple (List.map tycheck_to_ir_term terms)
+  | Ast.Matcher branches ->
     let ir_branches =
       List.map
         (fun (pat, command) ->
@@ -130,47 +137,47 @@ and tycheck_to_ir_term (t : Typechecker.Bidir.tycheck_term) : Ir.term =
         branches
     in
     Ir.Matcher ir_branches
-  | Typechecker.Bidir.TNum n -> Ir.Num n
-  | Typechecker.Bidir.TRec (name, term) ->
-    Ir.Rec (tycheck_binder_to_ir_binder name, tycheck_to_ir_term term)
-  | Typechecker.Bidir.TArr terms -> Ir.Arr (List.map tycheck_to_ir_term terms)
-  | Typechecker.Bidir.TAnn (term, _) -> tycheck_to_ir_term term
-  | Typechecker.Bidir.TDone -> Ir.Done
+  | Ast.Num n -> Ir.Num n
+  | Ast.Rec (name, term) -> Ir.Rec (binder_to_ir_name name, tycheck_to_ir_term term)
+  | Ast.Arr terms -> Ir.Arr (List.map tycheck_to_ir_term terms)
+  | Ast.Ann (term, _) -> tycheck_to_ir_term term
+  | Ast.Exit -> Ir.Exit
 ;;
 
-let empty_tycheck_command : Typechecker.Bidir.tycheck_command =
-  Typechecker.Bidir.TCore
-    { tl_term =
-        Typechecker.Bidir.TAnn
-          ( Typechecker.Bidir.TDone
-          , Ast.Polarised (Ast.Plus, Ast.Raw (Ast.By_value, Ast.Data, Ast.Product [])) )
-    ; tr_term = Typechecker.Bidir.TTuple []
-    }
-;;
-
-(* a sequential order of commands to do by the program *)
-let tycheck_command_of_module ((defs, cmd) : Typechecker.Bidir.tycheck_module)
-  : Typechecker.Bidir.tycheck_command
-  =
-  let base =
-    match cmd with
-    | Some new_base -> new_base
-    | None -> empty_tycheck_command
-  in
-  let rec aux (defs : Typechecker.Bidir.tycheck_top_level_item list) end_cmd
-    : Typechecker.Bidir.tycheck_command
-    =
+let tycheck_command_of_module (defs : typed_module) : Ir.command =
+  let rec aux (defs : typed_mod_tli Ast.top_level_item list) end_cmd : Ir.command =
     match defs with
     | [] -> end_cmd
-    | Typechecker.Bidir.Open _ :: rest -> aux rest end_cmd
-    | Typechecker.Bidir.Def (Typechecker.Bidir.TTypeDef (_kind_binder, _ty_def)) :: rest
-      -> aux rest end_cmd
-    | Typechecker.Bidir.Def (Typechecker.Bidir.TModuleDef _) :: _ ->
-      failwith "Nested modules not supported in typechecked AST to IR conversion"
-    | Typechecker.Bidir.Def (Typechecker.Bidir.TTermDef (b, term)) :: rest ->
+    | Ast.Open _ :: rest -> aux rest end_cmd
+    | Ast.Def (Ast.TypeDef _) :: rest -> aux rest end_cmd
+    | Ast.Def (Ast.ModuleDef _) :: _ ->
+      failwith "TODO: Nested modules not supported in typechecked AST to IR conversion"
+    | Ast.Def (Ast.TermDef (b, term)) :: rest ->
       let rest_cmd = aux rest end_cmd in
-      Typechecker.Bidir.TCore
-        { tl_term = term; tr_term = Typechecker.Bidir.TMu (b, rest_cmd) }
+      let ann, _ = term in
+      let t = tycheck_to_ir_term term in
+      let rest_mu = Ir.Mu (binder_to_ir_name b, rest_cmd) in
+      let term_evaluated_left =
+        match ann.ty with
+        | Some tyu -> should_focus_left tyu
+        | None -> assert false
+      in
+      if term_evaluated_left
+      then Ir.Core { focus_term = t; unfocus_term = rest_mu }
+      else Ir.Core { focus_term = rest_mu; unfocus_term = t }
+    | Ast.Def (Ast.Term term) :: rest ->
+      let rest_cmd = aux rest end_cmd in
+      let ann, _ = term in
+      let t = tycheck_to_ir_term term in
+      let rest_mu = Ir.Mu (gensym "toplevel", rest_cmd) in
+      let term_evaluated_left =
+        match ann.ty with
+        | Some tyu -> should_focus_left tyu
+        | _ -> assert false
+      in
+      if term_evaluated_left
+      then Ir.Core { focus_term = t; unfocus_term = rest_mu }
+      else Ir.Core { focus_term = rest_mu; unfocus_term = t }
   in
-  aux defs base
+  aux defs ModEndHole
 ;;

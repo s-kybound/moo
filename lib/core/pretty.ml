@@ -73,6 +73,7 @@ and show_command command =
       (show_term out_unfocus_term)
   | Fork (cmd1, cmd2) ->
     Printf.sprintf "[%s | %s]" (show_command cmd1) (show_command cmd2)
+  | ModEndHole -> "MOD_END_HOLE"
 ;;
 
 let show_instruction instr =

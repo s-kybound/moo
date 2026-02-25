@@ -139,7 +139,7 @@ let eval_state (state : state) : program_step =
        Step (mu_c, mu_s, new_e)
      (* invalid states - self matching
       * these should have been handled in the typechecking *)
-     | VExit, VExit -> raise (AssertionError "cannot cut two exit values")
+     | VExit, VExit -> raise (AssertionError " two exit values")
      | VArr _, VArr _ -> raise (AssertionError "cannot cut two array values")
      | VTuple _, VTuple _ -> raise (AssertionError "cannot cut two tuple values")
      | VConstruction _, VConstruction _ ->
@@ -147,8 +147,7 @@ let eval_state (state : state) : program_step =
      | VNum _, VNum _ -> raise (AssertionError "cannot cut two numeric values")
      | VMatcher _, VMatcher _ -> raise (AssertionError "cannot cut two matcher values")
      (* exit semantics *)
-     | VExit, VTuple [] | VTuple [], VExit -> Stop
-     (* | VExit, VNum n | VNum n, VExit -> Error (Exit n) *)
+     | VExit, VNum n | VNum n, VExit -> Error (Exit n)
      (* array semantics -- TODO *)
      (* match semantics *)
      | VMatcher (cases, match_e), adt | adt, VMatcher (cases, match_e) ->
@@ -159,8 +158,13 @@ let eval_state (state : state) : program_step =
         (* failure to pattern match should not happen *)
         | None -> raise (AssertionError "no matching pattern found"))
      (* invalid states - attempt to match value to non-mu value *)
-     | VExit, _ | _, VExit ->
-       raise (AssertionError "cannot cut exit value with non-numeric value")
+     | VExit, x | x, VExit ->
+       let exit_msg =
+         Printf.sprintf
+           "attempt to cut exit value with non-exit value: %s"
+           (Pretty.show_value x)
+       in
+       raise (AssertionError exit_msg)
      | VArr _, _ -> raise (AssertionError "attempt to cut array value with value")
      | VTuple _, _ -> raise (AssertionError "attempt to cut tuple value with value")
      | VConstruction _, _ ->
@@ -236,6 +240,7 @@ let eval_state (state : state) : program_step =
   (* commands *)
   | C cmd :: c', s, e ->
   match cmd with
+  | ModEndHole -> Stop
   | Fork (cmd1, cmd2) -> Step (I (Spawn cmd2) :: C cmd1 :: c', s, e)
   | Core { focus_term; unfocus_term } ->
     Step (force_term focus_term @ (T unfocus_term :: I Cut :: c'), s, e)
