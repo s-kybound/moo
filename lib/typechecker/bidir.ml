@@ -27,7 +27,7 @@ type typed_pattern = typed_ann Ast.pattern
 type typed_term = typed_ann Ast.term
 type typed_command = typed_ann Ast.command
 type typed_arith_command = typed_ann Ast.arith_command
-type typed_definition = typed_ann Ast.definition
+type typed_mod_tli = typed_ann Ast.mod_tli
 type typed_module = typed_ann Ast.module_
 
 let empty_ann : typed_ann = { loc = None; ty = None; unique_id = None; binder_ids = None }
@@ -170,26 +170,26 @@ let get_usages_of_hole (frame : tycheck_hole_environment_frame) (var : 'a Ast.bi
 
 (* perform a co-debrujin conversion on a module *)
 let tycheck_module_of_ast (modu : Ast.core_ann Ast.module_) : typed_module =
-  let rec tycheck_module_of_ast_aux
-            ((top_level_defs, top_level_command) : Ast.core_ann Ast.module_)
-            env
+  let rec tycheck_module_of_ast_aux (top_level_defs : Ast.core_ann Ast.module_) env
     : typed_module
     =
-    let rec tycheck_definition_of_ast (def : Ast.core_ann Ast.definition) env
-      : typed_definition * tycheck_hole_environment_frame
+    let rec tycheck_mod_tli_of_ast (def : Ast.core_ann Ast.mod_tli) env
+      : typed_mod_tli * tycheck_hole_environment_frame
       =
       match def with
       | Ast.TermDef (binder, term) ->
         let temp_binder = binder_with_ids binder None in
         let new_env = extend_hole_frame env temp_binder in
         let tterm = tycheck_term_of_ast term new_env in
-        (* needs a second pass to get the unique ids *)
         let tbinder = binder_with_ids binder None in
         Ast.TermDef (tbinder, tterm), new_env
       | Ast.TypeDef (kind_binder, ty) -> Ast.TypeDef (kind_binder, ty), env
       | Ast.ModuleDef { name; program } ->
         let tprogram = tycheck_module_of_ast_aux program env in
         Ast.ModuleDef { name; program = tprogram }, env
+      | Ast.Term term ->
+        let tterm = tycheck_term_of_ast term env in
+        Ast.Term tterm, env
     and tycheck_term_of_ast (term : Ast.core_ann Ast.term) env : typed_term =
       let src_ann, node = term in
       let ann = typed_ann_of_core src_ann in
@@ -305,26 +305,23 @@ let tycheck_module_of_ast (modu : Ast.core_ann Ast.module_) : typed_module =
         in
         Ast.Constr { pat_name; pat_args = tpat_args }
     and tycheck_top_level_item_of_ast
-          (tli : Ast.core_ann Ast.definition Ast.top_level_item)
+          (tli : Ast.core_ann Ast.mod_tli Ast.top_level_item)
           env
-      : typed_definition Ast.top_level_item * tycheck_hole_environment_frame
+      : typed_mod_tli Ast.top_level_item * tycheck_hole_environment_frame
       =
       match tli with
       | Ast.Open o -> Ast.Open o, env
       | Ast.Def d ->
-        let tdef, new_env = tycheck_definition_of_ast d env in
+        let tdef, new_env = tycheck_mod_tli_of_ast d env in
         Ast.Def tdef, new_env
     in
-    let unannotated_definitions, new_env, env_checkpoints =
+    let unannotated_mod_tlis, _new_env, env_checkpoints =
       List.fold_left
         (fun (defs_acc, env_acc, env_checkpoints) def ->
            let def, new_env = tycheck_top_level_item_of_ast def env_acc in
            defs_acc @ [ def ], new_env, env_checkpoints @ [ new_env ])
         ([], env, [])
         top_level_defs
-    in
-    let command =
-      Option.map (fun cmd -> tycheck_command_of_ast cmd new_env) top_level_command
     in
     let top_level_items =
       List.map2
@@ -334,10 +331,10 @@ let tycheck_module_of_ast (modu : Ast.core_ann Ast.module_) : typed_module =
              let unique_ids = get_usages_of_hole env_checkpoint tbinder in
              Ast.Def (Ast.TermDef (set_binder_ids tbinder unique_ids, tterm))
            | _ -> def)
-        unannotated_definitions
+        unannotated_mod_tlis
         env_checkpoints
     in
-    top_level_items, command
+    top_level_items
   in
   tycheck_module_of_ast_aux modu Top
 ;;
@@ -866,11 +863,11 @@ and typecheck_command
     mk_command ann (Ast.Fork (cmd1, cmd2)), ctx2
 ;;
 
-let rec tycheck_definition
+let rec tycheck_mod_tli
           (knowledge : context)
-          (def : typed_definition)
+          (def : typed_mod_tli)
           (tydef_env : tydef_env)
-  : typed_definition * context * tydef_env
+  : typed_mod_tli * context * tydef_env
   =
   match def with
   | Ast.TermDef (tbinder, tterm) ->
@@ -889,25 +886,28 @@ let rec tycheck_definition
     (* TODO: update outer tydef_env accessible space once Module namespacing is done *)
     let tprogram, new_insights, _ = tycheck_module knowledge program tydef_env in
     Ast.ModuleDef { name; program = tprogram }, new_insights, tydef_env
+  | Ast.Term term ->
+    let tterm, _, synth_knowledge = synthesize knowledge term tydef_env in
+    Ast.Term tterm, synth_knowledge, tydef_env
 
 and tycheck_module
       (knowledge : context)
-      ((top_level_items, top_level_command) : typed_module)
+      (top_level_items : typed_module)
       (tydef_env : tydef_env)
   : typed_module * context * tydef_env
   =
   let rec process_top_level_items
-            (defs : typed_definition Ast.top_level_item list)
-            (defs_acc : typed_definition Ast.top_level_item list)
+            (defs : typed_mod_tli Ast.top_level_item list)
+            (defs_acc : typed_mod_tli Ast.top_level_item list)
             (knowledge_acc : context)
             (tydef_env_acc : tydef_env)
-    : typed_definition Ast.top_level_item list * context * tydef_env
+    : typed_mod_tli Ast.top_level_item list * context * tydef_env
     =
     match defs with
     | [] -> List.rev defs_acc, knowledge_acc, tydef_env_acc
     | Ast.Def def :: rest ->
       let newdef, new_knowledge, new_tydef_env =
-        tycheck_definition knowledge_acc def tydef_env_acc
+        tycheck_mod_tli knowledge_acc def tydef_env_acc
       in
       process_top_level_items
         rest
@@ -920,13 +920,7 @@ and tycheck_module
   let new_top_level_items, after_defs_knowledge, after_defs_tydef_env =
     process_top_level_items top_level_items [] knowledge tydef_env
   in
-  match top_level_command with
-  | None -> (new_top_level_items, None), after_defs_knowledge, after_defs_tydef_env
-  | Some command ->
-    let newcmd, command_knowledge =
-      typecheck_command after_defs_knowledge command after_defs_tydef_env
-    in
-    (new_top_level_items, Some newcmd), command_knowledge, after_defs_tydef_env
+  new_top_level_items, after_defs_knowledge, after_defs_tydef_env
 ;;
 
 let tycheck_program (modu : Ast.core_ann Ast.module_) : typed_module * tydef_env =

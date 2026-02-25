@@ -246,9 +246,7 @@ let surface_top_level_item_to_ast_top_level_item
   | Surface.Def def -> Ast.Def (f def)
 ;;
 
-let rec surface_definition_to_ast_definition (def : Surface.definition)
-  : Ast.core_ann Ast.definition
-  =
+let rec surface_mod_tli_to_ast_mod_tli (def : Surface.mod_tli) : Ast.core_ann Ast.mod_tli =
   match def with
   | Surface.TermDef ({ name; typ = None }, term) ->
     Ast.TermDef (surface_binder_name_to_ast_binder name, surface_term_to_ast_term term)
@@ -264,21 +262,13 @@ let rec surface_definition_to_ast_definition (def : Surface.definition)
       { name = module_def.name
       ; program = surface_module_to_ast_module module_def.program
       }
+  | Surface.Term term -> Ast.Term (surface_term_to_ast_term term)
 
 and surface_module_to_ast_module (m : Surface.module_) : Ast.core_ann Ast.module_ =
-  let defs, cmd_opt = m in
-  let ast_defs =
-    List.map
-      (surface_top_level_item_to_ast_top_level_item surface_definition_to_ast_definition)
-      defs
-  in
-  let ast_cmd_opt = Option.map surface_command_to_ast_command cmd_opt in
-  ast_defs, ast_cmd_opt
+  List.map (surface_top_level_item_to_ast_top_level_item surface_mod_tli_to_ast_mod_tli) m
 ;;
 
-let rec surface_sig_definition_to_ast_sig_definition (sig_def : Surface.sig_definition)
-  : Ast.sig_definition
-  =
+let rec surface_sig_tli_to_ast_sig_tli (sig_def : Surface.sig_tli) : Ast.sig_tli =
   match sig_def with
   | Surface.TypeSigDef (kind_binder, shape, ty_opt) ->
     Ast.TypeSigDef (kind_binder, shape, Option.map surface_ty_to_ast_ty ty_opt)
@@ -294,7 +284,6 @@ let rec surface_sig_definition_to_ast_sig_definition (sig_def : Surface.sig_defi
 
 and surface_sig_module_to_ast_sig_module (sig_mod : Surface.sig_module) : Ast.sig_module =
   List.map
-    (surface_top_level_item_to_ast_top_level_item
-       surface_sig_definition_to_ast_sig_definition)
+    (surface_top_level_item_to_ast_top_level_item surface_sig_tli_to_ast_sig_tli)
     sig_mod
 ;;

@@ -130,10 +130,11 @@ type module_open =
       ; use_name : string
       }
 
-type definition =
+type mod_tli =
   | TermDef of binder * term
   | TypeDef of kind_binder * ty
   | ModuleDef of module_def
+  | Term of term
 
 and module_def =
   { name : string
@@ -144,11 +145,11 @@ and 'a top_level_item =
   | Open of module_open
   | Def of 'a
 
-and module_ = definition top_level_item list * command option
+and module_ = mod_tli top_level_item list
 
-type sig_module = sig_definition top_level_item list
+type sig_module = sig_tli top_level_item list
 
-and sig_definition =
+and sig_tli =
   | TypeSigDef of kind_binder * shape * ty option
   | TermSigDef of binder * ty_use
   | ModuleSigDef of module_sig_def

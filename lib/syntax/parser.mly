@@ -120,8 +120,11 @@ typed_binder_aux:
   | name=untyped_binder COLON ty=type_use               { { name with typ = Some ty } }
 
 untyped_binder: 
-  | name=IDENT                                          { { name = Var name; typ = None } }
   | UNDERSCORE                                          { { name = Wildcard; typ = None } }
+  | untyped_binder_strict                               { $1 }
+
+untyped_binder_strict:
+  | name=IDENT                                          { { name = Var name; typ = None } }
 
 kind_binder:
   | name=IDENT
@@ -150,16 +153,12 @@ maybe_delimited(item):
   | item DELIMITER?                                     { $1 }
 
 program:
-  | defs=list(maybe_delimited(top_level_item(top_level_definition)))
-    maybe_command = top_level_command?
-    { defs, maybe_command }
-
-top_level_command:
-  | DO statement                                        { $2 }
+  | tlis=list(maybe_delimited(top_level_item(mod_item)))
+    { tlis }
 
 interface:
-  | defs=list(maybe_delimited(top_level_item(top_level_signature_definition)))
-    { defs }
+  | tlis=list(maybe_delimited(top_level_item(sig_item)))
+    { tlis }
 
 top_level_item(definition):
   | open_statement                                      { Open $1 }
@@ -170,12 +169,13 @@ open_statement:
   | USE mod_name=namespaced(any_ident) AS use_name=any_ident
       { Use { mod_name; use_name } }
 
-top_level_definition:
+mod_item:
   | module_definition                                   { $1 }
   | term_definition                                     { $1 }
   | type_definition                                     { $1 }
+  | top_level_term                                      { $1 }
 
-top_level_signature_definition:
+sig_item:
   | module_signature                                    { $1 }
   | term_signature                                      { $1 }
   | type_signature                                      { $1 }
@@ -199,7 +199,7 @@ module_signature:
       { ModuleSigDef { name; interface  } }
 
 term_signature:
-  | LET b=untyped_binder EQUALS t=type_use              { TermSigDef (b, t) }
+  | LET b=untyped_binder_strict EQUALS t=type_use       { TermSigDef (b, t) }
 
 type_signature:
   | s=shape m=mode n=kind_binder EQUALS t=full_raw_type { TypeSigDef (n, s, Some (Raw (m, s, t))) }
@@ -214,9 +214,9 @@ let_definition:
  * they are useful enough to be granted
  * native representation *)
 proc_definition:
-  | PROC b=untyped_binder params=proc_binders body=proc_body
+  | PROC b=untyped_binder_strict params=proc_binders body=proc_body
       { TermDef (b, make_proc $startpos $endpos params body) }
-  | PROC REC b=untyped_binder params=proc_binders body=proc_body
+  | PROC REC b=untyped_binder_strict params=proc_binders body=proc_body
       {
         let proc = make_proc $startpos $endpos params body in
         TermDef (b, mk_term $startpos $endpos (Rec (b, proc)))
@@ -295,6 +295,10 @@ term:
   | active_number_term                                  { $1 }
   | indirect_term                                       { $1 }
 
+top_level_term:
+  | indirect_term                                       { Term $1 }
+  | do_term                                             { Term $1 }
+
 def_term:
   | indirect_term                                       { $1 }
   | naked_mu_term                                       { $1 }
@@ -310,6 +314,15 @@ indirect_term:
   | t=indirect_term COLON ty=type_use                   { mk_term $startpos $endpos (Ann (t, ty)) }
 (*| MU naked_mu_term                                    { $2 }*)
   | LPAREN t=term RPAREN                                { t }
+
+%inline do_term_binder:
+  | LBRACE b=untyped_binder RBRACE                      { b }
+  |                                                     { { name = Wildcard; typ = None } }
+
+do_term:
+  | DO b=do_term_binder s=statement                     { 
+                                                          mk_term $startpos $endpos (Mu (b, s)) 
+                                                        }
 
 array_term:
   | LBRACK r_terms=separated_list(COMMA, term) RBRACK   { mk_term $startpos $endpos (Arr r_terms) }

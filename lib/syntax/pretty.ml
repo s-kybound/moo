@@ -165,7 +165,7 @@ and show_arith_command arith_cmd =
       (show_term out_term)
 ;;
 
-let rec show_definition def =
+let rec show_mod_tli def =
   match def with
   | TermDef (binder, term) ->
     Printf.sprintf "let %s = %s" (show_binder binder) (show_term term)
@@ -173,6 +173,7 @@ let rec show_definition def =
     Printf.sprintf "type %s = %s" (show_kind_binder kind_binder) (show_ty ty)
   | ModuleDef { name; program } ->
     Printf.sprintf "module %s {\n%s\n}" name (show_program program)
+  | Term term -> show_term term
 
 and show_open (mo : Surface.module_open) =
   match mo with
@@ -180,14 +181,11 @@ and show_open (mo : Surface.module_open) =
   | Use { mod_name; use_name } ->
     Printf.sprintf "use %s as %s" (show_name mod_name) use_name
 
-and show_program (prog, cmd) =
-  (prog |> List.map (show_top_level_item show_definition))
-  @ Option.to_list (Option.map show_command cmd)
-  |> String.concat "\n"
+and show_program prog =
+  prog |> List.map (show_top_level_item show_mod_tli) |> String.concat "\n"
 
-and show_top_level_item (show_definition : 'a -> string) (tli : 'a Surface.top_level_item)
-  =
+and show_top_level_item (show_mod_tli : 'a -> string) (tli : 'a Surface.top_level_item) =
   match tli with
   | Open o -> show_open o
-  | Def d -> show_definition d
+  | Def d -> show_mod_tli d
 ;;

@@ -107,21 +107,22 @@ and 'ann arith_command =
       ; out_term : 'ann term
       }
 
-type 'ann definition =
+type 'ann mod_tli =
   | TermDef of 'ann binder * 'ann term
   | TypeDef of kind_binder * ty
   | ModuleDef of 'ann module_def
+  | Term of 'ann term
 
 and 'ann module_def =
   { name : string
   ; program : 'ann module_
   }
 
-and 'ann module_ = 'ann definition top_level_item list * 'ann command option
+and 'ann module_ = 'ann mod_tli top_level_item list
 
-type sig_module = sig_definition top_level_item list
+type sig_module = sig_tli top_level_item list
 
-and sig_definition =
+and sig_tli =
   | TypeSigDef of kind_binder * shape * ty option
   | TermSigDef of core_ann binder * ty_use
   | ModuleSigDef of module_sig_def
