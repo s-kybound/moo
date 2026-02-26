@@ -437,10 +437,11 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
     let tyu = WeakTyu.new_constructor_tyu (Product typs) in
     annotate (ann, Ast.Tuple terms) tyu, tyu, new_knowledge
   | Ast.Ann (tterm, ty_use) ->
-    let _, demands = check knowledge tterm ty_use tydef_env in
-    expr, ty_use, demands
+    let checked_term, demands = check knowledge tterm ty_use tydef_env in
+    let expr = ann, Ast.Ann (checked_term, ty_use) in
+    annotate expr ty_use, ty_use, demands
   | Ast.Rec (tbinder, tterm) ->
-    let _, inferred_tyu, demands = synthesize knowledge tterm tydef_env in
+    let expr, inferred_tyu, demands = synthesize knowledge tterm tydef_env in
     let relevant_ids = binder_ids_of_binder tbinder in
     let binder_tyu =
       match type_of_usages relevant_ids demands tydef_env with
@@ -454,18 +455,18 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
       | Ok (Some ty_use) -> ty_use
     in
     let tyu = most_specific_tyu inferred_tyu binder_tyu tydef_env in
-    annotate_with tyu, tyu, demands
+    annotate expr tyu, tyu, demands
   | Ast.Mu (tbinder, tcommand) ->
     let tcommand, new_knowledge = typecheck_command knowledge tcommand tydef_env in
     let relevant_ids = binder_ids_of_binder tbinder in
     (match type_of_usages relevant_ids new_knowledge tydef_env with
-     | Ok None ->
-       let tyu = WeakTyu.new_unknown_tyu () in
-       let expr = ann, Ast.Mu (tbinder, tcommand) in
-       annotate expr tyu, tyu, new_knowledge
      | Error msg -> type_error ?loc:ann.loc msg
-     | Ok (Some ty_use) ->
-       let tyu = Type.negate_tyu ty_use in
+     | Ok res ->
+       let tyu =
+         match res with
+         | Some tyu -> Type.negate_tyu tyu
+         | None -> WeakTyu.new_unknown_tyu ()
+       in
        let expr = ann, Ast.Mu (tbinder, tcommand) in
        annotate expr tyu, tyu, new_knowledge)
   | Ast.Matcher branches ->
@@ -692,15 +693,15 @@ and check
        annotate_with_tyu expr, IMap.add unique_id expected_type knowledge)
   | Ast.Num _ ->
     let _, tyu, knowledge = synthesize knowledge expr tydef_env in
-    if tyu_equal expected_type tyu tydef_env
-    then annotate_with_tyu expr, knowledge
-    else type_mismatch ?loc:ann.loc expected_type tyu "check: TNum expected type mismatch"
+    if not (tyu_equal expected_type tyu tydef_env)
+    then type_mismatch ?loc:ann.loc expected_type tyu "check: TNum expected type mismatch"
+    else annotate_with_tyu expr, knowledge
   | Ast.Exit ->
     let _, tyu, knowledge = synthesize knowledge expr tydef_env in
-    if tyu_equal expected_type tyu tydef_env
-    then annotate_with_tyu expr, knowledge
-    else
+    if not (tyu_equal expected_type tyu tydef_env)
+    then
       type_mismatch ?loc:ann.loc expected_type tyu "check: TExit expected type mismatch"
+    else annotate_with_tyu expr, knowledge
   | Ast.Mu (tbinder, tcommand) ->
     let tbinder_ty = Type.negate_tyu expected_type in
     let new_demands =
@@ -755,9 +756,12 @@ and check
           "check: TTuple expected type mismatch"
       end)
   | Ast.Ann (tterm, ty_use) ->
-    if tyu_equal ty_use expected_type tydef_env
-    then check knowledge tterm ty_use tydef_env
-    else type_mismatch ?loc:ann.loc expected_type ty_use "check: TAnn type mismatch"
+    if not (tyu_equal ty_use expected_type tydef_env)
+    then type_mismatch ?loc:ann.loc expected_type ty_use "check: TAnn type mismatch"
+    else (
+      let term, knowledge = check knowledge tterm ty_use tydef_env in
+      let expr = ann, Ast.Ann (term, ty_use) in
+      annotate expr expected_type, knowledge)
   | Ast.Rec (tbinder, tterm) ->
     let new_demands =
       List.map (fun id -> id, expected_type) (binder_ids_of_binder tbinder)
@@ -765,18 +769,20 @@ and check
     let updated_knowledge =
       List.fold_left (fun acc (id, ty) -> IMap.add id ty acc) knowledge new_demands
     in
-    check updated_knowledge tterm expected_type tydef_env
+    let term, knowledge = check updated_knowledge tterm expected_type tydef_env in
+    let expr = ann, Ast.Rec (tbinder, term) in
+    annotate expr expected_type, knowledge
   | Ast.Matcher _ ->
     let t, ty_use, discoveries = synthesize knowledge expr tydef_env in
-    if tyu_equal expected_type ty_use tydef_env
-    then t, discoveries
-    else type_mismatch ?loc:ann.loc expected_type ty_use "check: TMatcher type mismatch"
+    if not (tyu_equal expected_type ty_use tydef_env)
+    then type_mismatch ?loc:ann.loc expected_type ty_use "check: TMatcher type mismatch"
+    else t, discoveries
   | Ast.Construction _ ->
     let t, ty_use, discoveries = synthesize knowledge expr tydef_env in
-    if tyu_equal expected_type ty_use tydef_env
-    then t, discoveries
-    else
+    if not (tyu_equal expected_type ty_use tydef_env)
+    then
       type_mismatch ?loc:ann.loc expected_type ty_use "check: TConstruction type mismatch"
+    else t, discoveries
   | Ast.Arr terms ->
     if not (Type.is_constructor_tyu_forced expected_type tydef_env)
     then
@@ -814,14 +820,32 @@ and typecheck_command
   : typed_command * context
   =
   let typecheck_command_aux l_term r_term ann =
+    (* TODO: this logic must adapt to abstract types *)
+    (* Based on the paper, constructors are checkable and 
+     * destructors are synthesizable.
+     * Hence, we have a backtracking algorithm to attempt a check of the
+     * left term to check whether it is a destructor, before retrying if not, or
+     * if unable to determine.
+     *)
     let tl_term, l_ty_use, l_knowledge = synthesize knowledge l_term tydef_env in
-    let r_ty_use = Type.negate_tyu l_ty_use in
-    let tr_term, final_knowledge = check l_knowledge r_term r_ty_use tydef_env in
-    mk_command ann (Ast.Core { l_term = tl_term; r_term = tr_term }), final_knowledge
+    match is_constructor_tyu l_ty_use tydef_env with
+    | Some false ->
+      (* continue as planned *)
+      let r_ty_use = Type.negate_tyu l_ty_use in
+      let tr_term, final_knowledge = check l_knowledge r_term r_ty_use tydef_env in
+      mk_command ann (Ast.Core { l_term = tl_term; r_term = tr_term }), final_knowledge
+    | Some true | None ->
+      (* can't tell *)
+      (* TODO: do we really have to retry on none? *)
+      let tr_term, r_ty_use, r_knowledge = synthesize knowledge r_term tydef_env in
+      let l_ty_use = Type.negate_tyu r_ty_use in
+      let tl_term, final_knowledge = check r_knowledge l_term l_ty_use tydef_env in
+      mk_command ann (Ast.Core { l_term = tl_term; r_term = tr_term }), final_knowledge
   in
   let ann, node = command in
   match node with
   | Ast.Core { l_term; r_term } -> typecheck_command_aux l_term r_term ann
+  (* for Arithmetic commands, it is simpler - the out_term is always the destructor *)
   | Ast.Arith
       (Ast.Bop { op = top; l_term = tl_term; r_term = tr_term; out_term = tout_term }) ->
     let tout_term, out_ty_use, out_knowledge = synthesize knowledge tout_term tydef_env in
