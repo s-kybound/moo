@@ -2,7 +2,6 @@ open Syntax
 open Type
 
 (* a cocontextual typechecker that analyses a given program *)
-exception TypeMismatch of Ast.ty_use * Ast.ty_use * string
 
 exception
   TypeError of
@@ -13,6 +12,17 @@ exception
 exception Underspecified of string
 
 let type_error ?loc message = raise (TypeError { loc; message })
+
+let type_mismatch ?loc expected actual msg =
+  let message =
+    Printf.sprintf
+      "Type error: expected %s but got %s. %s"
+      (Syntax.Pretty.show_ty_use expected)
+      (Syntax.Pretty.show_ty_use actual)
+      msg
+  in
+  raise (TypeError { loc; message })
+;;
 
 type tycheck_ann =
   { loc : Loc.span option
@@ -235,7 +245,7 @@ let tycheck_module_of_ast (modu : Ast.core_ann Ast.module_) : typed_module =
               "tycheck_term_of_ast: recursive binder %s has no usages"
               (Syntax.Pretty.show_binder binder)
           in
-          failwith msg)
+          type_error ?loc:ann.loc msg)
         else (
           let tbinder = binder_with_ids binder (Some unique_ids) in
           mk_term ann (Ast.Rec (tbinder, tterm)))
@@ -382,19 +392,22 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
   let annotate_with = annotate expr in
   let ann, node = expr in
   match node with
-  | Ast.Variable original_name ->
+  | Ast.Variable _ ->
     (match ann.unique_id with
      | None -> assert false
      | Some unique_id ->
      match IMap.find_opt unique_id knowledge with
      | Some ty_use -> annotate_with ty_use, ty_use, knowledge
      | None ->
-       let msg =
+       let tyu = WeakTyu.new_unknown_tyu () in
+       let knowledge = IMap.add unique_id tyu knowledge in
+       annotate_with tyu, tyu, knowledge)
+    (* let msg =
          Printf.sprintf
            "synthesize: variable %s not found in context"
            (Syntax.Pretty.show_name original_name)
        in
-       raise (Underspecified msg))
+       raise (Underspecified msg)) *)
   | Ast.Num _ ->
     let tyu = WeakTyu.new_constructor_tyu Raw64 in
     annotate_with tyu, tyu, knowledge
@@ -635,9 +648,11 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
            | Some ty_use_acc ->
              if not (tyu_equal ty_use_acc ty_use tydef_env)
              then
-               raise
-                 (TypeMismatch
-                    (ty_use_acc, ty_use, "synthesize: TArr terms have mismatched types"))
+               type_mismatch
+                 ?loc:ann.loc
+                 ty_use_acc
+                 ty_use
+                 "synthesize: TArr terms have mismatched types"
              else t :: terms_acc, Some ty_use, merge_contexts ctx_acc term_ctx tydef_env)
         ([], None, knowledge)
         terms
@@ -671,12 +686,13 @@ and check
     let _, tyu, knowledge = synthesize knowledge expr tydef_env in
     if tyu_equal expected_type tyu tydef_env
     then annotate_with_tyu expr, knowledge
-    else raise (TypeMismatch (expected_type, tyu, "check: TNum expected type mismatch"))
+    else type_mismatch ?loc:ann.loc expected_type tyu "check: TNum expected type mismatch"
   | Ast.Exit ->
     let _, tyu, knowledge = synthesize knowledge expr tydef_env in
     if tyu_equal expected_type tyu tydef_env
     then annotate_with_tyu expr, knowledge
-    else raise (TypeMismatch (expected_type, tyu, "check: TExit expected type mismatch"))
+    else
+      type_mismatch ?loc:ann.loc expected_type tyu "check: TExit expected type mismatch"
   | Ast.Mu (tbinder, tcommand) ->
     let tbinder_ty = Type.negate_tyu expected_type in
     let new_demands =
@@ -692,24 +708,23 @@ and check
   | Ast.Tuple terms ->
     if not (Type.is_constructor_tyu expected_type tydef_env)
     then
-      raise
-        (TypeMismatch
-           ( expected_type
-           , WeakTyu.new_constructor_tyu
-               (Product
-                  (List.init (List.length terms) (fun _ -> WeakTyu.new_unknown_tyu ())))
-           , "check: TTuple expected type mismatch" ))
+      type_mismatch
+        ?loc:ann.loc
+        expected_type
+        (WeakTyu.new_constructor_tyu
+           (Product (List.init (List.length terms) (fun _ -> WeakTyu.new_unknown_tyu ()))))
+        "check: TTuple expected type mismatch"
     else (
       let _, _, _, raw_ty = Type.tyu_to_raw_ty expected_type tydef_env in
-      match raw_ty with
+      begin match raw_ty with
       | Product expected_tys ->
         if List.length terms <> List.length expected_tys
         then
-          raise
-            (TypeMismatch
-               ( expected_type
-               , WeakTyu.new_constructor_tyu (Product expected_tys)
-               , "check: TTuple arity mismatch" ))
+          type_mismatch
+            ?loc:ann.loc
+            expected_type
+            (WeakTyu.new_constructor_tyu (Product expected_tys))
+            "check: TTuple arity mismatch"
         else (
           let new_terms, knowledge =
             List.fold_left2
@@ -723,17 +738,18 @@ and check
           let expr = ann, Ast.Tuple (List.rev new_terms) in
           annotate expr expected_type, knowledge)
       | _ ->
-        raise
-          (TypeMismatch
-             ( expected_type
-             , WeakTyu.new_constructor_tyu
-                 (Product
-                    (List.init (List.length terms) (fun _ -> WeakTyu.new_unknown_tyu ())))
-             , "check: TTuple expected type mismatch" )))
+        type_mismatch
+          ?loc:ann.loc
+          expected_type
+          (WeakTyu.new_constructor_tyu
+             (Product
+                (List.init (List.length terms) (fun _ -> WeakTyu.new_unknown_tyu ()))))
+          "check: TTuple expected type mismatch"
+      end)
   | Ast.Ann (tterm, ty_use) ->
     if tyu_equal ty_use expected_type tydef_env
     then check knowledge tterm ty_use tydef_env
-    else raise (TypeMismatch (expected_type, ty_use, "check: TAnn type mismatch"))
+    else type_mismatch ?loc:ann.loc expected_type ty_use "check: TAnn type mismatch"
   | Ast.Rec (tbinder, tterm) ->
     let new_demands =
       List.map (fun id -> id, expected_type) (binder_ids_of_binder tbinder)
@@ -746,24 +762,24 @@ and check
     let t, ty_use, discoveries = synthesize knowledge expr tydef_env in
     if tyu_equal expected_type ty_use tydef_env
     then t, discoveries
-    else raise (TypeMismatch (expected_type, ty_use, "check: TMatcher type mismatch"))
+    else type_mismatch ?loc:ann.loc expected_type ty_use "check: TMatcher type mismatch"
   | Ast.Construction _ ->
     let t, ty_use, discoveries = synthesize knowledge expr tydef_env in
     if tyu_equal expected_type ty_use tydef_env
     then t, discoveries
     else
-      raise (TypeMismatch (expected_type, ty_use, "check: TConstruction type mismatch"))
+      type_mismatch ?loc:ann.loc expected_type ty_use "check: TConstruction type mismatch"
   | Ast.Arr terms ->
     if not (Type.is_constructor_tyu expected_type tydef_env)
     then
-      raise
-        (TypeMismatch
-           ( expected_type
-           , WeakTyu.new_constructor_tyu (Array (WeakTyu.new_unknown_tyu ()))
-           , "check: TArr expected type mismatch" ))
+      type_mismatch
+        ?loc:ann.loc
+        expected_type
+        (WeakTyu.new_constructor_tyu (Array (WeakTyu.new_unknown_tyu ())))
+        "check: TArr expected type mismatch"
     else (
       let _, _, _, raw_ty = Type.tyu_to_raw_ty expected_type tydef_env in
-      match raw_ty with
+      begin match raw_ty with
       | Array expected_elem_ty ->
         let new_terms, knowledge =
           List.fold_left
@@ -776,11 +792,12 @@ and check
         let expr = ann, Ast.Arr (List.rev new_terms) in
         annotate expr expected_type, knowledge
       | _ ->
-        raise
-          (TypeMismatch
-             ( expected_type
-             , WeakTyu.new_constructor_tyu (Array (WeakTyu.new_unknown_tyu ()))
-             , "check: TArr expected type mismatch" )))
+        type_mismatch
+          ?loc:ann.loc
+          expected_type
+          (WeakTyu.new_constructor_tyu (Array (WeakTyu.new_unknown_tyu ())))
+          "check: TArr expected type mismatch"
+      end)
 
 and typecheck_command
       (knowledge : context)
@@ -798,23 +815,15 @@ and typecheck_command
   match node with
   | Ast.Core { l_term; r_term } ->
     (try typecheck_command_aux l_term r_term ann with
-     | Underspecified msg ->
-       let _warning_msg =
+     | Underspecified _msg ->
+       assert false
+       (* let _warning_msg =
          Printf.sprintf
            "typecheck_command: underspecified left term, trying right term. %s"
            msg
-       in
-       (* print_endline warning_msg; *)
-       typecheck_command_aux r_term l_term ann
-     | TypeMismatch (expected, actual, msg) ->
-       let msg =
-         Printf.sprintf
-           "Type mismatch in TCore: expected %s but got %s. %s"
-           (Syntax.Pretty.show_ty_use expected)
-           (Syntax.Pretty.show_ty_use actual)
-           msg
-       in
-       type_error ?loc:ann.loc msg
+       in 
+        print_endline warning_msg; 
+       typecheck_command_aux r_term l_term ann *)
      | e -> raise e)
   | Ast.Arith
       (Ast.Bop { op = top; l_term = tl_term; r_term = tr_term; out_term = tout_term }) ->
@@ -823,11 +832,11 @@ and typecheck_command
     let expected_in_ty = WeakTyu.new_constructor_tyu Raw64 in
     if not (tyu_equal out_ty_use (Type.negate_tyu expected_in_ty) tydef_env)
     then
-      raise
-        (TypeMismatch
-           ( Type.negate_tyu expected_in_ty
-           , out_ty_use
-           , "typecheck_command: arithmetic binary operation expected raw64 output" ))
+      type_mismatch
+        ?loc:ann.loc
+        (Type.negate_tyu expected_in_ty)
+        out_ty_use
+        "typecheck_command: arithmetic binary operation expected raw64 output"
     else (
       let tl_term, left_knowledge = check out_knowledge tl_term in_ty_use tydef_env in
       let tr_term, right_knowledge = check left_knowledge tr_term in_ty_use tydef_env in
@@ -843,11 +852,11 @@ and typecheck_command
     let expected_in_ty = WeakTyu.new_constructor_tyu Raw64 in
     if not (tyu_equal out_ty_use (Type.negate_tyu expected_in_ty) tydef_env)
     then
-      raise
-        (TypeMismatch
-           ( Type.negate_tyu expected_in_ty
-           , out_ty_use
-           , "typecheck_command: arithmetic unary operation expected raw64 output" ))
+      type_mismatch
+        ?loc:ann.loc
+        (Type.negate_tyu expected_in_ty)
+        out_ty_use
+        "typecheck_command: arithmetic unary operation expected raw64 output"
     else (
       let tin_term, in_knowledge = check out_knowledge tin_term in_ty_use tydef_env in
       ( mk_command

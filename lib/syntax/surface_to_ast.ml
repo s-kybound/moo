@@ -1,25 +1,41 @@
 let default_ann : Ast.core_ann = Ast.empty_core_ann
 let ann_of_surface_loc (loc : Loc.span) : Ast.core_ann = { Ast.loc = Some loc }
 
-let mk_term (node : Ast.core_ann Ast.term_node) : Ast.core_ann Ast.term =
-  default_ann, node
+let merge_ann (ann1 : Ast.core_ann) (ann2 : Ast.core_ann) : Ast.core_ann =
+  let merged_loc =
+    match ann1.loc, ann2.loc with
+    | Some loc1, Some loc2 -> Some (Loc.merge_loc loc1 loc2)
+    | Some loc, None | None, Some loc -> Some loc
+    | None, None -> None
+  in
+  { Ast.loc = merged_loc }
 ;;
 
-let mk_command (node : Ast.core_ann Ast.command_node) : Ast.core_ann Ast.command =
-  default_ann, node
+let mk_term ?(loc = default_ann) (node : Ast.core_ann Ast.term_node)
+  : Ast.core_ann Ast.term
+  =
+  loc, node
 ;;
 
-let mk_core (l_term : Ast.core_ann Ast.term) (r_term : Ast.core_ann Ast.term)
+let mk_command ?(loc = default_ann) (node : Ast.core_ann Ast.command_node)
   : Ast.core_ann Ast.command
   =
-  mk_command (Ast.Core { l_term; r_term })
+  loc, node
 ;;
 
-let mk_ann (term : Ast.core_ann Ast.term) (tyu : Ast.ty_use) : Ast.core_ann Ast.term =
-  mk_term (Ast.Ann (term, tyu))
+let mk_core ~loc (l_term : Ast.core_ann Ast.term) (r_term : Ast.core_ann Ast.term)
+  : Ast.core_ann Ast.command
+  =
+  mk_command ~loc (Ast.Core { l_term; r_term })
 ;;
 
-let mk_var (name : Ast.name) : Ast.core_ann Ast.term = mk_term (Ast.Variable name)
+let mk_ann ~loc (term : Ast.core_ann Ast.term) (tyu : Ast.ty_use) : Ast.core_ann Ast.term =
+  mk_term ~loc (Ast.Ann (term, tyu))
+;;
+
+let mk_var ~loc (name : Ast.name) : Ast.core_ann Ast.term =
+  mk_term ~loc (Ast.Variable name)
+;;
 
 let cutlet_let
       (name : Ast.core_ann Ast.binder)
@@ -27,8 +43,10 @@ let cutlet_let
       (command : Ast.core_ann Ast.command)
   : Ast.core_ann Ast.command
   =
+  (* location should be merged *)
+  let loc = merge_ann (fst l_term) (fst command) in
   let r_term = mk_term (Ast.Mu (name, command)) in
-  mk_core l_term r_term
+  mk_core ~loc l_term r_term
 ;;
 
 let rec surface_ty_use_to_ast_ty_use (tyu : Surface.ty_use) : Ast.ty_use =
@@ -124,6 +142,7 @@ let rec surface_term_to_ast_term (t : Surface.term) : Ast.core_ann Ast.term =
   ann_of_surface_loc t.loc, node
 
 and surface_term_to_ast_term_node (t : Surface.term) : Ast.core_ann Ast.term_node =
+  let ann = ann_of_surface_loc t.loc in
   match t.it with
   | Surface.Mu ({ name; typ = Some ty_use }, command) ->
     (*
@@ -137,9 +156,9 @@ and surface_term_to_ast_term_node (t : Surface.term) : Ast.core_ann Ast.term_nod
       I prefer the second desugaring
     *)
     let gensym_name = gensym "gensym" in
-    let gensym_var = mk_var (Base gensym_name) in
+    let gensym_var = mk_var ~loc:ann (Base gensym_name) in
     let gensym_binder = Ast.Var (default_ann, gensym_name) in
-    let term = mk_ann gensym_var (surface_ty_use_to_ast_ty_use ty_use) in
+    let term = mk_ann ~loc:ann gensym_var (surface_ty_use_to_ast_ty_use ty_use) in
     Ast.Mu
       ( gensym_binder
       , cutlet_let
@@ -178,7 +197,7 @@ and surface_term_to_ast_term_node (t : Surface.term) : Ast.core_ann Ast.term_nod
                (fun acc_cmd (gensym_binder, original_binder, ty_use) ->
                   cutlet_let
                     original_binder
-                    (mk_ann (mk_var gensym_binder) ty_use)
+                    (mk_ann ~loc:ann (mk_var ~loc:ann gensym_binder) ty_use)
                     acc_cmd)
                (surface_command_to_ast_command cmd)
                binder_ty_uses
@@ -195,6 +214,7 @@ and surface_term_to_ast_term_node (t : Surface.term) : Ast.core_ann Ast.term_nod
     *)
     Ast.Ann
       ( mk_term
+          ~loc:ann
           (Ast.Rec (surface_binder_name_to_ast_binder name, surface_term_to_ast_term term))
       , surface_ty_use_to_ast_ty_use ty_use )
   | Surface.Rec ({ name; typ = None }, term) ->
@@ -254,7 +274,7 @@ let rec surface_mod_tli_to_ast_mod_tli (def : Surface.mod_tli) : Ast.core_ann As
     let term_node =
       Ast.Ann (surface_term_to_ast_term term, surface_ty_use_to_ast_ty_use ty_use)
     in
-    let term = default_ann, term_node in
+    let term = ann_of_surface_loc term.loc, term_node in
     Ast.TermDef (surface_binder_name_to_ast_binder name, term)
   | Surface.TypeDef (kind_binder, ty) -> Ast.TypeDef (kind_binder, surface_ty_to_ast_ty ty)
   | Surface.Term term -> Ast.Term (surface_term_to_ast_term term)
