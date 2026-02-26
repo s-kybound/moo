@@ -173,19 +173,16 @@ let rec tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env)
   match meta.cell with
   | Unified tyu ->
     let m, p, s, r = tyu_to_raw_ty tyu tydef_env in
-    if negated
-    then (
-      let neg_p =
-        match p with
-        | Plus -> Minus
-        | Minus -> Plus
-      in
-      m, neg_p, s, r)
-    else m, p, s, r
+    begin match p, negated with
+    | Plus, true | Minus, false -> m, Minus, s, r
+    | Minus, true | Plus, false -> m, Plus, s, r
+    end
   | Inferred constraints ->
   match constraints.constructor, constraints.raw_lower_bound with
   | Some is_constructor, Some raw_ty ->
-    if is_constructor then By_value, Plus, Data, raw_ty else By_value, Minus, Data, raw_ty
+    if is_constructor <> negated
+    then By_value, Plus, Data, raw_ty
+    else By_value, Minus, Data, raw_ty
   | _ -> assert false
 ;;
 
