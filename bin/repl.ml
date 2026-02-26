@@ -175,10 +175,7 @@ let rec repl_loop (kont : (Error.kont * (Ast.core_ann Ast.module_ -> 'a) * strin
     let full_input =
       if String.trim previous_input = "" then input else previous_input ^ "\n" ^ input
     in
-    try
-      f (parse_to_core_ast ?k input);
-      add_to_history full_input
-    with
+    try f (parse_to_core_ast ?k input) with
     | Error.Early_eof k -> repl_loop (Some (k, f, full_input))
     | e ->
       print_exception_with_context full_input e;
@@ -194,36 +191,37 @@ let rec repl_loop (kont : (Error.kont * (Ast.core_ann Ast.module_ -> 'a) * strin
     print_endline "\nGoodbye!";
     exit 0
   | Some line ->
-  match String.trim line, kont with
-  | "", None -> repl_loop kont
-  | "", Some (k, f, previous_input) ->
-    (* we need to consider the newlines here for correctness *)
-    attempt_eval ~previous_input ~k line f;
-    repl_loop None
-  | "\\q", _ | "\\quit", _ | "\\exit", _ ->
-    print_endline "Goodbye!";
-    exit 0
-  | "\\help", _ ->
-    print_endline "Commands:";
-    print_endline "  \\q, \\quit, \\exit   Exit REPL";
-    print_endline "  \\show <program>      Visualize the expression";
-    print_endline "  \\help                Show this help";
-    print_endline "  \\step <program>      Step through the program (not implemented)";
-    repl_loop kont
-  | l, None when String.starts_with ~prefix:"\\step " l ->
-    let expr = String.sub l 6 (String.length l - 6) in
-    attempt_eval expr step_module;
-    repl_loop None
-  | l, None when String.starts_with ~prefix:"\\show " l ->
-    let expr = String.sub l 6 (String.length l - 6) in
-    attempt_eval expr print_ast;
-    repl_loop None
-  | _, Some (k, f, previous_input) ->
-    attempt_eval ~previous_input ~k line f;
-    repl_loop None
-  | _, None ->
-    attempt_eval line eval_module;
-    repl_loop None
+    add_to_history line;
+    (match String.trim line, kont with
+     | "", None -> repl_loop kont
+     | "", Some (k, f, previous_input) ->
+       (* we need to consider the newlines here for correctness *)
+       attempt_eval ~previous_input ~k line f;
+       repl_loop None
+     | "\\q", _ | "\\quit", _ | "\\exit", _ ->
+       print_endline "Goodbye!";
+       exit 0
+     | "\\help", _ ->
+       print_endline "Commands:";
+       print_endline "  \\q, \\quit, \\exit   Exit REPL";
+       print_endline "  \\show <program>      Visualize the expression";
+       print_endline "  \\help                Show this help";
+       print_endline "  \\step <program>      Step through the program (not implemented)";
+       repl_loop kont
+     | l, None when String.starts_with ~prefix:"\\step " l ->
+       let expr = String.sub l 6 (String.length l - 6) in
+       attempt_eval expr step_module;
+       repl_loop None
+     | l, None when String.starts_with ~prefix:"\\show " l ->
+       let expr = String.sub l 6 (String.length l - 6) in
+       attempt_eval expr print_ast;
+       repl_loop None
+     | _, Some (k, f, previous_input) ->
+       attempt_eval ~previous_input ~k line f;
+       repl_loop None
+     | _, None ->
+       attempt_eval line eval_module;
+       repl_loop None)
 ;;
 
 let start_repl () =
