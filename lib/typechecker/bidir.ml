@@ -325,9 +325,12 @@ let tycheck_module_of_ast (modu : Ast.core_ann Ast.module_) : typed_module =
       List.fold_left
         (fun (defs_acc, env_acc, env_checkpoints) def ->
            let def, new_env = tycheck_top_level_item_of_ast def env_acc in
-           defs_acc @ [ def ], new_env, env_checkpoints @ [ new_env ])
+           def :: defs_acc, new_env, new_env :: env_checkpoints)
         ([], env, [])
         top_level_defs
+    in
+    let unannotated_mod_tlis, env_checkpoints =
+      List.rev unannotated_mod_tlis, List.rev env_checkpoints
     in
     let top_level_items =
       List.map2
@@ -421,12 +424,11 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
       List.fold_left
         (fun (terms_acc, tys_acc, ctx_acc) term ->
            let term, ty_use, term_ctx = synthesize ctx_acc term tydef_env in
-           ( terms_acc @ [ term ]
-           , tys_acc @ [ ty_use ]
-           , merge_contexts ctx_acc term_ctx tydef_env ))
+           term :: terms_acc, ty_use :: tys_acc, merge_contexts ctx_acc term_ctx tydef_env)
         ([], [], knowledge)
         terms
     in
+    let terms, typs = List.rev terms, List.rev typs in
     let tyu = WeakTyu.new_constructor_tyu (Product typs) in
     annotate (ann, Ast.Tuple terms) tyu, tyu, new_knowledge
   | Ast.Ann (tterm, ty_use) ->

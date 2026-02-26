@@ -103,14 +103,13 @@ let surface_pattern_to_ast_pattern (pat : Surface.pattern)
   let binder_fold (acc_binders, acc_ty_uses) (binder : Surface.binder) =
     let name = surface_binder_name_to_ast_binder binder.name in
     match binder.typ with
-    | None -> acc_binders @ [ name ], acc_ty_uses
+    | None -> name :: acc_binders, acc_ty_uses
     | Some ty_use ->
       let binder_name = genvar (Pretty.show_binder name) in
       let binding_triple =
         Ast.Base binder_name, name, surface_ty_use_to_ast_ty_use ty_use
       in
-      ( acc_binders @ [ Ast.Var (default_ann, binder_name) ]
-      , acc_ty_uses @ [ binding_triple ] )
+      Ast.Var (default_ann, binder_name) :: acc_binders, binding_triple :: acc_ty_uses
   in
   match pat with
   | Surface.Binder { name; typ = Some ty_use } ->
@@ -124,9 +123,11 @@ let surface_pattern_to_ast_pattern (pat : Surface.pattern)
     Ast.Binder (surface_binder_name_to_ast_binder name), []
   | Surface.Tup binders ->
     let binders, binder_ty_uses = List.fold_left binder_fold ([], []) binders in
+    let binders, binder_ty_uses = List.rev binders, List.rev binder_ty_uses in
     Ast.Tup binders, binder_ty_uses
   | Surface.Constr { pat_name; pat_args } ->
     let pat_args, binder_ty_uses = List.fold_left binder_fold ([], []) pat_args in
+    let pat_args, binder_ty_uses = List.rev pat_args, List.rev binder_ty_uses in
     Ast.Constr { pat_name; pat_args }, binder_ty_uses
   | Surface.Numeral n -> Ast.Numeral n, []
 ;;

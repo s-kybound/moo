@@ -255,18 +255,27 @@ let eval_state (state : state) : program_step =
 let state_of_command (cmd : command) : state = [ C cmd ], [], Ir.empty_environment
 
 let eval_program (initial_state : state) : int64 * environment_frame =
-  let rec runner states status curr_frame =
-    match states with
-    | [] -> status, curr_frame
-    | Step state :: rest_states ->
+  let work_queue : program_step Queue.t = Queue.create () in
+  Queue.add (Step initial_state) work_queue;
+  let rec runner status curr_frame immediate =
+    let next_item =
+      match immediate with
+      | Some item -> Some item
+      | None -> if Queue.is_empty work_queue then None else Some (Queue.take work_queue)
+    in
+    match next_item with
+    | None -> status, curr_frame
+    | Some (Step state) ->
       let next_step = eval_state state in
-      runner (rest_states @ [ next_step ]) status curr_frame
-    | Stop :: rest -> runner rest status curr_frame
-    | Split (state1, state2) :: rest ->
-      runner ((Step state1 :: rest) @ [ Step state2 ]) status curr_frame
-    | Send (_v, _chan, _next) :: _rest -> raise Not_implemented
-    | Receive (_chan, _cont) :: _rest -> raise Not_implemented
-    | Error exn :: _ -> raise exn (* TODO: better error handling *)
+      Queue.add next_step work_queue;
+      runner status curr_frame None
+    | Some Stop -> runner status curr_frame None
+    | Some (Split (state1, state2)) ->
+      Queue.add (Step state2) work_queue;
+      runner status curr_frame (Some (Step state1))
+    | Some (Send (_v, _chan, _next)) -> raise Not_implemented
+    | Some (Receive (_chan, _cont)) -> raise Not_implemented
+    | Some (Error exn) -> raise exn (* TODO: better error handling *)
   in
-  runner [ Step initial_state ] Int64.zero Ir.empty_environment
+  runner Int64.zero Ir.empty_environment None
 ;;
