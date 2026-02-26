@@ -29,7 +29,7 @@
       ("unit",      UNIT);
       ("raw64",     RAW64);
       ("open",      OPEN);
-      ("module",    MODULE);
+      (* ("module",    MODULE); *)
       ("use",       USE);
       ("as",        AS);
       ("abstract",  ABSTRACT);

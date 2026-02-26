@@ -66,7 +66,8 @@
 %token EQUALS
 %token SEMICOLON
 
-%token OPEN MODULE USE AS
+%token OPEN USE AS
+// %token MODULE
 
 (* definitions *)
 %token LET IN
@@ -170,19 +171,19 @@ open_statement:
       { Use { mod_name; use_name } }
 
 mod_item:
-  | module_definition                                   { $1 }
+  // | module_definition                                   { $1 }
   | term_definition                                     { $1 }
   | type_definition                                     { $1 }
   | top_level_term                                      { $1 }
 
 sig_item:
-  | module_signature                                    { $1 }
+  // | module_signature                                    { $1 }
   | term_signature                                      { $1 }
   | type_signature                                      { $1 }
 
-module_definition:
-  | MODULE name=any_ident LBRACE program=program RBRACE
-      { ModuleDef { name; program } }
+// module_definition:
+//   | MODULE name=any_ident LBRACE program=program RBRACE
+//       { ModuleDef { name; program } }
 
 term_definition:
   | let_definition                                      { $1 }
@@ -193,10 +194,9 @@ type_definition:
   | s=shape n=kind_binder EQUALS t=full_raw_type        { TypeDef (n, Raw (infer_mode s, s, t)) }
   | TYPE n=kind_binder EQUALS t=type_expr               { TypeDef (n, t) }
 
-
-module_signature:
-  | MODULE name=any_ident LBRACE interface=interface RBRACE
-      { ModuleSigDef { name; interface  } }
+// module_signature:
+//   | MODULE name=any_ident LBRACE interface=interface RBRACE
+//       { ModuleSigDef { name; interface  } }
 
 term_signature:
   | LET b=untyped_binder_strict EQUALS t=type_use       { TermSigDef (b, t) }

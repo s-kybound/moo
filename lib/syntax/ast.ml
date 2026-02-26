@@ -110,14 +110,13 @@ and 'ann arith_command =
 type 'ann mod_tli =
   | TermDef of 'ann binder * 'ann term
   | TypeDef of kind_binder * ty
-  | ModuleDef of 'ann module_def
+  (* | ModuleDef of 'ann module_def *)
   | Term of 'ann term
 
-and 'ann module_def =
+(* and 'ann module_def =
   { name : string
   ; program : 'ann module_
-  }
-
+  } *)
 and 'ann module_ = 'ann mod_tli top_level_item list
 
 type sig_module = sig_tli top_level_item list
@@ -125,9 +124,9 @@ type sig_module = sig_tli top_level_item list
 and sig_tli =
   | TypeSigDef of kind_binder * shape * ty option
   | TermSigDef of core_ann binder * ty_use
-  | ModuleSigDef of module_sig_def
+(* | ModuleSigDef of module_sig_def *)
 
-and module_sig_def =
+(* and module_sig_def =
   { name : string
   ; interface : sig_module
-  }
+  } *)

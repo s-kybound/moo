@@ -1,12 +1,5 @@
 open Syntax
-
-type typed_ann = Typechecker.Bidir.tycheck_ann
-type typed_binder = typed_ann Ast.binder
-type typed_pattern = typed_ann Ast.pattern
-type typed_term = typed_ann Ast.term
-type typed_command = typed_ann Ast.command
-type typed_mod_tli = typed_ann Ast.mod_tli
-type typed_module = typed_ann Ast.module_
+open Typechecker.Bidir
 
 let tycheck_to_ir_unop (op : Ast.unop) : Ir.unop =
   match op with
@@ -150,8 +143,6 @@ let tycheck_command_of_module (defs : typed_module) : Ir.command =
     | [] -> end_cmd
     | Ast.Open _ :: rest -> aux rest end_cmd
     | Ast.Def (Ast.TypeDef _) :: rest -> aux rest end_cmd
-    | Ast.Def (Ast.ModuleDef _) :: _ ->
-      failwith "TODO: Nested modules not supported in typechecked AST to IR conversion"
     | Ast.Def (Ast.TermDef (b, term)) :: rest ->
       let rest_cmd = aux rest end_cmd in
       let ann, _ = term in

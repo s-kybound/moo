@@ -170,7 +170,7 @@ let get_usages_of_hole (frame : tycheck_hole_environment_frame) (var : 'a Ast.bi
 
 (* perform a co-debrujin conversion on a module *)
 let tycheck_module_of_ast (modu : Ast.core_ann Ast.module_) : typed_module =
-  let rec tycheck_module_of_ast_aux (top_level_defs : Ast.core_ann Ast.module_) env
+  let tycheck_module_of_ast_aux (top_level_defs : Ast.core_ann Ast.module_) env
     : typed_module
     =
     let rec tycheck_mod_tli_of_ast (def : Ast.core_ann Ast.mod_tli) env
@@ -184,9 +184,6 @@ let tycheck_module_of_ast (modu : Ast.core_ann Ast.module_) : typed_module =
         let tbinder = binder_with_ids binder None in
         Ast.TermDef (tbinder, tterm), new_env
       | Ast.TypeDef (kind_binder, ty) -> Ast.TypeDef (kind_binder, ty), env
-      | Ast.ModuleDef { name; program } ->
-        let tprogram = tycheck_module_of_ast_aux program env in
-        Ast.ModuleDef { name; program = tprogram }, env
       | Ast.Term term ->
         let tterm = tycheck_term_of_ast term env in
         Ast.Term tterm, env
@@ -882,10 +879,6 @@ let rec tycheck_mod_tli
   | Ast.TypeDef (tbinder, ty) ->
     let new_tydef_env = TyFrame { parent = tydef_env; var = tbinder; ty } in
     Ast.TypeDef (tbinder, ty), knowledge, new_tydef_env
-  | Ast.ModuleDef { name; program } ->
-    (* TODO: update outer tydef_env accessible space once Module namespacing is done *)
-    let tprogram, new_insights, _ = tycheck_module knowledge program tydef_env in
-    Ast.ModuleDef { name; program = tprogram }, new_insights, tydef_env
   | Ast.Term term ->
     let tterm, _, synth_knowledge = synthesize knowledge term tydef_env in
     Ast.Term tterm, synth_knowledge, tydef_env

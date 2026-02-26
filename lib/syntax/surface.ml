@@ -133,14 +133,13 @@ type module_open =
 type mod_tli =
   | TermDef of binder * term
   | TypeDef of kind_binder * ty
-  | ModuleDef of module_def
+  (* | ModuleDef of module_def *)
   | Term of term
 
-and module_def =
+(* and module_def =
   { name : string
   ; program : module_
-  }
-
+  } *)
 and 'a top_level_item =
   | Open of module_open
   | Def of 'a
@@ -152,9 +151,9 @@ type sig_module = sig_tli top_level_item list
 and sig_tli =
   | TypeSigDef of kind_binder * shape * ty option
   | TermSigDef of binder * ty_use
-  | ModuleSigDef of module_sig_def
+(* | ModuleSigDef of module_sig_def *)
 
-and module_sig_def =
+(* and module_sig_def =
   { name : string
   ; interface : sig_module
-  }
+  } *)

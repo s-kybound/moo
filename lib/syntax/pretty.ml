@@ -171,8 +171,6 @@ let rec show_mod_tli def =
     Printf.sprintf "let %s = %s" (show_binder binder) (show_term term)
   | TypeDef (kind_binder, ty) ->
     Printf.sprintf "type %s = %s" (show_kind_binder kind_binder) (show_ty ty)
-  | ModuleDef { name; program } ->
-    Printf.sprintf "module %s {\n%s\n}" name (show_program program)
   | Term term -> show_term term
 
 and show_open (mo : Surface.module_open) =

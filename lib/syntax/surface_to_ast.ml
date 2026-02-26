@@ -257,11 +257,6 @@ let rec surface_mod_tli_to_ast_mod_tli (def : Surface.mod_tli) : Ast.core_ann As
     let term = default_ann, term_node in
     Ast.TermDef (surface_binder_name_to_ast_binder name, term)
   | Surface.TypeDef (kind_binder, ty) -> Ast.TypeDef (kind_binder, surface_ty_to_ast_ty ty)
-  | Surface.ModuleDef module_def ->
-    Ast.ModuleDef
-      { name = module_def.name
-      ; program = surface_module_to_ast_module module_def.program
-      }
   | Surface.Term term -> Ast.Term (surface_term_to_ast_term term)
 
 and surface_module_to_ast_module (m : Surface.module_) : Ast.core_ann Ast.module_ =
@@ -276,11 +271,6 @@ let rec surface_sig_tli_to_ast_sig_tli (sig_def : Surface.sig_tli) : Ast.sig_tli
     (* typ will always be empty *)
     Ast.TermSigDef
       (surface_binder_name_to_ast_binder name, surface_ty_use_to_ast_ty_use ty_use)
-  | Surface.ModuleSigDef module_sig_def ->
-    Ast.ModuleSigDef
-      { name = module_sig_def.name
-      ; interface = surface_sig_module_to_ast_sig_module module_sig_def.interface
-      }
 
 and surface_sig_module_to_ast_sig_module (sig_mod : Surface.sig_module) : Ast.sig_module =
   List.map
