@@ -1,6 +1,7 @@
 %{
   open Surface
   open Loc
+  open Utils.Fresh
 
   let loc_of_lexing_pos (p : Lexing.position) : Loc.position =
     let file = if p.pos_fname = "" then None else Some p.pos_fname in
@@ -16,18 +17,8 @@
     Loc.mk (span_of startp endp) it
   ;;
 
-  module Gensym : sig
-    val make : string -> string
-  end = struct
-    let counter = ref 0
-    let make prefix =
-      let sym = Printf.sprintf "GENSYM%d_%s" !counter prefix in
-      counter := !counter + 1;
-      sym
-  end
-
   let term_binop startp endp op l_term r_term =
-    let name = Gensym.make "binop_out" in
+    let name = genvar "binop_out" in
     let out_term = mk_term startp endp (Variable (Base name)) in
     let arith_cmd = Bop { op; l_term; r_term; out_term } in
     let out_binder = { name = Var name; typ = None } in
@@ -35,7 +26,7 @@
     mk_term startp endp (Mu (out_binder, cmd))
 
   let term_unop startp endp op in_term =
-    let name = Gensym.make "unop_out" in
+    let name = genvar "unop_out" in
     let out_term = mk_term startp endp (Variable (Base name)) in
     let arith_cmd = Unop { op; in_term; out_term } in
     let out_binder = { name = Var name; typ = None } in

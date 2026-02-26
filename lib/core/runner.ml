@@ -1,4 +1,5 @@
 open Ir
+open Utils.Fresh
 
 (* generic runtime error *)
 exception RuntimeError of string
@@ -9,13 +10,6 @@ exception Exit of int64
 exception Not_implemented
 
 let force_term t : control_item list = [ T t; I Force ]
-let counter = ref 0
-
-let gensym s =
-  let name = Printf.sprintf "%s_%d" s !counter in
-  incr counter;
-  name
-;;
 
 let extend_env (env : environment_frame) (new_bindings : (name * value) list)
   : environment_frame
@@ -123,7 +117,7 @@ let eval_state (state : state) : program_step =
   end
   (* instructions *)
   | I Force :: c', VMu (name, mu_c, mu_s, mu_e) :: s', e ->
-    let k_name = gensym "k" in
+    let k_name = genvar "k" in
     let captured_mu = VMu (k_name, c', s', e) in
     let new_e = extend_env mu_e [ name, captured_mu ] in
     Step (mu_c, mu_s, new_e)

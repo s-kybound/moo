@@ -1,0 +1,4 @@
+(library
+ (name utils)
+ (public_name moo.utils)
+ (modules fresh))

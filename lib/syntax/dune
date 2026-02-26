@@ -1,7 +1,7 @@
 (library
  (name syntax)
  (public_name moo.syntax)
- (libraries menhirLib))
+ (libraries menhirLib moo.utils))
 
 (menhir
  (flags --table)

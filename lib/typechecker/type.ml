@@ -1,3 +1,4 @@
+open Utils.Fresh
 open Syntax.Ast
 
 type tydef_env =
@@ -38,12 +39,9 @@ let rec negate_tyu (ty_use : ty_use) : ty_use =
  * type's mode and shape information.
  *)
 module WeakTyu = struct
-  let new_meta_var : unit -> meta_var =
-    let counter = ref 0 in
-    fun () ->
-      let id = !counter in
-      counter := id + 1;
-      { id; cell = Inferred { constructor = None; raw_lower_bound = None } }
+  let new_meta_var () : meta_var =
+    let id = genint () in
+    { id; cell = Inferred { constructor = None; raw_lower_bound = None } }
   ;;
 
   let new_unknown_tyu () : ty_use =

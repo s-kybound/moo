@@ -28,7 +28,7 @@ let rec parse_module_aux
     let checkpoint = I.resume checkpoint in
     parse_module_aux lexbuf previous checkpoint
   | I.HandlingError env ->
-    let span = Some (Utils.get_lexing_span lexbuf) in
+    let span = Some (Loc_utils.get_lexing_span lexbuf) in
     let resume_pos = lexbuf.lex_curr_p in
     let message = get_parse_error env in
     (match previous with

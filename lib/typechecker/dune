@@ -1,4 +1,4 @@
 (library
  (name typechecker)
  (public_name moo.typechecker)
- (libraries moo.syntax))
+ (libraries moo.syntax moo.utils))

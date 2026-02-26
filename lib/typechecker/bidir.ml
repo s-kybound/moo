@@ -1,5 +1,6 @@
 open Syntax
 open Type
+open Utils.Fresh
 
 (* a cocontextual typechecker that analyses a given program *)
 
@@ -97,14 +98,6 @@ let pattern_with_empty_ids (pat : Ast.core_ann Ast.pattern) : typed_pattern =
   | Ast.Constr { pat_name; pat_args } ->
     Ast.Constr
       { pat_name; pat_args = List.map (fun b -> binder_with_ids b None) pat_args }
-;;
-
-let gen_int =
-  let counter = ref 0 in
-  fun () ->
-    let id = !counter in
-    counter := id + 1;
-    id
 ;;
 
 type tycheck_hole_environment_frame =
@@ -215,7 +208,7 @@ let tycheck_module_of_ast (modu : Ast.core_ann Ast.module_) : typed_module =
         let tbinder = binder_with_ids binder (Some unique_ids) in
         mk_term ann (Ast.Mu (tbinder, tcommand))
       | Ast.Variable original_name ->
-        let unique_id = gen_int () in
+        let unique_id = genint () in
         add_usage_to_hole env original_name unique_id;
         mk_term
           { (ann_with_unique_id unique_id) with loc = ann.loc }

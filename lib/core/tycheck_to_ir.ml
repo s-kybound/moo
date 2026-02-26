@@ -1,5 +1,6 @@
 open Syntax
 open Typechecker.Bidir
+open Utils.Fresh
 
 let tycheck_to_ir_unop (op : Ast.unop) : Ir.unop =
   match op with
@@ -27,18 +28,10 @@ let ast_name_to_ir_name (n : Ast.name) : Ir.name =
   | Namespaced _ -> failwith "TODO: namespacing in typechecked AST to IR conversion"
 ;;
 
-let gensym =
-  let counter = ref 0 in
-  fun prefix ->
-    let name = Printf.sprintf "%s_%d" prefix !counter in
-    incr counter;
-    name
-;;
-
 let binder_to_ir_name (b : typed_binder) : Ir.name =
   match b with
   | Ast.Var (_ann, name) -> name
-  | Ast.Wildcard _ann -> gensym "wildcard"
+  | Ast.Wildcard _ann -> genvar "wildcard"
 ;;
 
 let tycheck_to_ir_form (f : typed_pattern) : Ir.form =
@@ -160,7 +153,7 @@ let tycheck_command_of_module (defs : typed_module) : Ir.command =
       let rest_cmd = aux rest end_cmd in
       let ann, _ = term in
       let t = tycheck_to_ir_term term in
-      let rest_mu = Ir.Mu (gensym "toplevel", rest_cmd) in
+      let rest_mu = Ir.Mu (genvar "toplevel", rest_cmd) in
       let term_evaluated_left =
         match ann.ty with
         | Some tyu -> should_focus_left tyu

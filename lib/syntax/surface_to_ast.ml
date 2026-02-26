@@ -1,3 +1,5 @@
+open Utils.Fresh
+
 let default_ann : Ast.core_ann = Ast.empty_core_ann
 let ann_of_surface_loc (loc : Loc.span) : Ast.core_ann = { Ast.loc = Some loc }
 
@@ -82,14 +84,6 @@ and surface_raw_ty_to_ast_raw_ty (raw_ty : Surface.raw_ty) : Ast.raw_ty =
          variants)
 ;;
 
-let gensym =
-  let counter = ref 0 in
-  fun prefix ->
-    let name = Printf.sprintf "\"GENSYM%s_%d" prefix !counter in
-    incr counter;
-    name
-;;
-
 let surface_binder_name_to_ast_binder (bn : Surface.binder_name) : Ast.core_ann Ast.binder
   =
   match bn with
@@ -111,7 +105,7 @@ let surface_pattern_to_ast_pattern (pat : Surface.pattern)
     match binder.typ with
     | None -> acc_binders @ [ name ], acc_ty_uses
     | Some ty_use ->
-      let binder_name = gensym (Pretty.show_binder name) in
+      let binder_name = genvar (Pretty.show_binder name) in
       let binding_triple =
         Ast.Base binder_name, name, surface_ty_use_to_ast_ty_use ty_use
       in
@@ -121,7 +115,7 @@ let surface_pattern_to_ast_pattern (pat : Surface.pattern)
   match pat with
   | Surface.Binder { name; typ = Some ty_use } ->
     let name = surface_binder_name_to_ast_binder name in
-    let binder_name = gensym (Pretty.show_binder name) in
+    let binder_name = genvar (Pretty.show_binder name) in
     let binding_triple =
       Ast.Base binder_name, name, surface_ty_use_to_ast_ty_use ty_use
     in
@@ -155,7 +149,7 @@ and surface_term_to_ast_term_node (t : Surface.term) : Ast.core_ann Ast.term_nod
          }
       I prefer the second desugaring
     *)
-    let gensym_name = gensym "gensym" in
+    let gensym_name = gensym () in
     let gensym_var = mk_var ~loc:ann (Base gensym_name) in
     let gensym_binder = Ast.Var (default_ann, gensym_name) in
     let term = mk_ann ~loc:ann gensym_var (surface_ty_use_to_ast_ty_use ty_use) in
