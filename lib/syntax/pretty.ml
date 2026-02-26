@@ -59,7 +59,9 @@ and show_meta_var { id; cell } =
      * say what type it's meant to be *)
     begin match constructor, raw_lower_bound with
     | Some cons, Some raw ->
-      if cons then show_raw_ty raw else Printf.sprintf "destructor(%s)" (show_raw_ty raw)
+      if cons
+      then Printf.sprintf "inferred{%s}" (show_raw_ty raw)
+      else Printf.sprintf "inferred{destructor(%s)}" (show_raw_ty raw)
     | _, _ -> Printf.sprintf "?%d" id
     end
   | Unified tyu -> Printf.sprintf "%s" (show_ty_use tyu)

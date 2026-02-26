@@ -111,25 +111,21 @@ module Substitute = struct
   ;;
 end
 
+(* resolved - means there is no chance that the 
+ * type is as resolved as it can be
+ *)
 let rec tyu_is_resolved (tyu : ty_use) : bool =
   match tyu with
   | Polarised (_, ty) -> ty_is_resolved ty
   | AbstractIntroducer _ ->
     failwith "TODO: get resolver to ignore introduced abstract names"
-  | Abstract _ -> false
+  | Abstract _ -> failwith "TODO: get resolver to ignore introduced abstract names"
   | Weak { meta; _ } -> meta_var_is_resolved meta
 
 and meta_var_is_resolved m : bool =
   match m.cell with
-  | Inferred constraints ->
-    (* a meta var is unresolved if it has any unsolved constraints *)
-    begin match constraints.constructor, constraints.raw_lower_bound with
-    | Some _, Some raw_ty ->
-      (* if this doesn't resolve further against another ty_use, it will 
-       * stay an instantiation of data[cbv] raw type *)
-      raw_ty_is_resolved raw_ty
-    | _ -> false
-    end
+  (* inferred meta variables can be further resolved *)
+  | Inferred _ -> false
   | Unified tyu -> tyu_is_resolved tyu
 
 and ty_is_resolved (ty : ty) : bool =
@@ -168,7 +164,8 @@ let rec tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env)
     let mode, shape, raw_ty = ty_to_raw_ty ty tydef_env in
     mode, polarity, shape, raw_ty
   | Abstract _ -> assert false (* should not be called on abstract types *)
-  | AbstractIntroducer _ -> failwith "TODO"
+  | AbstractIntroducer (_, tyu) ->
+    tyu_to_raw_ty tyu tydef_env (* TODO - emit the information on the abstract variable *)
   | Weak { negated; meta } ->
   match meta.cell with
   | Unified tyu ->
@@ -177,41 +174,44 @@ let rec tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env)
     | Plus, true | Minus, false -> m, Minus, s, r
     | Minus, true | Plus, false -> m, Plus, s, r
     end
-  | Inferred constraints ->
-  match constraints.constructor, constraints.raw_lower_bound with
-  | Some is_constructor, Some raw_ty ->
-    if is_constructor <> negated
-    then By_value, Plus, Data, raw_ty
-    else By_value, Minus, Data, raw_ty
   | _ -> assert false
 ;;
 
-let rec is_constructor_tyu (tyu : ty_use) (tydef_env : tydef_env) : bool =
+let rec is_constructor_tyu ~update (tyu : ty_use) (tydef_env : tydef_env) : bool option =
   match tyu with
   (* TODO: semantics of abstract need to be redone due to abstract introducer *)
   | Abstract _ -> assert false
-  | AbstractIntroducer (_, tyu) -> is_constructor_tyu tyu tydef_env
+  | AbstractIntroducer (_, tyu) -> is_constructor_tyu ~update tyu tydef_env
   | Polarised (pol, ty) ->
     let _, shape, _ = ty_to_raw_ty ty tydef_env in
     (match pol, shape with
-     | Plus, Data | Minus, Codata -> true
-     | Plus, Codata | Minus, Data -> false)
+     | Plus, Data | Minus, Codata -> Some true
+     | Plus, Codata | Minus, Data -> Some false)
   | Weak { negated; meta } ->
   match meta.cell with
-  | Unified tyu ->
-    if negated
-    then not (is_constructor_tyu tyu tydef_env)
-    else is_constructor_tyu tyu tydef_env
+  | Unified tyu -> Option.map (( <> ) negated) (is_constructor_tyu ~update tyu tydef_env)
   | Inferred constraints ->
   (* be loose - if the constraint doesn't have a constructor flag, assume it's a constructor *)
   match constraints.constructor with
-  | Some is_constructor -> if negated then not is_constructor else is_constructor
+  | Some is_constructor -> Some (is_constructor <> negated)
   | None ->
-    if negated
-    then meta.cell <- Inferred { constraints with constructor = Some false }
-    else meta.cell <- Inferred { constraints with constructor = Some true };
-    true
+    if update
+    then None
+    else begin
+      let constructor_val = not negated in
+      meta.cell <- Inferred { constraints with constructor = Some constructor_val };
+      Some true
+    end
 ;;
+
+let is_constructor_tyu_forced tyu tydef_env =
+  match is_constructor_tyu ~update:true tyu tydef_env with
+  | Some is_constructor -> is_constructor
+  | None -> assert false (* should only be None if the tyu is an unknown variable *)
+;;
+
+(* we will have the standard is_constructor_tyu as a non-updating version *)
+let is_constructor_tyu = is_constructor_tyu ~update:false
 
 let rec tyu_equal (tyu1 : Syntax.Ast.ty_use) (tyu2 : Syntax.Ast.ty_use) tydef_env : bool =
   let compare_resolved tyu1 tyu2 =
@@ -328,13 +328,13 @@ and unify_weak_with_tyu
       match constraints.constructor, constraints.raw_lower_bound with
       | None, None -> true
       | Some is_constructor, None ->
-        is_constructor == is_constructor_tyu compared_tyu tydef_env
+        is_constructor == is_constructor_tyu_forced compared_tyu tydef_env
       | None, Some raw_ty ->
         let _, _, _, ty_raw_ty = tyu_to_raw_ty compared_tyu tydef_env in
         raw_ty_equal raw_ty ty_raw_ty tydef_env
       | Some is_constructor, Some raw_ty ->
         let _, _, _, ty_raw_ty = tyu_to_raw_ty compared_tyu tydef_env in
-        is_constructor == is_constructor_tyu compared_tyu tydef_env
+        is_constructor == is_constructor_tyu_forced compared_tyu tydef_env
         && raw_ty_equal raw_ty ty_raw_ty tydef_env
     in
     if unifiable then meta.cell <- Unified compared_tyu;

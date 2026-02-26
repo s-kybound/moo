@@ -9,7 +9,13 @@ exception
     ; message : string
     }
 
-exception Underspecified of string
+exception Underspecified
+
+exception
+  UnboundVariable of
+    { loc : Loc.span option
+    ; name : Ast.name
+    }
 
 let type_error ?loc message = raise (TypeError { loc; message })
 
@@ -439,8 +445,11 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
     let binder_tyu =
       match type_of_usages relevant_ids demands tydef_env with
       | Ok None ->
-        (* TODO: emit a warning or a failure that the binder is not used *)
-        WeakTyu.new_unknown_tyu ()
+        type_error
+          ?loc:ann.loc
+          (Printf.sprintf
+             "synthesize: recursive binder %s has no usages"
+             (Syntax.Pretty.show_binder tbinder))
       | Error msg -> type_error ?loc:ann.loc msg
       | Ok (Some ty_use) -> ty_use
     in
@@ -475,7 +484,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
                | Error msg -> type_error ?loc:ann.loc msg
                | Ok None -> cmd, Some (WeakTyu.new_unknown_tyu ()), command_knowledge
                | Ok (Some result) ->
-                 if not (Type.is_constructor_tyu result tydef_env)
+                 if not (Type.is_constructor_tyu_forced result tydef_env)
                  then type_error ?loc:ann.loc "variable is not a constructed item"
                  else cmd, Some (Type.negate_tyu result), command_knowledge
                end
@@ -585,7 +594,6 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
        let expr = ann, Ast.Matcher (List.rev new_branches) in
        annotate expr tyu, tyu, new_knowledge)
   | Ast.Construction { cons_name; cons_args } ->
-    (* Synthesize will depend on check here - leave the heavy work there *)
     let typ =
       type_of_namespaced_constructor cons_name (List.length cons_args) tydef_env
     in
@@ -706,7 +714,7 @@ and check
     let expr = ann, Ast.Mu (tbinder, cmd) in
     annotate expr expected_type, knowledge
   | Ast.Tuple terms ->
-    if not (Type.is_constructor_tyu expected_type tydef_env)
+    if not (Type.is_constructor_tyu_forced expected_type tydef_env)
     then
       type_mismatch
         ?loc:ann.loc
@@ -770,7 +778,7 @@ and check
     else
       type_mismatch ?loc:ann.loc expected_type ty_use "check: TConstruction type mismatch"
   | Ast.Arr terms ->
-    if not (Type.is_constructor_tyu expected_type tydef_env)
+    if not (Type.is_constructor_tyu_forced expected_type tydef_env)
     then
       type_mismatch
         ?loc:ann.loc
@@ -813,18 +821,7 @@ and typecheck_command
   in
   let ann, node = command in
   match node with
-  | Ast.Core { l_term; r_term } ->
-    (try typecheck_command_aux l_term r_term ann with
-     | Underspecified _msg ->
-       assert false
-       (* let _warning_msg =
-         Printf.sprintf
-           "typecheck_command: underspecified left term, trying right term. %s"
-           msg
-       in 
-        print_endline warning_msg; 
-       typecheck_command_aux r_term l_term ann *)
-     | e -> raise e)
+  | Ast.Core { l_term; r_term } -> typecheck_command_aux l_term r_term ann
   | Ast.Arith
       (Ast.Bop { op = top; l_term = tl_term; r_term = tr_term; out_term = tout_term }) ->
     let tout_term, out_ty_use, out_knowledge = synthesize knowledge tout_term tydef_env in
