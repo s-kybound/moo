@@ -1,6 +1,9 @@
 open Utils.Fresh
 open Ast
 
+exception TypeNotFound of name
+exception TypeInstantiationFailure of name * int * int
+
 type tydef_env =
   | Top
   | TyFrame of
@@ -11,15 +14,28 @@ type tydef_env =
 
 let lookup (name : name) (tydef_env : tydef_env) : ty * string list =
   match name with
-  | Base name ->
+  | Base n ->
     let rec aux env =
       match env with
-      | Top -> failwith "lookup: type not found in environment"
+      | Top -> raise (TypeNotFound name)
       | TyFrame { parent; var = ty_name, abstracts; ty } ->
-        if ty_name = name then ty, abstracts else aux parent
+        if ty_name = n then ty, abstracts else aux parent
     in
     aux tydef_env
   | Namespaced _ -> failwith "lookup: namespaced types not supported"
+;;
+
+let has_type_name (type_name : string) (tydef_env : tydef_env) : bool =
+  let rec aux env =
+    match env with
+    | Top -> false
+    | TyFrame { parent; var = bound_name, _; _ } -> bound_name = type_name || aux parent
+  in
+  aux tydef_env
+;;
+
+let has_binding ((type_name, _abstracts) : kind_binder) (tydef_env : tydef_env) : bool =
+  has_type_name type_name tydef_env
 ;;
 
 let rec negate_tyu (ty_use : ty_use) : ty_use =
@@ -111,7 +127,9 @@ module Substitute = struct
     | Named (name, ty_uses) ->
       let found_ty, abstracts = lookup name tydef_env in
       if List.length abstracts <> List.length ty_uses
-      then failwith "resolve_parameterized_ty: type parameter length mismatch"
+      then
+        raise
+          (TypeInstantiationFailure (name, List.length abstracts, List.length ty_uses))
       else (
         let bindings = List.combine abstracts ty_uses in
         ty_replace bindings found_ty)
@@ -340,8 +358,7 @@ and unify_weak_with_tyu
         is_constructor == is_constructor_tyu_forced compared_tyu tydef_env
         && raw_ty_equal raw_ty ty_raw_ty tydef_env
     in
-    if unifiable
-    then meta.cell <- Unified compared_tyu;
+    if unifiable then meta.cell <- Unified compared_tyu;
     unifiable
 
 and unify_constraints
@@ -451,7 +468,7 @@ let args_of_namespaced_variant (constr : name) (ty : ty) : ty_use list =
  * invariant: must be equal *)
 let most_specific_tyu (tyu1 : ty_use) (tyu2 : ty_use) (tydef_env : tydef_env) : ty_use =
   if not (tyu_equal tyu1 tyu2 tydef_env)
-  then failwith "most_specific_tyu: types are not equal, cannot determine most specific"
+  then failwith "most_specific_tyu: tyu1 and tyu2 are not equal"
   else (
     match tyu1, tyu2 with
     | Abstract _, Abstract _ -> tyu1 (* tyu_equal ensures that both are equal *)
@@ -461,4 +478,3 @@ let most_specific_tyu (tyu1 : ty_use) (tyu2 : ty_use) (tydef_env : tydef_env) : 
       failwith "TODO: most_specific_tyu does not yet support abstract introducers"
     | Weak _, tyu -> tyu)
 ;;
-(* should never be equal *)

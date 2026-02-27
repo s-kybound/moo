@@ -1,3 +1,8 @@
+(* Converts a surface syntax tree to the core AST form.
+ * Desugars and raises errors on illegal surface syntax,
+ * but leaves typechecking to later stages. 
+ *)
+
 open Utils.Fresh
 
 let default_ann : Ast.core_ann = Ast.empty_core_ann
@@ -102,14 +107,17 @@ let surface_pattern_to_ast_pattern (pat : Surface.pattern)
   =
   let binder_fold (acc_binders, acc_ty_uses) (binder : Surface.binder) =
     let name = surface_binder_name_to_ast_binder binder.name in
-    match binder.typ with
-    | None -> name :: acc_binders, acc_ty_uses
-    | Some ty_use ->
-      let binder_name = genvar (Pretty.show_binder name) in
-      let binding_triple =
-        Ast.Base binder_name, name, surface_ty_use_to_ast_ty_use ty_use
-      in
-      Ast.Var (default_ann, binder_name) :: acc_binders, binding_triple :: acc_ty_uses
+    if List.mem name acc_binders
+    then raise (Failure "Duplicate binder in pattern")
+    else (
+      match binder.typ with
+      | None -> name :: acc_binders, acc_ty_uses
+      | Some ty_use ->
+        let binder_name = genvar (Pretty.show_binder name) in
+        let binding_triple =
+          Ast.Base binder_name, name, surface_ty_use_to_ast_ty_use ty_use
+        in
+        Ast.Var (default_ann, binder_name) :: acc_binders, binding_triple :: acc_ty_uses)
   in
   match pat with
   | Surface.Binder { name; typ = Some ty_use } ->
@@ -141,25 +149,18 @@ and surface_term_to_ast_term_node (t : Surface.term) : Ast.core_ann Ast.term_nod
   match t.it with
   | Surface.Mu ({ name; typ = Some ty_use }, command) ->
     (*
-      { x : tyu -> command } is syntactic sugar for either
-      1. ( {x -> command} : neg(tyu) ) or
-      2. {
-            x_gensym -> 
-            let x <- (x_gensym : tyu) in
-            command
-         }
-      I prefer the second desugaring
+      { x : tyu -> command } is syntactic sugar for
+      ( {x -> command} : neg(tyu) ) or
     *)
-    let gensym_name = gensym () in
-    let gensym_var = mk_var ~loc:ann (Base gensym_name) in
-    let gensym_binder = Ast.Var (default_ann, gensym_name) in
-    let term = mk_ann ~loc:ann gensym_var (surface_ty_use_to_ast_ty_use ty_use) in
-    Ast.Mu
-      ( gensym_binder
-      , cutlet_let
-          (surface_binder_name_to_ast_binder name)
-          term
-          (surface_command_to_ast_command command) )
+    let ty_use = surface_ty_use_to_ast_ty_use ty_use in
+    let neg_tyu = Type.negate_tyu ty_use in
+    let mu =
+      mk_term
+        ~loc:ann
+        (Ast.Mu
+           (surface_binder_name_to_ast_binder name, surface_command_to_ast_command command))
+    in
+    Ast.Ann (mu, neg_tyu)
   | Surface.Mu ({ name; typ = None }, command) ->
     Ast.Mu (surface_binder_name_to_ast_binder name, surface_command_to_ast_command command)
   | Surface.Variable name -> Ast.Variable name
@@ -186,7 +187,11 @@ and surface_term_to_ast_term_node (t : Surface.term) : Ast.core_ann Ast.term_nod
     let ast_branches =
       List.map
         (fun (pat, cmd) ->
-           let ast_pat, binder_ty_uses = surface_pattern_to_ast_pattern pat in
+           let ast_pat, binder_ty_uses =
+             try surface_pattern_to_ast_pattern pat with
+             | Failure message ->
+               raise (Error.Syntax_error { span = Some t.loc; message })
+           in
            let ast_cmd =
              List.fold_left
                (fun acc_cmd (gensym_binder, original_binder, ty_use) ->

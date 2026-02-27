@@ -31,6 +31,59 @@ let type_mismatch ?loc expected actual msg =
   raise (TypeError { loc; message })
 ;;
 
+let validate_ty (ty : Ast.ty) (tydef_env : tydef_env) : (Ast.ty, string) result =
+  try
+    ignore (Substitute.resolve_parameterized_ty ty tydef_env);
+    Ok ty
+  with
+  | TypeNotFound name ->
+    Error (Printf.sprintf "Type not found: %s" (Pretty.show_name name))
+  | TypeInstantiationFailure (name, expected, actual) ->
+    Error
+      (Printf.sprintf
+         "Type instantiation failure: %s expected %d parameters but got %d"
+         (Pretty.show_name name)
+         expected
+         actual)
+  | e ->
+    Error
+      (Printf.sprintf "Unknown error during type validation: %s" (Printexc.to_string e))
+;;
+
+let rec validate_tyu (tyu : Ast.ty_use) (tydef_env : tydef_env)
+  : (Ast.ty_use, string) result
+  =
+  let validate_raw_ty raw =
+    validate_ty (Ast.Raw (Ast.By_value, Ast.Data, raw)) tydef_env
+  in
+  match tyu with
+  | Ast.Polarised (_, ty) -> begin
+    match validate_ty ty tydef_env with
+    | Ok _ -> Ok tyu
+    | Error msg -> Error msg
+  end
+  | Ast.AbstractIntroducer (_, inner_tyu) -> begin
+    match validate_tyu inner_tyu tydef_env with
+    | Ok _ -> Ok tyu
+    | Error msg -> Error msg
+  end
+  | Ast.Abstract _ -> Ok tyu
+  | Ast.Weak { meta; _ } ->
+  match meta.cell with
+  | Unified tyu -> begin
+    match validate_tyu tyu tydef_env with
+    | Ok _ -> Ok tyu
+    | Error msg -> Error msg
+  end
+  | Inferred { raw_lower_bound; _ } ->
+  match raw_lower_bound with
+  | None -> Ok tyu
+  | Some raw ->
+  match validate_raw_ty raw with
+  | Ok _ -> Ok tyu
+  | Error msg -> Error msg
+;;
+
 type tycheck_ann =
   { loc : Loc.span option
   ; ty : Ast.ty_use option
@@ -446,10 +499,17 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
     let terms, typs = List.rev terms, List.rev typs in
     let tyu = WeakTyu.new_constructor_tyu (Product typs) in
     annotate (ann, Ast.Tuple terms) tyu, tyu, new_knowledge
-  | Ast.Ann (tterm, ty_use) ->
-    let checked_term, demands = check knowledge tterm ty_use tydef_env in
-    (* we can remove the annotations here *)
-    checked_term, ty_use, demands
+  | Ast.Ann (tterm, ty_use) -> begin
+    match validate_tyu ty_use tydef_env with
+    | Error msg ->
+      type_error
+        ?loc:ann.loc
+        (Printf.sprintf "synthesize: annotation has invalid type: %s" msg)
+    | Ok _ ->
+      let checked_term, demands = check knowledge tterm ty_use tydef_env in
+      (* we can remove the annotations here *)
+      checked_term, ty_use, demands
+  end
   | Ast.Rec (tbinder, tterm) ->
     let expr, inferred_tyu, demands = synthesize knowledge tterm tydef_env in
     let relevant_ids = binder_ids_of_binder tbinder in
@@ -697,7 +757,9 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
        let tyu = WeakTyu.new_constructor_tyu (Array most_specific_term) in
        annotate expr tyu, tyu, total_knowledge)
 
-(* workflow - given demands, check an expression with a type and output discoveries *)
+(* workflow - given demands, check an expression with a type and output discoveries 
+ * invariant - the expected type is valid
+ *)
 and check
       (knowledge : context)
       (expr : typed_term)
@@ -705,8 +767,8 @@ and check
       (tydef_env : tydef_env)
   : typed_term * context
   =
-  let annotate_with_tyu expr = annotate expr expected_type in
   let ann, node = expr in
+  let annotate_with_tyu expr = annotate expr expected_type in
   match node with
   | Ast.Variable _ ->
     (match ann.unique_id with
@@ -723,7 +785,7 @@ and check
            "check: variable expected type mismatch"
        else (
          let best_tyu = Type.most_specific_tyu expected_type ty_use tydef_env in
-         annotate_with_tyu expr, add_to_context tydef_env unique_id best_tyu knowledge)
+         annotate expr best_tyu, add_to_context tydef_env unique_id best_tyu knowledge)
      | None ->
        annotate_with_tyu expr, add_to_context tydef_env unique_id expected_type knowledge)
   | Ast.Num _ ->
@@ -790,13 +852,20 @@ and check
                 (List.init (List.length terms) (fun _ -> WeakTyu.new_unknown_tyu ()))))
           "check: TTuple expected type mismatch"
       end)
-  | Ast.Ann (tterm, ty_use) ->
-    if not (tyu_equal ty_use expected_type tydef_env)
-    then type_mismatch ?loc:ann.loc expected_type ty_use "check: TAnn type mismatch"
-    else (
-      let most_specific_tyu = Type.most_specific_tyu expected_type ty_use tydef_env in
-      let checked_term, knowledge = check knowledge tterm most_specific_tyu tydef_env in
-      checked_term, knowledge)
+  | Ast.Ann (tterm, ty_use) -> begin
+    match validate_tyu ty_use tydef_env with
+    | Error msg ->
+      type_error
+        ?loc:ann.loc
+        (Printf.sprintf "check: annotation has invalid type: %s" msg)
+    | Ok _ ->
+      if not (tyu_equal ty_use expected_type tydef_env)
+      then type_mismatch ?loc:ann.loc expected_type ty_use "check: TAnn type mismatch"
+      else (
+        let most_specific_tyu = Type.most_specific_tyu expected_type ty_use tydef_env in
+        let checked_term, knowledge = check knowledge tterm most_specific_tyu tydef_env in
+        checked_term, knowledge)
+  end
   | Ast.Rec (tbinder, tterm) ->
     let new_demands =
       List.map (fun id -> id, expected_type) (binder_ids_of_binder tbinder)
@@ -945,8 +1014,16 @@ let rec tycheck_mod_tli
     in
     Ast.TermDef (tbinder, tterm), new_knowledge, tydef_env
   | Ast.TypeDef (tbinder, ty) ->
-    let new_tydef_env = TyFrame { parent = tydef_env; var = tbinder; ty } in
-    Ast.TypeDef (tbinder, ty), knowledge, new_tydef_env
+    (* for now, we reject duplicate type definitions - it is a lot easier to reason about :) *)
+    let ty_name, _ = tbinder in
+    if Type.has_binding tbinder tydef_env
+    then type_error (Printf.sprintf "type %s is already defined in this module" ty_name)
+    else (
+      match validate_ty ty tydef_env with
+      | Ok ty ->
+        let new_tydef_env = TyFrame { parent = tydef_env; var = tbinder; ty } in
+        Ast.TypeDef (tbinder, ty), knowledge, new_tydef_env
+      | Error e -> type_error (Printf.sprintf "in definition of type %s: %s" ty_name e))
   | Ast.Term term ->
     let tterm, _, synth_knowledge = synthesize knowledge term tydef_env in
     (* if the top level term returns an unknown type, it is most likely of form
@@ -999,3 +1076,26 @@ let tycheck_program (modu : Ast.core_ann Ast.module_) : typed_module * tydef_env
   let out, _, env = tycheck_module IMap.empty modu Top in
   out, env
 ;;
+
+let bidir_ann_show (ann : typed_ann) str : string =
+  let ty_str =
+    match ann.ty with
+    | None -> ""
+    | Some tyu -> Printf.sprintf "(inferred type: %s)" (Syntax.Pretty.show_ty_use tyu)
+  in
+  let id_str =
+    match ann.unique_id with
+    | None -> ""
+    | Some id -> Printf.sprintf "(unique id: %d)" id
+  in
+  let binder_id_str =
+    match ann.binder_ids with
+    | None -> ""
+    | Some ids ->
+      let ids_str = String.concat ", " (List.map string_of_int ids) in
+      Printf.sprintf "(binder ids: %s)" ids_str
+  in
+  Printf.sprintf "%s%s%s%s" ty_str id_str binder_id_str str
+;;
+
+let show_tychecked_program m = Syntax.Pretty.show_program ~ann_show:bidir_ann_show m
