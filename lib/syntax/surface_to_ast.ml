@@ -71,7 +71,7 @@ let rec recursive_definition_is_guarded rec_binder body : bool =
   | _, Ast.Exit -> true
   (* invariant - the inner recursive term has already been checked to be guarded *)
   | _, Ast.Rec (Ast.Var (_, name), term) ->
-    if name = rec_binder then false else recursive_definition_is_guarded rec_binder term
+    if name = rec_binder then true else recursive_definition_is_guarded rec_binder term
   | _, Ast.Rec (Ast.Wildcard _, term) -> recursive_definition_is_guarded rec_binder term
 ;;
 

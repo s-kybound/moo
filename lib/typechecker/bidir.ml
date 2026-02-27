@@ -401,6 +401,72 @@ let tycheck_module_of_ast (modu : Ast.core_ann Ast.module_) : typed_module =
   tycheck_module_of_ast_aux modu Top
 ;;
 
+(* check if a recursive name in a recursive term appears in an unguarded position, outside
+ * of a destructor. This is because destructors are considered inert.
+ * if it does, the entire type must be lazily constructed
+ *)
+let recursive_name_in_unguarded_position (name : string) (term : typed_term) : bool =
+  (* invariant - aux_term is only called on terms that are not in guarded positions *)
+  let rec aux_term (term : typed_term) : bool =
+    let _, node = term in
+    match node with
+    | Ast.Variable (Base name') -> name = name'
+    | Ast.Variable (Namespaced _) -> false
+    | Ast.Construction { cons_args; _ } -> List.exists aux_term cons_args
+    | Ast.Tuple terms -> List.exists aux_term terms
+    | Ast.Matcher _ -> false
+    | Ast.Num _ -> false
+    | Ast.Rec (tbinder, tterm) -> begin
+      match tbinder with
+      | Ast.Var (_, name') -> if name = name' then false else aux_term tterm
+      | Ast.Wildcard _ -> aux_term tterm
+    end
+    | Ast.Arr terms -> List.exists aux_term terms
+    | Ast.Ann (term, _) -> aux_term term
+    | Ast.Exit -> false
+    | Ast.Mu (tbinder, command) ->
+    match tbinder with
+    | Ast.Var (_, binder_name) ->
+      if binder_name = name then false else aux_command command
+    | Ast.Wildcard _ -> aux_command command
+  and aux_command (command : typed_command) : bool =
+    let _, node = command in
+    match node with
+    | Ast.Core { l_term; r_term } -> aux_term l_term || aux_term r_term
+    | Ast.Fork (cmd1, cmd2) -> aux_command cmd1 || aux_command cmd2
+    | Ast.Arith arith_cmd ->
+    match arith_cmd with
+    | Ast.Unop { in_term; out_term; _ } -> aux_term in_term || aux_term out_term
+    | Ast.Bop { l_term; r_term; out_term; _ } ->
+      aux_term l_term || aux_term r_term || aux_term out_term
+  in
+  aux_term term
+;;
+
+(* used to determine whether a recursive binder is lazy. 
+ * if we can't determine whether it is lazy, assume it is not. *)
+let rec is_lazy_tyu tyu tydef_env =
+  match tyu with
+  | Ast.Weak { meta; negated } -> begin
+    match meta.cell with
+    | Unified tyu ->
+      let tyu_to_compare = if negated then Type.negate_tyu tyu else tyu in
+      is_lazy_tyu tyu_to_compare tydef_env
+    (* inferred types are always assumed to be data[cbv], so check if it is a destructor *)
+    | Inferred { constructor = Some is_constructor; _ } -> not (is_constructor <> negated)
+    | Inferred { constructor = None; _ } -> false
+  end
+  | Ast.Abstract _ -> false
+  | Ast.AbstractIntroducer (_, inner_tyu) -> is_lazy_tyu inner_tyu tydef_env
+  | Ast.Polarised (pol, ty) ->
+    let mode, _, _ = Type.ty_to_raw_ty ty tydef_env in
+    (match pol, mode with
+     | Plus, By_name -> true
+     | Minus, By_value -> true
+     | Plus, By_value -> false
+     | Minus, By_name -> false)
+;;
+
 module IMap = Map.Make (Int)
 
 type context = Ast.ty_use IMap.t
@@ -510,7 +576,8 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
       (* we can remove the annotations here *)
       checked_term, ty_use, demands
   end
-  | Ast.Rec (tbinder, tterm) ->
+  | Ast.Rec (Ast.Wildcard _, _) -> assert false
+  | Ast.Rec ((Ast.Var (_, name) as tbinder), tterm) ->
     let expr, inferred_tyu, demands = synthesize knowledge tterm tydef_env in
     let relevant_ids = binder_ids_of_binder tbinder in
     let binder_tyu =
@@ -518,9 +585,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
       | Ok None ->
         type_error
           ?loc:ann.loc
-          (Printf.sprintf
-             "synthesize: recursive binder %s has no usages"
-             (Syntax.Pretty.show_binder tbinder))
+          (Printf.sprintf "synthesize: recursive binder %s has no usages" name)
       | Error msg -> type_error ?loc:ann.loc msg
       | Ok (Some ty_use) -> ty_use
     in
@@ -532,12 +597,22 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
         inferred_tyu
         (Printf.sprintf
            "synthesize: recursive binder %s has type %s but body has type %s"
-           (Syntax.Pretty.show_binder tbinder)
+           name
            (Syntax.Pretty.show_ty_use binder_tyu)
            (Syntax.Pretty.show_ty_use inferred_tyu))
     else (
       let tyu = most_specific_tyu inferred_tyu binder_tyu tydef_env in
-      annotate expr tyu, tyu, demands)
+      if
+        recursive_name_in_unguarded_position name tterm && not (is_lazy_tyu tyu tydef_env)
+      then
+        type_error
+          ?loc:ann.loc
+          (Printf.sprintf
+             "synthesize: recursive binder %s appears in an unguarded position and has \
+              non-lazy type %s"
+             name
+             (Syntax.Pretty.show_ty_use tyu))
+      else annotate expr tyu, tyu, demands)
   | Ast.Mu (tbinder, tcommand) ->
     let tcommand, new_knowledge = typecheck_command knowledge tcommand tydef_env in
     let relevant_ids = binder_ids_of_binder tbinder in
@@ -867,7 +942,8 @@ and check
         let checked_term, knowledge = check knowledge tterm most_specific_tyu tydef_env in
         checked_term, knowledge)
   end
-  | Ast.Rec (tbinder, tterm) ->
+  | Ast.Rec (Ast.Wildcard _, _) -> assert false
+  | Ast.Rec ((Ast.Var (_, name) as tbinder), tterm) ->
     let new_demands =
       List.map (fun id -> id, expected_type) (binder_ids_of_binder tbinder)
     in
@@ -879,7 +955,18 @@ and check
     in
     let term, knowledge = check updated_knowledge tterm expected_type tydef_env in
     let expr = ann, Ast.Rec (tbinder, term) in
-    annotate expr expected_type, knowledge
+    if
+      recursive_name_in_unguarded_position name tterm
+      && not (is_lazy_tyu expected_type tydef_env)
+    then
+      type_error
+        ?loc:ann.loc
+        (Printf.sprintf
+           "check: recursive binder %s appears in an unguarded position and has non-lazy \
+            type %s"
+           name
+           (Syntax.Pretty.show_ty_use expected_type))
+    else annotate expr expected_type, knowledge
   | Ast.Matcher _ ->
     let t, ty_use, discoveries = synthesize knowledge expr tydef_env in
     if not (tyu_equal expected_type ty_use tydef_env)
