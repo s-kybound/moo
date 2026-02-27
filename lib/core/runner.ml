@@ -118,7 +118,11 @@ let eval_state (state : state) : program_step =
   (* instructions *)
   | I Force :: c', VMu (name, mu_c, mu_s, mu_e) :: s', e ->
     let k_name = genvar "k" in
-    let captured_mu = VMu (k_name, c', s', e) in
+    (* the captured mu has everything required, except it needs to resume with the 
+     * value of the rest of the continuation. 
+     * hence it captures the current continuation, and leaves a stack with the variable
+     * at the top of the stack *)
+    let captured_mu = VMu (k_name, T (Variable k_name) :: c', s', e) in
     let new_e = extend_env mu_e [ name, captured_mu ] in
     Step (mu_c, mu_s, new_e)
   | I Force :: c', v :: s', e ->
@@ -141,7 +145,7 @@ let eval_state (state : state) : program_step =
      | VNum _, VNum _ -> raise (AssertionError "cannot cut two numeric values")
      | VMatcher _, VMatcher _ -> raise (AssertionError "cannot cut two matcher values")
      (* exit semantics *)
-     | VExit, VNum n | VNum n, VExit -> Error (Exit n)
+     | VExit, VNum n | VNum n, VExit -> exit (Int64.to_int n)
      (* array semantics -- TODO *)
      (* match semantics *)
      | VMatcher (cases, match_e), adt | adt, VMatcher (cases, match_e) ->
