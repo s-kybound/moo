@@ -59,6 +59,16 @@ module WeakTyu = struct
     let constructor_tyu = new_constructor_tyu raw in
     negate_tyu constructor_tyu
   ;;
+
+  let is_unknown tyu =
+    match tyu with
+    | Weak { meta; _ } -> begin
+      match meta.cell with
+      | Inferred { constructor = None; raw_lower_bound = None } -> true
+      | _ -> false
+    end
+    | _ -> false
+  ;;
 end
 
 module Substitute = struct

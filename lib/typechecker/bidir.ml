@@ -370,6 +370,10 @@ let merge_contexts (ctx1 : context) (ctx2 : context) tydef_env : context =
     ctx2
 ;;
 
+let add_to_context tydef_env id tyu ctx =
+  merge_contexts ctx (IMap.singleton id tyu) tydef_env
+;;
+
 let type_of_usages (ids : int list) (ctx : context) (tydef_env : tydef_env)
   : (Ast.ty_use option, string) result
   =
@@ -413,7 +417,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
      | Some ty_use -> annotate_with ty_use, ty_use, knowledge
      | None ->
        let tyu = WeakTyu.new_unknown_tyu () in
-       let knowledge = IMap.add unique_id tyu knowledge in
+       let knowledge = add_to_context tydef_env unique_id tyu knowledge in
        annotate_with tyu, tyu, knowledge)
     (* let msg =
          Printf.sprintf
@@ -444,8 +448,8 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
     annotate (ann, Ast.Tuple terms) tyu, tyu, new_knowledge
   | Ast.Ann (tterm, ty_use) ->
     let checked_term, demands = check knowledge tterm ty_use tydef_env in
-    let expr = ann, Ast.Ann (checked_term, ty_use) in
-    annotate expr ty_use, ty_use, demands
+    (* we can remove the annotations here *)
+    checked_term, ty_use, demands
   | Ast.Rec (tbinder, tterm) ->
     let expr, inferred_tyu, demands = synthesize knowledge tterm tydef_env in
     let relevant_ids = binder_ids_of_binder tbinder in
@@ -571,7 +575,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
                      (fun ctx_acc (pat_arg, arg_ty) ->
                         let unique_ids = binder_ids_of_binder pat_arg in
                         List.fold_left
-                          (fun ctx_acc id -> IMap.add id arg_ty ctx_acc)
+                          (fun ctx_acc id -> add_to_context tydef_env id arg_ty ctx_acc)
                           ctx_acc
                           unique_ids)
                      demands
@@ -719,8 +723,9 @@ and check
            "check: variable expected type mismatch"
        else (
          let best_tyu = Type.most_specific_tyu expected_type ty_use tydef_env in
-         annotate_with_tyu expr, IMap.add unique_id best_tyu knowledge)
-     | None -> annotate_with_tyu expr, IMap.add unique_id expected_type knowledge)
+         annotate_with_tyu expr, add_to_context tydef_env unique_id best_tyu knowledge)
+     | None ->
+       annotate_with_tyu expr, add_to_context tydef_env unique_id expected_type knowledge)
   | Ast.Num _ ->
     let _, tyu, knowledge = synthesize knowledge expr tydef_env in
     if not (tyu_equal expected_type tyu tydef_env)
@@ -736,7 +741,7 @@ and check
     let tbinder_ty = Type.negate_tyu expected_type in
     let new_demands =
       List.fold_left
-        (fun acc id -> IMap.add id tbinder_ty acc)
+        (fun acc id -> add_to_context tydef_env id tbinder_ty acc)
         knowledge
         (binder_ids_of_binder tbinder)
     in
@@ -789,15 +794,18 @@ and check
     if not (tyu_equal ty_use expected_type tydef_env)
     then type_mismatch ?loc:ann.loc expected_type ty_use "check: TAnn type mismatch"
     else (
-      let term, knowledge = check knowledge tterm ty_use tydef_env in
-      let expr = ann, Ast.Ann (term, ty_use) in
-      annotate expr expected_type, knowledge)
+      let most_specific_tyu = Type.most_specific_tyu expected_type ty_use tydef_env in
+      let checked_term, knowledge = check knowledge tterm most_specific_tyu tydef_env in
+      checked_term, knowledge)
   | Ast.Rec (tbinder, tterm) ->
     let new_demands =
       List.map (fun id -> id, expected_type) (binder_ids_of_binder tbinder)
     in
     let updated_knowledge =
-      List.fold_left (fun acc (id, ty) -> IMap.add id ty acc) knowledge new_demands
+      List.fold_left
+        (fun acc (id, ty) -> add_to_context tydef_env id ty acc)
+        knowledge
+        new_demands
     in
     let term, knowledge = check updated_knowledge tterm expected_type tydef_env in
     let expr = ann, Ast.Rec (tbinder, term) in
@@ -931,7 +939,7 @@ let rec tycheck_mod_tli
     let tterm, inferred_ty, synth_knowledge = synthesize knowledge tterm tydef_env in
     let new_knowledge =
       List.fold_left
-        (fun acc id -> IMap.add id inferred_ty acc)
+        (fun acc id -> add_to_context tydef_env id inferred_ty acc)
         synth_knowledge
         (binder_ids_of_binder tbinder)
     in
@@ -941,7 +949,17 @@ let rec tycheck_mod_tli
     Ast.TypeDef (tbinder, ty), knowledge, new_tydef_env
   | Ast.Term term ->
     let tterm, _, synth_knowledge = synthesize knowledge term tydef_env in
-    Ast.Term tterm, synth_knowledge, tydef_env
+    (* if the top level term returns an unknown type, it is most likely of form
+     * { _ -> ... } where the hole is never used. In this case,
+     * we can assign it the data unit type.
+     *)
+    let ann, _ = tterm in
+    if WeakTyu.is_unknown (Option.get ann.ty)
+    then (
+      let unit_tyu = Ast.Polarised (Plus, Ast.Raw (By_value, Data, Product [])) in
+      let tterm, check_knowledge = check synth_knowledge tterm unit_tyu tydef_env in
+      Ast.Term tterm, check_knowledge, tydef_env)
+    else Ast.Term tterm, synth_knowledge, tydef_env
 
 and tycheck_module
       (knowledge : context)
