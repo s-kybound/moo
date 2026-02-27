@@ -1,5 +1,5 @@
 open Utils.Fresh
-open Syntax.Ast
+open Ast
 
 type tydef_env =
   | Top
@@ -211,7 +211,7 @@ let is_constructor_tyu_forced tyu tydef_env =
 (* we will have the standard is_constructor_tyu as a non-updating version *)
 let is_constructor_tyu = is_constructor_tyu ~update:false
 
-let rec tyu_equal (tyu1 : Syntax.Ast.ty_use) (tyu2 : Syntax.Ast.ty_use) tydef_env : bool =
+let rec tyu_equal (tyu1 : ty_use) (tyu2 : ty_use) tydef_env : bool =
   let compare_resolved tyu1 tyu2 =
     let mode1, polarity1, chirality1, raw_ty1 = tyu_to_raw_ty tyu1 tydef_env in
     let mode2, polarity2, chirality2, raw_ty2 = tyu_to_raw_ty tyu2 tydef_env in
@@ -272,19 +272,14 @@ let rec tyu_equal (tyu1 : Syntax.Ast.ty_use) (tyu2 : Syntax.Ast.ty_use) tydef_en
       then assert false (* everything here should be resolved *)
       else compare_resolved tyu1 tyu2)
 
-and ty_equal (ty1 : Syntax.Ast.ty) (ty2 : Syntax.Ast.ty) tydef_env : bool =
+and ty_equal (ty1 : ty) (ty2 : ty) tydef_env : bool =
   let mode1, shape1, raw_ty1 = ty_to_raw_ty ty1 tydef_env in
   let mode2, shape2, raw_ty2 = ty_to_raw_ty ty2 tydef_env in
   if mode1 <> mode2 || shape1 <> shape2
   then false
   else raw_ty_equal raw_ty1 raw_ty2 tydef_env
 
-and raw_ty_equal
-      (rty1 : Syntax.Ast.raw_ty)
-      (rty2 : Syntax.Ast.raw_ty)
-      (tydef_env : tydef_env)
-  : bool
-  =
+and raw_ty_equal (rty1 : raw_ty) (rty2 : raw_ty) (tydef_env : tydef_env) : bool =
   match rty1, rty2 with
   | Raw64, Raw64 -> true
   | Raw64, _ | _, Raw64 -> false
@@ -335,7 +330,8 @@ and unify_weak_with_tyu
         is_constructor == is_constructor_tyu_forced compared_tyu tydef_env
         && raw_ty_equal raw_ty ty_raw_ty tydef_env
     in
-    if unifiable then meta.cell <- Unified compared_tyu;
+    if unifiable
+    then meta.cell <- Unified compared_tyu;
     unifiable
 
 and unify_constraints
@@ -411,7 +407,7 @@ let type_of_raw_constructor
 (* given a constructor and a type, 
  * get the types of the constructor's arguments 
  ** invariant: type must match*)
-let args_of_raw_variant (constr : string) (ty : ty) : Syntax.Ast.ty_use list =
+let args_of_raw_variant (constr : string) (ty : ty) : ty_use list =
   match ty with
   | Raw (_, _, Variant variants) ->
     (match List.find_opt (fun (v : variant) -> v.constr_name = constr) variants with
@@ -432,7 +428,7 @@ let type_of_namespaced_constructor
       "TODO: namespacing resolution - namespace semantics have not been figured out"
 ;;
 
-let args_of_namespaced_variant (constr : name) (ty : ty) : Syntax.Ast.ty_use list =
+let args_of_namespaced_variant (constr : name) (ty : ty) : ty_use list =
   match constr with
   | Base name -> args_of_raw_variant name ty
   | Namespaced _ ->

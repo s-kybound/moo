@@ -354,7 +354,18 @@ type context = Ast.ty_use IMap.t
 
 let merge_contexts (ctx1 : context) (ctx2 : context) tydef_env : context =
   IMap.union
-    (fun _ tyu1 tyu2 -> Some (Type.most_specific_tyu tyu1 tyu2 tydef_env))
+    (fun id tyu1 tyu2 ->
+       if not (tyu_equal tyu1 tyu2 tydef_env)
+       then (
+         let msg =
+           Printf.sprintf
+             "merge_contexts: conflicting types for id %d: %s vs %s"
+             id
+             (Syntax.Pretty.show_ty_use tyu1)
+             (Syntax.Pretty.show_ty_use tyu2)
+         in
+         type_error msg)
+       else Some (Type.most_specific_tyu tyu1 tyu2 tydef_env))
     ctx1
     ctx2
 ;;
@@ -368,9 +379,8 @@ let type_of_usages (ids : int list) (ctx : context) (tydef_env : tydef_env)
        | Error _, _ -> acc
        | Ok None, result | Ok result, None -> Ok result
        | Ok (Some tyu), Some tyu' ->
-         if tyu_equal tyu tyu' tydef_env
-         then Ok (Some (Type.most_specific_tyu tyu tyu' tydef_env))
-         else (
+         if not (tyu_equal tyu tyu' tydef_env)
+         then (
            let msg =
              Printf.sprintf
                "type_of_usages: conflicting types for id %d: %s vs %s"
@@ -378,7 +388,8 @@ let type_of_usages (ids : int list) (ctx : context) (tydef_env : tydef_env)
                (Syntax.Pretty.show_ty_use tyu)
                (Syntax.Pretty.show_ty_use tyu')
            in
-           Error msg))
+           Error msg)
+         else Ok (Some (Type.most_specific_tyu tyu tyu' tydef_env)))
     (Ok None)
     ids
 ;;
@@ -449,8 +460,20 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
       | Error msg -> type_error ?loc:ann.loc msg
       | Ok (Some ty_use) -> ty_use
     in
-    let tyu = most_specific_tyu inferred_tyu binder_tyu tydef_env in
-    annotate expr tyu, tyu, demands
+    if not (tyu_equal inferred_tyu binder_tyu tydef_env)
+    then
+      type_mismatch
+        ?loc:ann.loc
+        binder_tyu
+        inferred_tyu
+        (Printf.sprintf
+           "synthesize: recursive binder %s has type %s but body has type %s"
+           (Syntax.Pretty.show_binder tbinder)
+           (Syntax.Pretty.show_ty_use binder_tyu)
+           (Syntax.Pretty.show_ty_use inferred_tyu))
+    else (
+      let tyu = most_specific_tyu inferred_tyu binder_tyu tydef_env in
+      annotate expr tyu, tyu, demands)
   | Ast.Mu (tbinder, tcommand) ->
     let tcommand, new_knowledge = typecheck_command knowledge tcommand tydef_env in
     let relevant_ids = binder_ids_of_binder tbinder in
@@ -663,7 +686,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
     in
     (match most_specific_term with
      | None ->
-       let tyu = WeakTyu.new_unknown_tyu () in
+       let tyu = WeakTyu.new_constructor_tyu (Array (WeakTyu.new_unknown_tyu ())) in
        annotate expr tyu, tyu, total_knowledge
      | Some most_specific_term ->
        let expr = ann, Ast.Arr (List.rev new_terms) in
@@ -685,7 +708,19 @@ and check
     (match ann.unique_id with
      | None -> assert false
      | Some unique_id ->
-       annotate_with_tyu expr, IMap.add unique_id expected_type knowledge)
+     match IMap.find_opt unique_id knowledge with
+     | Some ty_use ->
+       if not (tyu_equal expected_type ty_use tydef_env)
+       then
+         type_mismatch
+           ?loc:ann.loc
+           expected_type
+           ty_use
+           "check: variable expected type mismatch"
+       else (
+         let best_tyu = Type.most_specific_tyu expected_type ty_use tydef_env in
+         annotate_with_tyu expr, IMap.add unique_id best_tyu knowledge)
+     | None -> annotate_with_tyu expr, IMap.add unique_id expected_type knowledge)
   | Ast.Num _ ->
     let _, tyu, knowledge = synthesize knowledge expr tydef_env in
     if not (tyu_equal expected_type tyu tydef_env)
