@@ -89,6 +89,50 @@ let parse_to_core_ast ?k input =
   |> Surface_to_ast.surface_module_to_ast_module
 ;;
 
+module Command = struct
+  type t =
+    | Quit
+    | Help
+    | Step of string
+    | Show of string
+    | Not_a_command
+
+  let completions =
+    [ [ "!q"; "!quit"; "!exit" ], [], "Exit REPL"
+    ; [ "!help" ], [], "Show help"
+    ; [ "!step" ], [ "prog" ], "Step through program"
+    ; [ "!show" ], [ "prog" ], "Visualize given program"
+    ]
+  ;;
+
+  let show_help () =
+    Printf.printf "Commands:\n%!";
+    List.iter
+      (fun (cmds, args, desc) ->
+         let cmd_str =
+           cmds
+           |> List.map (fun c ->
+             c ^ if args = [] then "" else " " ^ String.concat " " args)
+           |> String.concat ", "
+         in
+         Printf.printf "  %s - %s\n%!" cmd_str desc)
+      completions
+  ;;
+
+  let parse line =
+    let line = String.trim line in
+    if line = "!q" || line = "!quit" || line = "!exit"
+    then Quit
+    else if line = "!help"
+    then Help
+    else if String.starts_with ~prefix:"!step " line
+    then Step (String.sub line 6 (String.length line - 6))
+    else if String.starts_with ~prefix:"!show " line
+    then Show (String.sub line 6 (String.length line - 6))
+    else Not_a_command
+  ;;
+end
+
 let eval_module input =
   let tychecked, _ = Typechecker.Bidir.tycheck_program input in
   let converted = Core.Tycheck_to_ir.tycheck_command_of_module tychecked in
@@ -116,7 +160,7 @@ let step_module input =
       | None -> ()
       | Some s ->
       match String.trim s with
-      | "\\q" | "\\quit" | "\\exit" -> ()
+      | "!q" | "!quit" | "!exit" -> ()
       | _ ->
         let next_state = eval_state state in
         step_loop (rest @ [ next_state ])
@@ -135,7 +179,7 @@ let step_module input =
   let converted = Core.Tycheck_to_ir.tycheck_command_of_module tychecked in
   let converted = Core.Runner.state_of_command converted in
   Printf.printf
-    "Stepping through program. Press any key to step through the program, \\q to quit\n%!";
+    "Stepping through program. Press any key to step through the program, !q to quit\n%!";
   step_loop [ Step converted ]
 ;;
 
@@ -150,7 +194,8 @@ let init_repl () =
     LNoise.set_completion_callback (fun line_so_far ln_completions ->
       if line_so_far = ""
       then
-        [ ":q"; ":quit"; ":exit"; ":help"; ":step"; ":show"; ":clear"; ":load" ]
+        Command.completions
+        |> List.concat_map (fun (cmds, _, _) -> cmds)
         |> List.iter (LNoise.add_completion ln_completions)
       else
         State.get_history ()
@@ -191,35 +236,27 @@ let rec repl_loop (kont : (Error.kont * (Ast.core_ann Ast.module_ -> 'a) * strin
     print_endline "\nGoodbye!";
     exit 0
   | Some line ->
+    let command = Command.parse line in
     add_to_history line;
-    (match String.trim line, kont with
-     | "", None -> repl_loop kont
-     | "", Some (k, f, previous_input) ->
+    (match kont, command with
+     | _, Command.Quit ->
+       print_endline "Goodbye!";
+       exit 0
+     | _, Command.Help ->
+       Command.show_help ();
+       repl_loop kont
+     | None, Command.Step expr ->
+       attempt_eval expr step_module;
+       repl_loop None
+     | None, Command.Show expr ->
+       attempt_eval expr print_ast;
+       repl_loop None
+     | Some (k, f, previous_input), _ ->
        (* we need to consider the newlines here for correctness *)
        attempt_eval ~previous_input ~k line f;
        repl_loop None
-     | "\\q", _ | "\\quit", _ | "\\exit", _ ->
-       print_endline "Goodbye!";
-       exit 0
-     | "\\help", _ ->
-       print_endline "Commands:";
-       print_endline "  \\q, \\quit, \\exit   Exit REPL";
-       print_endline "  \\show <program>      Visualize the expression";
-       print_endline "  \\help                Show this help";
-       print_endline "  \\step <program>      Step through the program (not implemented)";
-       repl_loop kont
-     | l, None when String.starts_with ~prefix:"\\step " l ->
-       let expr = String.sub l 6 (String.length l - 6) in
-       attempt_eval expr step_module;
-       repl_loop None
-     | l, None when String.starts_with ~prefix:"\\show " l ->
-       let expr = String.sub l 6 (String.length l - 6) in
-       attempt_eval expr print_ast;
-       repl_loop None
-     | _, Some (k, f, previous_input) ->
-       attempt_eval ~previous_input ~k line f;
-       repl_loop None
-     | _, None ->
+     | None, Command.Not_a_command when String.trim line = "" -> repl_loop kont
+     | None, Command.Not_a_command ->
        attempt_eval line eval_module;
        repl_loop None)
 ;;
@@ -227,7 +264,7 @@ let rec repl_loop (kont : (Error.kont * (Ast.core_ann Ast.module_ -> 'a) * strin
 let start_repl () =
   init_repl ();
   Printf.printf
-    "Welcome to moo %s.\nType \"\\help\" for more information.\n%!"
+    "Welcome to moo %s.\nType \"!help\" for more information.\n%!"
     Version.version;
   try repl_loop None with
   | Sys.Break ->
