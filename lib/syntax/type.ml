@@ -182,7 +182,7 @@ let ty_to_raw_ty (ty : ty) (tydef_env : tydef_env) : mode * shape * raw_ty =
 ;;
 
 (* invariant: this is only ever called on resolved tyus *)
-let rec tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env)
+let rec tyu_to_raw_ty_strict (tyu : ty_use) (tydef_env : tydef_env)
   : mode * polarity * shape * raw_ty
   =
   match tyu with
@@ -191,15 +191,42 @@ let rec tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env)
     mode, polarity, shape, raw_ty
   | Abstract _ -> assert false (* should not be called on abstract types *)
   | AbstractIntroducer (_, tyu) ->
-    tyu_to_raw_ty tyu tydef_env (* TODO - emit the information on the abstract variable *)
+    tyu_to_raw_ty_strict
+      tyu
+      tydef_env (* TODO - emit the information on the abstract variable *)
   | Weak { negated; meta } ->
   match meta.cell with
   | Unified tyu ->
-    let m, p, s, r = tyu_to_raw_ty tyu tydef_env in
+    let m, p, s, r = tyu_to_raw_ty_strict tyu tydef_env in
     begin match p, negated with
     | Plus, true | Minus, false -> m, Minus, s, r
     | Minus, true | Plus, false -> m, Plus, s, r
     end
+  | _ -> assert false
+;;
+
+(* returns whether the tyu is a constructor or destructor of
+ * some raw type *)
+let rec tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env) : bool * raw_ty =
+  match tyu with
+  | Polarised (polarity, ty) ->
+    let _, shape, raw_ty = ty_to_raw_ty ty tydef_env in
+    let is_constructor =
+      match polarity, shape with
+      | Plus, Data | Minus, Codata -> true
+      | Plus, Codata | Minus, Data -> false
+    in
+    is_constructor, raw_ty
+  | Abstract _ -> assert false (* should not be called on abstract types *)
+  | AbstractIntroducer (_, tyu) -> tyu_to_raw_ty tyu tydef_env
+  | Weak { negated; meta } ->
+  match meta.cell with
+  | Unified tyu ->
+    let is_cons, raw_ty = tyu_to_raw_ty tyu tydef_env in
+    is_cons <> negated, raw_ty
+  | Inferred { constructor; raw_lower_bound } ->
+  match constructor, raw_lower_bound with
+  | Some is_constructor, Some raw_ty -> is_constructor <> negated, raw_ty
   | _ -> assert false
 ;;
 
@@ -241,8 +268,8 @@ let is_constructor_tyu = is_constructor_tyu ~update:false
 
 let rec tyu_equal (tyu1 : ty_use) (tyu2 : ty_use) tydef_env : bool =
   let compare_resolved tyu1 tyu2 =
-    let mode1, polarity1, chirality1, raw_ty1 = tyu_to_raw_ty tyu1 tydef_env in
-    let mode2, polarity2, chirality2, raw_ty2 = tyu_to_raw_ty tyu2 tydef_env in
+    let mode1, polarity1, chirality1, raw_ty1 = tyu_to_raw_ty_strict tyu1 tydef_env in
+    let mode2, polarity2, chirality2, raw_ty2 = tyu_to_raw_ty_strict tyu2 tydef_env in
     if mode1 <> mode2 || polarity1 <> polarity2 || chirality1 <> chirality2
     then false
     else raw_ty_equal raw_ty1 raw_ty2 tydef_env
@@ -351,10 +378,10 @@ and unify_weak_with_tyu
       | Some is_constructor, None ->
         is_constructor == is_constructor_tyu_forced compared_tyu tydef_env
       | None, Some raw_ty ->
-        let _, _, _, ty_raw_ty = tyu_to_raw_ty compared_tyu tydef_env in
+        let _, _, _, ty_raw_ty = tyu_to_raw_ty_strict compared_tyu tydef_env in
         raw_ty_equal raw_ty ty_raw_ty tydef_env
       | Some is_constructor, Some raw_ty ->
-        let _, _, _, ty_raw_ty = tyu_to_raw_ty compared_tyu tydef_env in
+        let _, _, _, ty_raw_ty = tyu_to_raw_ty_strict compared_tyu tydef_env in
         is_constructor == is_constructor_tyu_forced compared_tyu tydef_env
         && raw_ty_equal raw_ty ty_raw_ty tydef_env
     in

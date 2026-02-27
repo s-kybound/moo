@@ -821,9 +821,10 @@ and check
            (Product (List.init (List.length terms) (fun _ -> WeakTyu.new_unknown_tyu ()))))
         "check: TTuple expected type mismatch"
     else (
-      let _, _, _, raw_ty = Type.tyu_to_raw_ty expected_type tydef_env in
-      begin match raw_ty with
-      | Product expected_tys ->
+      let is_constructor, raw_ty = Type.tyu_to_raw_ty expected_type tydef_env in
+      begin match is_constructor, raw_ty with
+      | false, _ -> assert false
+      | _, Product expected_tys ->
         if List.length terms <> List.length expected_tys
         then
           type_mismatch
@@ -899,9 +900,10 @@ and check
         (WeakTyu.new_constructor_tyu (Array (WeakTyu.new_unknown_tyu ())))
         "check: TArr expected type mismatch"
     else (
-      let _, _, _, raw_ty = Type.tyu_to_raw_ty expected_type tydef_env in
-      begin match raw_ty with
-      | Array expected_elem_ty ->
+      let is_constructor, raw_ty = Type.tyu_to_raw_ty expected_type tydef_env in
+      begin match is_constructor, raw_ty with
+      | false, _ -> assert false
+      | _, Array expected_elem_ty ->
         let new_terms, knowledge =
           List.fold_left
             (fun (terms, ctx_acc) term ->
