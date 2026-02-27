@@ -50,21 +50,30 @@ let rec show_ty_use tyu =
   | Abstract { negated; name } -> if negated then Printf.sprintf "~%s" name else name
   | AbstractIntroducer (name, ty_use) -> Printf.sprintf "[%s]%s" name (show_ty_use ty_use)
   | Weak { negated; meta } ->
-    if negated then Printf.sprintf "~%s" (show_meta_var meta) else show_meta_var meta
+  match describe_meta_var meta with
+  | `Unknown id ->
+    let prefix = if negated then "~" else "" in
+    Printf.sprintf "%s?%d" prefix id
+  | `Shaped (id, cons) ->
+    let shape = if cons <> negated then "constructor" else "destructor" in
+    Printf.sprintf "[inferred-?%d]%s" id shape
+  | `Inferred (id, constructor, raw) ->
+    let is_constructor = constructor <> negated in
+    Printf.sprintf
+      "[inferred-?%d]%sdata %s"
+      id
+      (if is_constructor then "+" else "-")
+      (show_raw_ty raw)
+  | `Unified tyu -> show_ty_use (Type.negate_tyu tyu)
 
-and show_meta_var { id; cell } =
+and describe_meta_var { id; cell } =
   match cell with
+  | Unified tyu -> `Unified tyu
   | Inferred { constructor; raw_lower_bound } ->
-    (* only case that matters is when we have enough information to 
-     * say what type it's meant to be *)
-    begin match constructor, raw_lower_bound with
-    | Some cons, Some raw ->
-      if cons
-      then Printf.sprintf "inferred{%s}" (show_raw_ty raw)
-      else Printf.sprintf "inferred{destructor(%s)}" (show_raw_ty raw)
-    | _, _ -> Printf.sprintf "?%d" id
-    end
-  | Unified tyu -> Printf.sprintf "%s" (show_ty_use tyu)
+  match constructor, raw_lower_bound with
+  | Some cons, Some raw -> `Inferred (id, cons, raw)
+  | Some cons, None -> `Shaped (id, cons)
+  | _, _ -> `Unknown id
 
 and show_ty ty =
   match ty with
@@ -103,77 +112,100 @@ let show_kind_binder (name, params) =
     Printf.sprintf "%s<%s>" name params_str
 ;;
 
-let show_binder binder =
+let show_binder ?(ann_show = fun _ s -> s) binder =
   match binder with
-  | Wildcard _ -> "_"
-  | Var (_, name) -> name
+  | Wildcard ann -> ann_show ann "_"
+  | Var (ann, name) -> ann_show ann name
 ;;
 
-let show_pattern pat =
+let show_pattern ~ann_show pat =
   match pat with
-  | Binder pb -> show_binder pb
+  | Binder pb -> show_binder ~ann_show pb
   | Constr { pat_name; pat_args } ->
-    let args_str = pat_args |> List.map show_binder |> String.concat ", " in
+    let args_str = pat_args |> List.map (show_binder ~ann_show) |> String.concat ", " in
     Printf.sprintf "%s(%s)" (show_name pat_name) args_str
   | Tup pats ->
-    let pats_str = pats |> List.map show_binder |> String.concat ", " in
+    let pats_str = pats |> List.map (show_binder ~ann_show) |> String.concat ", " in
     Printf.sprintf "(%s)" pats_str
   | Numeral n -> Int64.to_string n
 ;;
 
-let rec show_term (_, term) =
-  match term with
-  | Mu (binder, cmd) ->
-    Printf.sprintf "{ %s -> %s }" (show_binder binder) (show_command cmd)
-  | Variable name -> show_name name
-  | Construction { cons_name; cons_args } ->
-    let args_str = cons_args |> List.map show_term |> String.concat ", " in
-    Printf.sprintf "%s(%s)" (show_name cons_name) args_str
-  | Tuple terms ->
-    let terms_str = terms |> List.map show_term |> String.concat ", " in
-    Printf.sprintf "(%s)" terms_str
-  | Matcher arms ->
-    let show_arm (pat, cmd) =
-      Printf.sprintf "%s -> %s" (show_pattern pat) (show_command cmd)
-    in
-    Printf.sprintf "match { %s }" (arms |> List.map show_arm |> String.concat "|")
-  | Num n -> Int64.to_string n
-  | Rec (binder, body) ->
-    Printf.sprintf "rec |%s| %s" (show_binder binder) (show_term body)
-  | Arr terms ->
-    let terms_str = terms |> List.map show_term |> String.concat ", " in
-    Printf.sprintf "[%s]" terms_str
-  | Ann (term, tyu) -> Printf.sprintf "(%s : %s)" (show_term term) (show_ty_use tyu)
-  | Exit -> "exit"
+let rec show_term ~ann_show (ann, term) =
+  let term_str =
+    match term with
+    | Mu (binder, cmd) ->
+      Printf.sprintf
+        "{ %s -> %s }"
+        (show_binder ~ann_show binder)
+        (show_command ~ann_show cmd)
+    | Variable name -> show_name name
+    | Construction { cons_name; cons_args } ->
+      let args_str = cons_args |> List.map (show_term ~ann_show) |> String.concat ", " in
+      Printf.sprintf "%s(%s)" (show_name cons_name) args_str
+    | Tuple terms ->
+      let terms_str = terms |> List.map (show_term ~ann_show) |> String.concat ", " in
+      Printf.sprintf "(%s)" terms_str
+    | Matcher arms ->
+      let show_arm (pat, cmd) =
+        Printf.sprintf
+          "%s -> %s"
+          (show_pattern ~ann_show pat)
+          (show_command ~ann_show cmd)
+      in
+      Printf.sprintf "match { %s }" (arms |> List.map show_arm |> String.concat "|")
+    | Num n -> Int64.to_string n
+    | Rec (binder, body) ->
+      Printf.sprintf
+        "rec |%s| %s"
+        (show_binder ~ann_show binder)
+        (show_term ~ann_show body)
+    | Arr terms ->
+      let terms_str = terms |> List.map (show_term ~ann_show) |> String.concat ", " in
+      Printf.sprintf "[%s]" terms_str
+    | Ann (term, tyu) ->
+      Printf.sprintf "(%s : %s)" (show_term ~ann_show term) (show_ty_use tyu)
+    | Exit -> "exit"
+  in
+  ann_show ann term_str
 
-and show_command (_, cmd) =
-  match cmd with
-  | Fork (cmd1, cmd2) ->
-    Printf.sprintf "[%s | %s]" (show_command cmd1) (show_command cmd2)
-  | Core { l_term; r_term } ->
-    Printf.sprintf "%s . %s" (show_term l_term) (show_term r_term)
-  | Arith arith_cmd -> show_arith_command arith_cmd
+and show_command ~ann_show (ann, cmd) =
+  let cmd_str =
+    match cmd with
+    | Fork (cmd1, cmd2) ->
+      Printf.sprintf
+        "[%s | %s]"
+        (show_command ~ann_show cmd1)
+        (show_command ~ann_show cmd2)
+    | Core { l_term; r_term } ->
+      Printf.sprintf "%s . %s" (show_term ~ann_show l_term) (show_term ~ann_show r_term)
+    | Arith arith_cmd -> show_arith_command ~ann_show arith_cmd
+  in
+  ann_show ann cmd_str
 
-and show_arith_command arith_cmd =
+and show_arith_command ~ann_show arith_cmd =
   match arith_cmd with
   | Unop { op; in_term; out_term } ->
-    Printf.sprintf "%s(%s | %s)" (show_unop op) (show_term in_term) (show_term out_term)
+    Printf.sprintf
+      "%s(%s | %s)"
+      (show_unop op)
+      (show_term ~ann_show in_term)
+      (show_term ~ann_show out_term)
   | Bop { op; l_term; r_term; out_term } ->
     Printf.sprintf
       "%s(%s, %s | %s)"
       (show_bop op)
-      (show_term l_term)
-      (show_term r_term)
-      (show_term out_term)
+      (show_term ~ann_show l_term)
+      (show_term ~ann_show r_term)
+      (show_term ~ann_show out_term)
 ;;
 
-let rec show_mod_tli def =
+let rec show_mod_tli ~ann_show def =
   match def with
   | TermDef (binder, term) ->
-    Printf.sprintf "let %s = %s" (show_binder binder) (show_term term)
+    Printf.sprintf "let %s = %s" (show_binder ~ann_show binder) (show_term ~ann_show term)
   | TypeDef (kind_binder, ty) ->
     Printf.sprintf "type %s = %s" (show_kind_binder kind_binder) (show_ty ty)
-  | Term term -> show_term term
+  | Term term -> show_term ~ann_show term
 
 and show_open (mo : Surface.module_open) =
   match mo with
@@ -181,11 +213,11 @@ and show_open (mo : Surface.module_open) =
   | Use { mod_name; use_name } ->
     Printf.sprintf "use %s as %s" (show_name mod_name) use_name
 
-and show_program prog =
-  prog |> List.map (show_top_level_item show_mod_tli) |> String.concat "\n"
+and show_program ~ann_show prog =
+  prog |> List.map (show_top_level_item ~ann_show show_mod_tli) |> String.concat "\n"
 
-and show_top_level_item (show_mod_tli : 'a -> string) (tli : 'a Surface.top_level_item) =
+and show_top_level_item ~ann_show show_mod_tli (tli : 'a Surface.top_level_item) =
   match tli with
   | Open o -> show_open o
-  | Def d -> show_mod_tli d
+  | Def d -> show_mod_tli ~ann_show d
 ;;

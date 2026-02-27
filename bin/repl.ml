@@ -65,7 +65,10 @@ module State = struct
   ;;
 end
 
-let print_ast ast = Printf.printf "%s\n%!" (Pretty.show_program ast)
+let print_ast ?(ann_show = fun _ s -> s) ast =
+  Printf.printf "%s\n%!" (Pretty.show_program ~ann_show ast)
+;;
+
 let print_error msg = Printf.eprintf "Error: %s\n%!" msg
 
 let print_exception_with_context source exn =
@@ -134,8 +137,9 @@ module Command = struct
 end
 
 let eval_module input =
-  let tychecked, _ = Typechecker.Bidir.tycheck_program input in
-  let converted = Core.Tycheck_to_ir.tycheck_command_of_module tychecked in
+  let tychecked, tenv = Typechecker.Bidir.tycheck_program input in
+  (* print_ast ~ann_show:Typechecker.Bidir.bidir_ann_show tychecked; *)
+  let converted = Core.Tycheck_to_ir.tycheck_command_of_module tenv tychecked in
   let converted = Core.Runner.state_of_command converted in
   ignore (Core.Runner.eval_program converted)
 ;;
@@ -175,8 +179,8 @@ let step_module input =
       print_error "Step-through for Receive not implemented."
     | Error exn :: _ -> print_error (Printexc.to_string exn)
   in
-  let tychecked, _ = Typechecker.Bidir.tycheck_program input in
-  let converted = Core.Tycheck_to_ir.tycheck_command_of_module tychecked in
+  let tychecked, tenv = Typechecker.Bidir.tycheck_program input in
+  let converted = Core.Tycheck_to_ir.tycheck_command_of_module tenv tychecked in
   let converted = Core.Runner.state_of_command converted in
   Printf.printf
     "Stepping through program. Press any key to step through the program, !q to quit\n%!";
