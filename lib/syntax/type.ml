@@ -204,12 +204,12 @@ let rec is_constructor_tyu ~update (tyu : ty_use) (tydef_env : tydef_env) : bool
   | Some is_constructor -> Some (is_constructor <> negated)
   | None ->
     if update
-    then None
-    else begin
+    then begin
       let constructor_val = not negated in
       meta.cell <- Inferred { constraints with constructor = Some constructor_val };
       Some true
     end
+    else None
 ;;
 
 let is_constructor_tyu_forced tyu tydef_env =
