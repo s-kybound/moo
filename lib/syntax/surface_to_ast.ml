@@ -56,6 +56,25 @@ let cutlet_let
   mk_core ~loc l_term r_term
 ;;
 
+(* make sure that the recursive binder is not immediately used *)
+let rec recursive_definition_is_guarded rec_binder body : bool =
+  match body with
+  | _, Ast.Variable (Base name) -> not (name = rec_binder)
+  | _, Ast.Variable _ -> true
+  | _, Ast.Ann (t, _) -> recursive_definition_is_guarded rec_binder t
+  | _, Ast.Mu _ -> true
+  | _, Ast.Construction _ -> true
+  | _, Ast.Tuple _ -> true
+  | _, Ast.Matcher _ -> true
+  | _, Ast.Num _ -> true
+  | _, Ast.Arr _ -> true
+  | _, Ast.Exit -> true
+  (* invariant - the inner recursive term has already been checked to be guarded *)
+  | _, Ast.Rec (Ast.Var (_, name), term) ->
+    if name = rec_binder then false else recursive_definition_is_guarded rec_binder term
+  | _, Ast.Rec (Ast.Wildcard _, term) -> recursive_definition_is_guarded rec_binder term
+;;
+
 let rec surface_ty_use_to_ast_ty_use (tyu : Surface.ty_use) : Ast.ty_use =
   match tyu with
   | Surface.Polarised (pol, ty) -> Ast.Polarised (pol, surface_ty_to_ast_ty ty)
@@ -147,6 +166,12 @@ let rec surface_term_to_ast_term (t : Surface.term) : Ast.core_ann Ast.term =
 and surface_term_to_ast_term_node (t : Surface.term) : Ast.core_ann Ast.term_node =
   let ann = ann_of_surface_loc t.loc in
   match t.it with
+  | Surface.Num n -> Ast.Num n
+  | Surface.Variable name -> Ast.Variable name
+  | Surface.Arr terms -> Ast.Arr (List.map surface_term_to_ast_term terms)
+  | Surface.Ann (term, ty_use) ->
+    Ast.Ann (surface_term_to_ast_term term, surface_ty_use_to_ast_ty_use ty_use)
+  | Surface.Exit -> Ast.Exit
   | Surface.Mu ({ name; typ = Some ty_use }, command) ->
     (*
       { x : tyu -> command } is syntactic sugar for
@@ -163,7 +188,6 @@ and surface_term_to_ast_term_node (t : Surface.term) : Ast.core_ann Ast.term_nod
     Ast.Ann (mu, neg_tyu)
   | Surface.Mu ({ name; typ = None }, command) ->
     Ast.Mu (surface_binder_name_to_ast_binder name, surface_command_to_ast_command command)
-  | Surface.Variable name -> Ast.Variable name
   | Surface.Construction { cons_name; cons_args } ->
     Ast.Construction
       { cons_name; cons_args = List.map surface_term_to_ast_term cons_args }
@@ -206,23 +230,43 @@ and surface_term_to_ast_term_node (t : Surface.term) : Ast.core_ann Ast.term_nod
         branches
     in
     Ast.Matcher ast_branches
-  | Surface.Num n -> Ast.Num n
-  | Surface.Rec ({ name; typ = Some ty_use }, term) ->
-    (*
-      rec |x : typ| body is syntactic sugar for
-      ( rec |x| body : typ )
-    *)
-    Ast.Ann
-      ( mk_term
-          ~loc:ann
-          (Ast.Rec (surface_binder_name_to_ast_binder name, surface_term_to_ast_term term))
-      , surface_ty_use_to_ast_ty_use ty_use )
-  | Surface.Rec ({ name; typ = None }, term) ->
-    Ast.Rec (surface_binder_name_to_ast_binder name, surface_term_to_ast_term term)
-  | Surface.Arr terms -> Ast.Arr (List.map surface_term_to_ast_term terms)
-  | Surface.Ann (term, ty_use) ->
-    Ast.Ann (surface_term_to_ast_term term, surface_ty_use_to_ast_ty_use ty_use)
-  | Surface.Exit -> Ast.Exit
+  | Surface.Rec ({ name; typ }, term) ->
+    let new_name = surface_binder_name_to_ast_binder name in
+    let new_term = surface_term_to_ast_term term in
+    (match new_name with
+     | Ast.Wildcard _ ->
+       raise
+         (Error.Syntax_error
+            { span = ann.loc
+            ; message =
+                "Recursive definition cannot use wildcard binder: recursive variable \
+                 must be named"
+            })
+     | Ast.Var (_, s) ->
+       if not (recursive_definition_is_guarded s new_term)
+       then
+         raise
+           (Error.Syntax_error
+              { span = ann.loc
+              ; message =
+                  Printf.sprintf
+                    "Recursive definition is not guarded: recursive variable %s used \
+                     immediately in body"
+                    s
+              })
+       else (
+         match typ with
+         | None -> Ast.Rec (new_name, new_term)
+         | Some ty_use ->
+           (* rec |x : typ| body is syntactic sugar for
+            * ( rec |x| body : typ )
+            *)
+           Ast.Ann
+             ( mk_term
+                 ~loc:ann
+                 (Ast.Rec
+                    (surface_binder_name_to_ast_binder name, surface_term_to_ast_term term))
+             , surface_ty_use_to_ast_ty_use ty_use )))
 
 and surface_command_to_ast_command (cmd : Surface.command) : Ast.core_ann Ast.command =
   let node = surface_command_to_ast_command_node cmd in
