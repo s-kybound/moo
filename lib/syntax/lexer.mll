@@ -6,7 +6,7 @@
     Printf.ksprintf
       (fun message ->
         let span = Some (Loc_utils.get_lexing_span lexbuf) in
-        raise (Syntax_error 
+        raise (SyntaxError 
                 { span
                 ; message
                 })) 

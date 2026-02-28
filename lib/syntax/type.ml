@@ -100,10 +100,27 @@ module Substitute = struct
       | Some ty_use -> if negated then negate_tyu ty_use else ty_use
       | None -> target
     end
-    | Weak _ ->
-      (* weak type variables are an artifact of our type inference system.
-       * they do not exist in the type definitions that these replace functions are used for *)
-      assert false
+    | Weak { negated; meta } -> Weak { negated; meta = meta_var_replace bindings meta }
+
+  and meta_var_replace (bindings : (string * ty_use) list) (meta : meta_var) : meta_var =
+    match meta.cell with
+    | Unified tyu ->
+      let new_tyu = tyu_replace bindings tyu in
+      meta.cell <- Unified new_tyu;
+      meta
+    | Inferred cons ->
+      let constructor =
+        match cons.constructor with
+        | Some c -> Some c
+        | None -> None
+      in
+      let raw_lower_bound =
+        match cons.raw_lower_bound with
+        | Some r -> Some (raw_ty_replace bindings r)
+        | None -> None
+      in
+      meta.cell <- Inferred { constructor; raw_lower_bound };
+      meta
 
   and ty_replace (bindings : (string * ty_use) list) (target : ty) : ty =
     match target with
@@ -192,7 +209,14 @@ let rec tyu_to_raw_ty_strict (tyu : ty_use) (tydef_env : tydef_env)
   | Polarised (polarity, ty) ->
     let mode, shape, raw_ty = ty_to_raw_ty ty tydef_env in
     mode, polarity, shape, raw_ty
-  | Abstract _ -> assert false (* should not be called on abstract types *)
+  | Abstract { name; _ } ->
+    let message =
+      Printf.sprintf
+        "Cannot obtain modal, polarity information of an abstract type variable (name: \
+         %s)"
+        name
+    in
+    raise (Error.TypeError { loc = None; message })
   | AbstractIntroducer (_, tyu) ->
     tyu_to_raw_ty_strict
       tyu
@@ -205,7 +229,14 @@ let rec tyu_to_raw_ty_strict (tyu : ty_use) (tydef_env : tydef_env)
     | Plus, true | Minus, false -> m, Minus, s, r
     | Minus, true | Plus, false -> m, Plus, s, r
     end
-  | _ -> assert false
+  | Inferred _ ->
+    let message =
+      Printf.sprintf
+        "Cannot obtain modal, polarity information of weak type variable %s that has not \
+         been fully unified"
+        (Pretty.show_ty_use tyu)
+    in
+    raise (Error.TypeError { loc = None; message })
 ;;
 
 (* returns whether the tyu is a constructor or destructor of
@@ -220,7 +251,9 @@ let rec tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env) : bool * raw_ty =
       | Plus, Codata | Minus, Data -> false
     in
     is_constructor, raw_ty
-  | Abstract _ -> assert false (* should not be called on abstract types *)
+  | Abstract { name; _ } ->
+    let message = Printf.sprintf "Cannot convert abstract type %s to raw type" name in
+    raise (Error.TypeError { loc = None; message })
   | AbstractIntroducer (_, tyu) -> tyu_to_raw_ty tyu tydef_env
   | Weak { negated; meta } ->
   match meta.cell with
@@ -230,13 +263,27 @@ let rec tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env) : bool * raw_ty =
   | Inferred { constructor; raw_lower_bound } ->
   match constructor, raw_lower_bound with
   | Some is_constructor, Some raw_ty -> is_constructor <> negated, raw_ty
-  | _ -> assert false
+  | _ ->
+    let message =
+      Printf.sprintf
+        "Cannot convert weak type variable %s to raw type because it does not have \
+         enough constraints"
+        (Pretty.show_ty_use tyu)
+    in
+    raise (Error.TypeError { loc = None; message })
 ;;
 
 let rec is_constructor_tyu ~update (tyu : ty_use) (tydef_env : tydef_env) : bool option =
   match tyu with
   (* TODO: semantics of abstract need to be redone due to abstract introducer *)
-  | Abstract _ -> assert false
+  | Abstract { name; _ } ->
+    let message =
+      Printf.sprintf
+        "Cannot determine whether an abstract type variable %s is a constructor or \
+         destructor"
+        name
+    in
+    raise (Error.TypeError { loc = None; message })
   | AbstractIntroducer (_, tyu) -> is_constructor_tyu ~update tyu tydef_env
   | Polarised (pol, ty) ->
     let _, shape, _ = ty_to_raw_ty ty tydef_env in
@@ -263,8 +310,10 @@ let rec is_constructor_tyu ~update (tyu : ty_use) (tydef_env : tydef_env) : bool
 let is_constructor_tyu_forced tyu tydef_env =
   match is_constructor_tyu ~update:true tyu tydef_env with
   | Some is_constructor -> is_constructor
-  | None -> assert false (* should only be None if the tyu is an unknown variable *)
+  | None -> assert false
 ;;
+
+(* should only be None if the tyu is an unknown variable, but we only call this on tyus we know are constructors or destructors *)
 
 (* we will have the standard is_constructor_tyu as a non-updating version *)
 let is_constructor_tyu = is_constructor_tyu ~update:false
@@ -469,8 +518,19 @@ let args_of_raw_variant (constr : string) (ty : ty) : ty_use list =
   | Raw (_, _, Variant variants) ->
     (match List.find_opt (fun (v : variant) -> v.constr_name = constr) variants with
      | Some v -> v.constr_args
-     | None -> assert false)
-  | _ -> assert false
+     | None ->
+       let message =
+         Printf.sprintf "Constructor %s not found in type %s" constr (Pretty.show_ty ty)
+       in
+       raise (Error.TypeError { loc = None; message }))
+  | _ ->
+    let message =
+      Printf.sprintf
+        "Type %s is not a variant type, cannot get constructor %s's argument types"
+        (Pretty.show_ty ty)
+        constr
+    in
+    raise (Error.TypeError { loc = None; message })
 ;;
 
 let type_of_namespaced_constructor
@@ -558,7 +618,13 @@ let validate_tydef ((name, abstracts) : kind_binder) ty tydef_env =
       else ()
     | AbstractIntroducer (abstract_name, tyu) ->
       validate_tydef_tyu (abstract_name :: abs_vars) tyu
-    | Weak _ -> assert false (* not possible in a tydef *)
+    | Weak _ ->
+      let message =
+        Printf.sprintf
+          "Weak type variables are not allowed in type definitions (in type %s)"
+          name
+      in
+      raise (Error.TypeError { loc = None; message })
   in
   match ty with
   (* ensure that the type doesn't just name itself *)

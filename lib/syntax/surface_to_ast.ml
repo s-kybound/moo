@@ -213,8 +213,7 @@ and surface_term_to_ast_term_node (t : Surface.term) : Ast.core_ann Ast.term_nod
         (fun (pat, cmd) ->
            let ast_pat, binder_ty_uses =
              try surface_pattern_to_ast_pattern pat with
-             | Failure message ->
-               raise (Error.Syntax_error { span = Some t.loc; message })
+             | Failure message -> raise (Error.SyntaxError { span = Some t.loc; message })
            in
            let ast_cmd =
              List.fold_left
@@ -236,7 +235,7 @@ and surface_term_to_ast_term_node (t : Surface.term) : Ast.core_ann Ast.term_nod
     (match new_name with
      | Ast.Wildcard _ ->
        raise
-         (Error.Syntax_error
+         (Error.SyntaxError
             { span = ann.loc
             ; message =
                 "Recursive definition cannot use wildcard binder: recursive variable \
@@ -246,7 +245,7 @@ and surface_term_to_ast_term_node (t : Surface.term) : Ast.core_ann Ast.term_nod
        if not (recursive_definition_is_guarded s new_term)
        then
          raise
-           (Error.Syntax_error
+           (Error.SyntaxError
               { span = ann.loc
               ; message =
                   Printf.sprintf

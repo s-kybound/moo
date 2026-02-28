@@ -17,7 +17,7 @@ let rec parse_module_aux
   =
   match checkpoint with
   | I.Accepted v -> v
-  | I.Rejected -> raise (Syntax_error { span = None; message = "Parsing rejected" })
+  | I.Rejected -> raise (SyntaxError { span = None; message = "Parsing rejected" })
   | I.InputNeeded _env ->
     let token = Lexer.token lexbuf in
     let startp = lexbuf.lex_start_p
@@ -33,7 +33,7 @@ let rec parse_module_aux
     let message = get_parse_error env in
     (match previous with
      | Some (Parser.EOF, k) -> raise (Early_eof (k, resume_pos))
-     | _ -> raise (Syntax_error { span; message }))
+     | _ -> raise (SyntaxError { span; message }))
 ;;
 
 let parse_module (lexbuf : Lexing.lexbuf) =

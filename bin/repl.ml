@@ -77,16 +77,15 @@ let print_error msg = Printf.eprintf "Error: %s\n%!" msg
 
 let print_exception_with_context source exn =
   match exn with
-  | Error.Syntax_error { span = Some span; message } ->
+  | Error.SyntaxError { span = Some span; message } ->
     let snippet = Loc_utils.display_span source span in
     Printf.eprintf "%s\nSyntax Error: %s\n%!" snippet message
-  | Error.Syntax_error { span = None; message } ->
+  | Error.SyntaxError { span = None; message } ->
     Printf.eprintf "Syntax Error: %s\n%!" message
-  | Typechecker.Bidir.TypeError { loc = Some loc; message } ->
+  | Error.TypeError { loc = Some loc; message } ->
     let snippet = Loc_utils.display_span source loc in
     Printf.eprintf "%s\nType Error: %s\n%!" snippet message
-  | Typechecker.Bidir.TypeError { loc = None; message } ->
-    Printf.eprintf "Type Error: %s\n%!" message
+  | Error.TypeError { loc = None; message } -> Printf.eprintf "Type Error: %s\n%!" message
   | _ -> print_error (Printexc.to_string exn)
 ;;
 

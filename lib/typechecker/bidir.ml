@@ -4,12 +4,6 @@ open Utils.Fresh
 
 (* a cocontextual typechecker that analyses a given program *)
 
-exception
-  TypeError of
-    { loc : Loc.span option
-    ; message : string
-    }
-
 exception Underspecified
 
 exception
@@ -18,7 +12,7 @@ exception
     ; name : Ast.name
     }
 
-let type_error ?loc message = raise (TypeError { loc; message })
+let type_error ?loc message = raise (Syntax.Error.TypeError { loc; message })
 
 let type_mismatch ?loc expected actual msg =
   let message =
@@ -28,7 +22,7 @@ let type_mismatch ?loc expected actual msg =
       (Syntax.Pretty.show_ty_use actual)
       msg
   in
-  raise (TypeError { loc; message })
+  type_error ?loc message
 ;;
 
 let validate_ty (ty : Ast.ty) (tydef_env : tydef_env) : (Ast.ty, string) result =
@@ -530,7 +524,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
   match node with
   | Ast.Variable _ ->
     (match ann.unique_id with
-     | None -> assert false
+     | None -> assert false (* impossible case *)
      | Some unique_id ->
      match IMap.find_opt unique_id knowledge with
      | Some ty_use -> annotate_with ty_use, ty_use, knowledge
@@ -576,7 +570,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
       (* we can remove the annotations here *)
       checked_term, ty_use, demands
   end
-  | Ast.Rec (Ast.Wildcard _, _) -> assert false
+  | Ast.Rec (Ast.Wildcard _, _) -> assert false (* impossible case, rejected by syntax *)
   | Ast.Rec ((Ast.Var (_, name) as tbinder), tterm) ->
     let expr, inferred_tyu, demands = synthesize knowledge tterm tydef_env in
     let relevant_ids = binder_ids_of_binder tbinder in
@@ -747,7 +741,12 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
         branches
     in
     (match most_specific_type with
-     | None -> assert false
+     | None ->
+       let message =
+         Printf.sprintf
+           "synthesize: unable to determine type of matcher expression from branches"
+       in
+       type_error ?loc:ann.loc message
      | Some tyu ->
        let expr = ann, Ast.Matcher (List.rev new_branches) in
        annotate expr tyu, tyu, new_knowledge)
@@ -847,7 +846,7 @@ and check
   match node with
   | Ast.Variable _ ->
     (match ann.unique_id with
-     | None -> assert false
+     | None -> assert false (* impossible case *)
      | Some unique_id ->
      match IMap.find_opt unique_id knowledge with
      | Some ty_use ->
@@ -942,7 +941,7 @@ and check
         let checked_term, knowledge = check knowledge tterm most_specific_tyu tydef_env in
         checked_term, knowledge)
   end
-  | Ast.Rec (Ast.Wildcard _, _) -> assert false
+  | Ast.Rec (Ast.Wildcard _, _) -> assert false (* impossible case, rejected by syntax *)
   | Ast.Rec ((Ast.Var (_, name) as tbinder), tterm) ->
     let new_demands =
       List.map (fun id -> id, expected_type) (binder_ids_of_binder tbinder)
@@ -1201,3 +1200,14 @@ let bidir_ann_show (ann : typed_ann) str : string =
 ;;
 
 let show_tychecked_program m = Syntax.Pretty.show_program ~ann_show:bidir_ann_show m
+
+(**
+proc rec factorial(x : i64, k : -i64) {
+  match x {
+    | 1 -> 1 . k
+    | x -> (x * { out -> factorial.((x - 1), out) }) . k
+  }
+}
+
+
+*)

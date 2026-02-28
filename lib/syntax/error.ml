@@ -4,8 +4,14 @@ module I = Parser.MenhirInterpreter
 type kont = Surface.module_ I.checkpoint * Lexing.position
 
 exception
-  Syntax_error of
+  SyntaxError of
     { span : span option
+    ; message : string
+    }
+
+exception
+  TypeError of
+    { loc : span option
     ; message : string
     }
 

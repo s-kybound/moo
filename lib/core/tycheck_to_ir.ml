@@ -60,20 +60,34 @@ let rec should_focus_left (tyu : Ast.ty_use) (tydef_env : Type.tydef_env) : bool
   match meta.cell with
   | Unified tyu -> should_focus_left tyu tydef_env <> negated
   | Inferred { constructor = Some cons; _ } -> cons <> negated
-  | Inferred { constructor = None; _ } -> assert false
+  | Inferred { constructor = None; _ } ->
+    let message =
+      Printf.sprintf
+        "Cannot determine polarity of a weak type variable that has not been unified yet \
+         (meta var id: %d)"
+        meta.id
+    in
+    raise (Error.TypeError { loc = None; message })
+;;
+
+let term_focuses_left (t : typed_term) (tydef_env : Type.tydef_env) : bool =
+  let ann, _ = t in
+  match ann.ty with
+  | Some tyu -> should_focus_left tyu tydef_env
+  | None ->
+    let message =
+      Printf.sprintf
+        "Term %s does not have a type annotation, cannot determine focus direction"
+        (Pretty.show_term ~ann_show:(fun _ s -> s) t)
+    in
+    raise (Error.TypeError { loc = ann.loc; message })
 ;;
 
 let rec tycheck_to_ir_command tydef_env (c : typed_command) : Ir.command =
   let _ann, node = c in
   match node with
   | Ast.Core { l_term; r_term } ->
-    let focus_left =
-      let l_ann, _ = l_term in
-      match l_ann.ty with
-      | Some tyu -> should_focus_left tyu tydef_env
-      | None -> assert false
-    in
-    if focus_left
+    if term_focuses_left l_term tydef_env
     then
       Ir.Core
         { focus_term = tycheck_to_ir_term tydef_env l_term
@@ -86,13 +100,7 @@ let rec tycheck_to_ir_command tydef_env (c : typed_command) : Ir.command =
         }
   | Ast.Arith (Ast.Unop { out_term; _ } as a) | Ast.Arith (Ast.Bop { out_term; _ } as a)
     ->
-    let right_focus =
-      let out_ann, _ = out_term in
-      match out_ann.ty with
-      | Some tyu -> should_focus_left tyu tydef_env
-      | None -> assert false
-    in
-    let left_focus = not right_focus in
+    let left_focus = not (term_focuses_left out_term tydef_env) in
     begin match a with
     | Ast.Unop { op; in_term; out_term } ->
       Ir.Arith
@@ -116,8 +124,8 @@ let rec tycheck_to_ir_command tydef_env (c : typed_command) : Ir.command =
     Ir.Fork (tycheck_to_ir_command tydef_env c1, tycheck_to_ir_command tydef_env c2)
 
 and tycheck_to_ir_term tydef_env (t : typed_term) : Ir.term =
-  let ann, node = t in
-  let t =
+  let _ann, node = t in
+  let new_t =
     match node with
     | Ast.Mu (name, command) ->
       Ir.Mu (binder_to_ir_name name, tycheck_to_ir_command tydef_env command)
@@ -145,9 +153,7 @@ and tycheck_to_ir_term tydef_env (t : typed_term) : Ir.term =
     | Ast.Ann (term, _) -> tycheck_to_ir_term tydef_env term
     | Ast.Exit -> Ir.Exit
   in
-  match ann.ty with
-  | Some tyu -> if should_focus_left tyu tydef_env then Ir.NeedsForce t else t
-  | None -> assert false
+  if term_focuses_left t tydef_env then Ir.NeedsForce new_t else new_t
 ;;
 
 let tycheck_command_of_module tydef_env (defs : typed_module) : Ir.command =
@@ -158,28 +164,16 @@ let tycheck_command_of_module tydef_env (defs : typed_module) : Ir.command =
     | Ast.Def (Ast.TypeDef _) :: rest -> aux rest end_cmd
     | Ast.Def (Ast.TermDef (b, term)) :: rest ->
       let rest_cmd = aux rest end_cmd in
-      let ann, _ = term in
       let t = tycheck_to_ir_term tydef_env term in
       let rest_mu = Ir.Mu (binder_to_ir_name b, rest_cmd) in
-      let term_evaluated_left =
-        match ann.ty with
-        | Some tyu -> should_focus_left tyu tydef_env
-        | None -> assert false
-      in
-      if term_evaluated_left
+      if term_focuses_left term tydef_env
       then Ir.Core { focus_term = t; unfocus_term = rest_mu }
       else Ir.Core { focus_term = rest_mu; unfocus_term = t }
     | Ast.Def (Ast.Term term) :: rest ->
       let rest_cmd = aux rest end_cmd in
-      let ann, _ = term in
       let t = tycheck_to_ir_term tydef_env term in
       let rest_mu = Ir.Mu (genvar "toplevel", rest_cmd) in
-      let term_evaluated_left =
-        match ann.ty with
-        | Some tyu -> should_focus_left tyu tydef_env
-        | _ -> assert false
-      in
-      if term_evaluated_left
+      if term_focuses_left term tydef_env
       then Ir.Core { focus_term = t; unfocus_term = rest_mu }
       else Ir.Core { focus_term = rest_mu; unfocus_term = t }
   in
