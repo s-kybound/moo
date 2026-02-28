@@ -89,6 +89,9 @@ rule token = parse
   | '+'                       { PLUS }
   | '-'                       { MINUS }
   | '~'                       { NEG }
+  | '*'                       { STAR }
+  | '/'                       { SLASH }
+  | '%'                       { PERCENT }
   | number as num             { NUMBER (Int64.of_string num) }
   (* TODO: find a nicer way to handle parser conflicts than these few rules *)
   | any_ident as ns_id namespace_sep  
