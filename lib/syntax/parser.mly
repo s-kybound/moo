@@ -1,7 +1,6 @@
 %{
   open Surface
   open Loc
-  open Utils.Fresh
 
   let loc_of_lexing_pos (p : Lexing.position) : Loc.position =
     let file = if p.pos_fname = "" then None else Some p.pos_fname in
@@ -17,32 +16,13 @@
     Loc.mk (span_of startp endp) it
   ;;
 
-  let term_binop startp endp op l_term r_term =
-    let name = genvar "binop_out" in
-    let out_term = mk_term startp endp (Variable (Base name)) in
-    let arith_cmd = Bop { op; l_term; r_term; out_term } in
-    let out_binder = { name = Var name; typ = None } in
-    let cmd = mk_command startp endp (Arith arith_cmd) in
-    mk_term startp endp (Mu (out_binder, cmd))
-
-  let term_unop startp endp op in_term =
-    let name = genvar "unop_out" in
-    let out_term = mk_term startp endp (Variable (Base name)) in
-    let arith_cmd = Unop { op; in_term; out_term } in
-    let out_binder = { name = Var name; typ = None } in
-    let cmd = mk_command startp endp (Arith arith_cmd) in
-    mk_term startp endp (Mu (out_binder, cmd))
+  let mk_recursive (b : binder) (it : term) : term =
+    Loc.mk it.loc (Rec (b, it))
 
   let infer_mode shape =
     match shape with
     | Data -> By_value
     | Codata -> By_name
-
-  (* desugars procedures into pattern matchers *)
-  let make_proc startp endp binders body =
-    mk_term startp endp (Matcher [
-      (Tup binders, body)
-    ])
 %}
 
 %token <string> IDENT
@@ -118,10 +98,14 @@ untyped_binder:
 untyped_binder_strict:
   | name=IDENT                                          { { name = Var name; typ = None } }
 
+%inline
+abstract_list:
+  | LANGLE ts=separated_list(COMMA, CONSTRUCTOR_IDENT) RANGLE
+      { ts }
+  |   { [] }
+
 kind_binder:
-  | name=IDENT
-      { (name, []) }
-  | name=IDENT LANGLE ts=separated_list(COMMA, CONSTRUCTOR_IDENT) RANGLE
+  | name=IDENT ts=abstract_list
       { (name, ts) }
 
 %inline abstract_binder:
@@ -205,12 +189,12 @@ let_definition:
  * they are useful enough to be granted
  * native representation *)
 proc_definition:
-  | PROC b=untyped_binder_strict params=proc_binders body=proc_body
-      { TermDef (b, make_proc $startpos $endpos params body) }
-  | PROC REC b=untyped_binder_strict params=proc_binders body=proc_body
+  | PROC b=untyped_binder_strict ts=abstract_list params=proc_binders body=proc_body
+      { TermDef (b, mk_term $startpos $endpos (Proc (ts, params, body))) }
+  | PROC REC b=untyped_binder_strict ts=abstract_list params=proc_binders body=proc_body
       {
-        let proc = make_proc $startpos $endpos params body in
-        TermDef (b, mk_term $startpos $endpos (Rec (b, proc)))
+        let proc = mk_recursive b (mk_term $startpos $endpos (Proc (ts, params, body))) in
+        TermDef (b, proc)
       }
 
 proc_binders:
@@ -241,25 +225,22 @@ fork_command:
 
 (* sugared commands *)
 cutlet:
-  | MATCH l_term=indirect_term r_term=match_body
-      { mk_command $startpos $endpos (Core { l_term; r_term }) }
-  | LET b=binder RTLARROW l_term=term IN s=statement
+  | MATCH matched_term=indirect_term matcher_term=match_body
+      { mk_command $startpos $endpos (Matchlet { matched_term; matcher_term }) }
+  | LET b=binder RTLARROW t=term IN s=statement
       {
-        let r_term = mk_term $startpos $endpos (Mu (b, s)) in
-        mk_command $startpos $endpos (Core { l_term; r_term })
+        mk_command $startpos $endpos (Cutlet (b, t, s))
       }
   (* let rec... itself sugar over fixpoint terms *)
   | LET REC b=binder RTLARROW t=term IN s=statement
       {
-        let l_term = mk_term $startpos $endpos (Rec (b, t)) in
-        let r_term = mk_term $startpos $endpos (Mu (b, s)) in
-        mk_command $startpos $endpos (Core { l_term; r_term })
+        let t = mk_recursive b t in
+        mk_command $startpos $endpos (Cutlet (b, t, s))
       }
   (* ignored statement *)
   | ignored_term=term SEMICOLON rest=statement
-      { let ignored_binder = { name = Wildcard; typ = None } in
-        let r_term = mk_term $startpos $endpos (Mu (ignored_binder, rest)) in
-        mk_command $startpos $endpos (Core { l_term = ignored_term; r_term }) 
+      {
+        mk_command $startpos $endpos (Ignore (ignored_term, rest)) 
       }
 
 (* core commands and arithmetic operations *)
@@ -337,8 +318,8 @@ simple_number_term:
  * commands of numbers. For example,
  * 1 + 1 => { k -> +(1, 1 | k) } *)
 active_number_term:
-  | op=unop t=term %prec UNARY                          { term_unop $startpos $endpos op t }
-  | l=term op=bop r=term                                { term_binop $startpos $endpos op l r }
+  | op=unop t=term %prec UNARY                          { mk_term $startpos $endpos (UnopTerm (op, t)) }
+  | l=term op=bop r=term                                { mk_term $startpos $endpos (BopTerm (op, l, r)) }
 
 %inline unop:
   | MINUS                                               { Neg }

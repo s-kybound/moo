@@ -64,7 +64,8 @@ let rec show_ty_use tyu =
       id
       (if is_constructor then "+" else "-")
       (show_raw_ty raw)
-  | `Unified tyu -> show_ty_use (Type.negate_tyu tyu)
+  | `Unified tyu ->
+    if negated then Printf.sprintf "~(%s)" (show_ty_use tyu) else show_ty_use tyu
 
 and describe_meta_var { id; cell } =
   match cell with

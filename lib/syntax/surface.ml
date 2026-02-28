@@ -98,11 +98,20 @@ and term_node =
   | Rec of binder * term (* fixpoint term *)
   | Arr of term list
   | Ann of term * ty_use
+  | UnopTerm of unop * term
+  | BopTerm of bop * term * term
+  | Proc of string list * binder list * command
   | Exit
 
 and command = command_node Loc.located
 
 and command_node =
+  | Matchlet of
+      { matched_term : term
+      ; matcher_term : term
+      }
+  | Cutlet of binder * term * command
+  | Ignore of term * command
   | Core of
       { l_term : term
       ; r_term : term

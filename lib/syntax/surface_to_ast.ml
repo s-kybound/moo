@@ -56,6 +56,16 @@ let cutlet_let
   mk_core ~loc l_term r_term
 ;;
 
+let make_proc_type (abstracts : string list) (param_types : Ast.ty_use list) : Ast.ty_use =
+  let base_type =
+    Ast.Polarised (Ast.Plus, Ast.Raw (Ast.By_name, Ast.Codata, Ast.Product param_types))
+  in
+  List.fold_right
+    (fun abstract_name acc -> Ast.AbstractIntroducer (abstract_name, acc))
+    abstracts
+    base_type
+;;
+
 (* make sure that the recursive binder is not immediately used *)
 let rec recursive_definition_is_guarded rec_binder body : bool =
   match body with
@@ -192,43 +202,7 @@ and surface_term_to_ast_term_node (t : Surface.term) : Ast.core_ann Ast.term_nod
     Ast.Construction
       { cons_name; cons_args = List.map surface_term_to_ast_term cons_args }
   | Surface.Tuple terms -> Ast.Tuple (List.map surface_term_to_ast_term terms)
-  | Surface.Matcher branches ->
-    (*
-      desugar of
-      match {
-       | (x : ty) ... (z : ty) -> cmd
-      }
-      is
-
-      match {
-      | x_gensym ... z_gensym ->
-        let x <- (x_gensym : ty) in
-        ...
-        let z <- (z_gensym : ty) in
-        cmd
-      }    
-    *)
-    let ast_branches =
-      List.map
-        (fun (pat, cmd) ->
-           let ast_pat, binder_ty_uses =
-             try surface_pattern_to_ast_pattern pat with
-             | Failure message -> raise (Error.SyntaxError { span = Some t.loc; message })
-           in
-           let ast_cmd =
-             List.fold_left
-               (fun acc_cmd (gensym_binder, original_binder, ty_use) ->
-                  cutlet_let
-                    original_binder
-                    (mk_ann ~loc:ann (mk_var ~loc:ann gensym_binder) ty_use)
-                    acc_cmd)
-               (surface_command_to_ast_command cmd)
-               binder_ty_uses
-           in
-           ast_pat, ast_cmd)
-        branches
-    in
-    Ast.Matcher ast_branches
+  | Surface.Matcher branches -> Ast.Matcher (make_matcher_body ann branches)
   | Surface.Rec ({ name; typ }, term) ->
     let new_name = surface_binder_name_to_ast_binder name in
     let new_term = surface_term_to_ast_term term in
@@ -266,6 +240,82 @@ and surface_term_to_ast_term_node (t : Surface.term) : Ast.core_ann Ast.term_nod
                  (Ast.Rec
                     (surface_binder_name_to_ast_binder name, surface_term_to_ast_term term))
              , surface_ty_use_to_ast_ty_use ty_use )))
+  | Proc (abstracts, binders, body) ->
+    let typs =
+      List.map
+        (fun ({ typ; _ } : Surface.binder) ->
+           match typ with
+           | None ->
+             raise
+               (Error.SyntaxError
+                  { span = None; message = "Binder without type in procedure" })
+           | Some ty -> surface_ty_use_to_ast_ty_use ty)
+        binders
+    in
+    let proc_type = make_proc_type abstracts typs in
+    let untyped_proc =
+      mk_term ~loc:ann (Ast.Matcher (make_matcher_body ann [ Surface.Tup binders, body ]))
+    in
+    Ast.Ann (untyped_proc, proc_type)
+  | UnopTerm (op, in_term) ->
+    let out_name = genvar "unop_out" in
+    let out_term = mk_var ~loc:ann (Ast.Base out_name) in
+    let cmd =
+      mk_command
+        ~loc:ann
+        (Ast.Arith (Ast.Unop { op; in_term = surface_term_to_ast_term in_term; out_term }))
+    in
+    Ast.Mu (Ast.Var (ann, out_name), cmd)
+  | BopTerm (op, l_term, r_term) ->
+    let out_name = genvar "bop_out" in
+    let out_term = mk_var ~loc:ann (Ast.Base out_name) in
+    let cmd =
+      mk_command
+        ~loc:ann
+        (Ast.Arith
+           (Ast.Bop
+              { op
+              ; l_term = surface_term_to_ast_term l_term
+              ; r_term = surface_term_to_ast_term r_term
+              ; out_term
+              }))
+    in
+    Ast.Mu (Ast.Var (ann, out_name), cmd)
+
+and make_matcher_body ann branches =
+  (*
+      desugar of
+      match {
+       | (x : ty) ... (z : ty) -> cmd
+      }
+      is
+
+      match {
+      | x_gensym ... z_gensym ->
+        let x <- (x_gensym : ty) in
+        ...
+        let z <- (z_gensym : ty) in
+        cmd
+      }    
+    *)
+  List.map
+    (fun (pat, cmd) ->
+       let ast_pat, binder_ty_uses =
+         try surface_pattern_to_ast_pattern pat with
+         | Failure message -> raise (Error.SyntaxError { span = ann.loc; message })
+       in
+       let ast_cmd =
+         List.fold_right
+           (fun (gensym_binder, original_binder, ty_use) acc_cmd ->
+              cutlet_let
+                original_binder
+                (mk_ann ~loc:ann (mk_var ~loc:ann gensym_binder) ty_use)
+                acc_cmd)
+           binder_ty_uses
+           (surface_command_to_ast_command cmd)
+       in
+       ast_pat, ast_cmd)
+    branches
 
 and surface_command_to_ast_command (cmd : Surface.command) : Ast.core_ann Ast.command =
   let node = surface_command_to_ast_command_node cmd in
@@ -275,6 +325,36 @@ and surface_command_to_ast_command_node (cmd : Surface.command)
   : Ast.core_ann Ast.command_node
   =
   match cmd.it with
+  | Surface.Matchlet { matched_term; matcher_term } ->
+    Ast.Core
+      { l_term = surface_term_to_ast_term matched_term
+      ; r_term = surface_term_to_ast_term matcher_term
+      }
+  | Surface.Cutlet ({ name; typ }, term, command) ->
+    let l_term =
+      mk_term
+        ~loc:(ann_of_surface_loc cmd.loc)
+        (Ast.Mu
+           (surface_binder_name_to_ast_binder name, surface_command_to_ast_command command))
+    in
+    let r_term =
+      match typ with
+      | None -> surface_term_to_ast_term term
+      | Some ty_use ->
+        let t = surface_term_to_ast_term term in
+        let ann, _ = t in
+        mk_term ~loc:ann (Ast.Ann (t, surface_ty_use_to_ast_ty_use ty_use))
+    in
+    Ast.Core { l_term; r_term }
+  | Surface.Ignore (term, rest) ->
+    let l_term =
+      mk_term
+        ~loc:(ann_of_surface_loc cmd.loc)
+        (Ast.Mu
+           (Ast.Wildcard (ann_of_surface_loc cmd.loc), surface_command_to_ast_command rest))
+    in
+    let r_term = surface_term_to_ast_term term in
+    Ast.Core { l_term; r_term }
   | Surface.Core { l_term; r_term } ->
     Ast.Core
       { l_term = surface_term_to_ast_term l_term

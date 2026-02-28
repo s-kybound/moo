@@ -8,7 +8,7 @@ parse_program: UNIT
 ##
 ##
 
-In parse program, expected parse program.
+Malformed parse program'.
 
 parse_program: USE USE
 ##
@@ -20,7 +20,7 @@ parse_program: USE USE
 ## USE
 ##
 
-In open statement after use, expected module path as identifier.
+Malformed import/open statement. Expected a qualified name here. Use `use A.B as Alias` or `open A.B`.
 
 parse_program: OPEN NAMESPACE_IDENT USE
 ##
@@ -32,7 +32,7 @@ parse_program: OPEN NAMESPACE_IDENT USE
 ## NAMESPACE_IDENT
 ##
 
-In module path after namespace identifier, expected module path.
+Malformed qualified name. Expected a qualified name here.
 
 parse_program: USE CONSTRUCTOR_IDENT USE
 ##
@@ -44,7 +44,7 @@ parse_program: USE CONSTRUCTOR_IDENT USE
 ## USE namespaced(any_ident)
 ##
 
-In open statement after use module path, expected as identifier.
+Malformed import/open statement. Expected `as` here. Use `use A.B as Alias` or `open A.B`.
 
 parse_program: USE CONSTRUCTOR_IDENT AS USE
 ##
@@ -56,7 +56,7 @@ parse_program: USE CONSTRUCTOR_IDENT AS USE
 ## USE namespaced(any_ident) AS
 ##
 
-In open statement after use module path as, expected identifier.
+Malformed import/open statement. Expected an identifier here. Use `use A.B as Alias` or `open A.B`.
 
 parse_program: TYPE USE
 ##
@@ -68,20 +68,20 @@ parse_program: TYPE USE
 ## TYPE
 ##
 
-In type definition after type, expected type name (optionally with type parameters) = type expression.
+Malformed type definition. Expected a type name (and optional type parameters) here. Use `type name <...> = ...`.
 
 parse_program: CODATA IDENT USE
 ##
 ## Ends in an error in state: 11.
 ##
-## kind_binder -> IDENT . [ EQUALS ]
 ## kind_binder -> IDENT . LANGLE loption(separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT)) RANGLE [ EQUALS ]
+## kind_binder -> IDENT . [ EQUALS ]
 ##
 ## The known suffix of the stack is as follows:
 ## IDENT
 ##
 
-In type name (optionally with type parameters) after identifier, expected valid continuation.
+Malformed type binder. Expected `<`.
 
 parse_program: CODATA IDENT LANGLE USE
 ##
@@ -93,7 +93,7 @@ parse_program: CODATA IDENT LANGLE USE
 ## IDENT LANGLE
 ##
 
-In type name (optionally with type parameters) after identifier <, expected loption(separated nonempty list(comma,constructor ident)) >.
+Malformed type binder. Expected `=`.
 
 parse_program: CODATA IDENT LANGLE CONSTRUCTOR_IDENT USE
 ##
@@ -106,7 +106,7 @@ parse_program: CODATA IDENT LANGLE CONSTRUCTOR_IDENT USE
 ## CONSTRUCTOR_IDENT
 ##
 
-In separated nonempty list(comma,constructor ident) after constructor identifier, expected valid continuation.
+Expected `>`.
 
 parse_program: CODATA IDENT LANGLE CONSTRUCTOR_IDENT COMMA USE
 ##
@@ -118,7 +118,7 @@ parse_program: CODATA IDENT LANGLE CONSTRUCTOR_IDENT COMMA USE
 ## CONSTRUCTOR_IDENT COMMA
 ##
 
-In separated nonempty list(comma,constructor ident) after constructor identifier ,, expected separated nonempty list(comma,constructor ident).
+Expected `>`.
 
 parse_program: TYPE IDENT LANGLE RANGLE USE
 ##
@@ -130,7 +130,7 @@ parse_program: TYPE IDENT LANGLE RANGLE USE
 ## TYPE kind_binder
 ##
 
-In type definition after type type name (optionally with type parameters), expected = type expression.
+Malformed type definition. Expected `=` here. Use `type name <...> = ...`.
 
 parse_program: TYPE IDENT EQUALS USE
 ##
@@ -142,7 +142,7 @@ parse_program: TYPE IDENT EQUALS USE
 ## TYPE kind_binder EQUALS
 ##
 
-In type definition after type type name (optionally with type parameters) =, expected type expression.
+Malformed type definition. Expected a type expression here. Use `type name <...> = ...`.
 
 parse_program: CONSTRUCTOR_IDENT COLON NAMESPACE_IDENT USE
 ##
@@ -154,7 +154,7 @@ parse_program: CONSTRUCTOR_IDENT COLON NAMESPACE_IDENT USE
 ## NAMESPACE_IDENT
 ##
 
-In qualified identifier after namespace identifier, expected qualified identifier.
+Expected `use`, `_`, `type`, or `*`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_IDENT COLON LPAREN USE
 ##
@@ -166,7 +166,7 @@ parse_program: CONSTRUCTOR_IDENT COLON LPAREN USE
 ## LPAREN
 ##
 
-In type expression after (, expected type expression ).
+Malformed type expr. Expected a type expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_IDENT COLON LPAREN IDENT USE
 ##
@@ -185,7 +185,7 @@ parse_program: CONSTRUCTOR_IDENT COLON LPAREN IDENT USE
 ## In state 60, spurious reduction of production type_expr -> named_type
 ##
 
-In type expression after ( type expression, expected ).
+Malformed type expr. Expected `)` to close `(`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_IDENT COLON CODATA USE
 ##
@@ -198,7 +198,7 @@ parse_program: CONSTRUCTOR_IDENT COLON CODATA USE
 ## shape
 ##
 
-In shaped type after shape, expected mode raw type.
+Malformed shaped type. Expected a mode annotation, either `[cbv]` or `[cbn]` here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_IDENT COLON CODATA LPAREN USE
 ##
@@ -212,7 +212,7 @@ parse_program: CONSTRUCTOR_IDENT COLON CODATA LPAREN USE
 ## LPAREN
 ##
 
-In tuple type after (, expected ).
+Malformed tuple type. Expected `)` to close `(`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_IDENT COLON NEG USE
 ##
@@ -224,7 +224,7 @@ parse_program: CONSTRUCTOR_IDENT COLON NEG USE
 ## NEG
 ##
 
-In abstract type after neg, expected abstract type.
+Malformed abstract type. Expected `use`, `_`, `type`, or `*`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_IDENT COLON LBRACK USE
 ##
@@ -236,7 +236,7 @@ parse_program: CONSTRUCTOR_IDENT COLON LBRACK USE
 ## LBRACK
 ##
 
-In unify type aux after [, expected separated nonempty list(comma,abstract binder) ] type.
+Malformed unify type aux. Expected `use`, `_`, `type`, or `*`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_IDENT COLON LBRACK CONSTRUCTOR_IDENT USE
 ##
@@ -249,7 +249,7 @@ parse_program: CONSTRUCTOR_IDENT COLON LBRACK CONSTRUCTOR_IDENT USE
 ## CONSTRUCTOR_IDENT
 ##
 
-In separated nonempty list(comma,abstract binder) after constructor identifier, expected valid continuation.
+Expected `]`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_IDENT COLON LBRACK CONSTRUCTOR_IDENT COMMA USE
 ##
@@ -261,7 +261,7 @@ parse_program: CONSTRUCTOR_IDENT COLON LBRACK CONSTRUCTOR_IDENT COMMA USE
 ## CONSTRUCTOR_IDENT COMMA
 ##
 
-In separated nonempty list(comma,abstract binder) after constructor identifier ,, expected separated nonempty list(comma,abstract binder).
+Expected `]`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_IDENT COLON LBRACK CONSTRUCTOR_IDENT RBRACK USE
 ##
@@ -273,7 +273,7 @@ parse_program: CONSTRUCTOR_IDENT COLON LBRACK CONSTRUCTOR_IDENT RBRACK USE
 ## LBRACK separated_nonempty_list(COMMA,abstract_binder) RBRACK
 ##
 
-In unify type aux after [ separated nonempty list(comma,abstract binder) ], expected type.
+Malformed unify type aux. Expected `use`, `_`, `type`, or `*`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_IDENT COLON ABSTRACT USE
 ##
@@ -285,7 +285,7 @@ parse_program: CONSTRUCTOR_IDENT COLON ABSTRACT USE
 ## ABSTRACT
 ##
 
-In unify type after abstract, expected unify type aux.
+Malformed unify type. Expected `use`, `_`, `type`, or `*`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_IDENT COLON MINUS USE
 ##
@@ -297,7 +297,7 @@ parse_program: CONSTRUCTOR_IDENT COLON MINUS USE
 ## polarity
 ##
 
-In polarised type after polarity, expected type expression.
+Malformed polarised type. Expected a type expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_IDENT COLON IDENT UNIT
 ##
@@ -310,7 +310,7 @@ parse_program: CONSTRUCTOR_IDENT COLON IDENT UNIT
 ## namespaced(IDENT)
 ##
 
-In named type after qualified identifier, expected valid continuation.
+Malformed named type. Expected `use`, `_`, `type`, or `*`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_IDENT COLON IDENT LANGLE USE
 ##
@@ -322,7 +322,7 @@ parse_program: CONSTRUCTOR_IDENT COLON IDENT LANGLE USE
 ## namespaced(IDENT) LANGLE
 ##
 
-In named type after qualified identifier <, expected loption(separated nonempty list(comma,type use)) >.
+Malformed named type. Expected `use`, `_`, `type`, or `*`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_IDENT COLON IDENT LANGLE CONSTRUCTOR_IDENT UNIT
 ##
@@ -335,7 +335,7 @@ parse_program: CONSTRUCTOR_IDENT COLON IDENT LANGLE CONSTRUCTOR_IDENT UNIT
 ## type_use
 ##
 
-In separated nonempty list(comma,type use) after type, expected valid continuation.
+Expected `)` or `>`. You may be missing a closing `)`.
 
 parse_program: CONSTRUCTOR_IDENT COLON IDENT LANGLE CONSTRUCTOR_IDENT COMMA USE
 ##
@@ -347,7 +347,7 @@ parse_program: CONSTRUCTOR_IDENT COLON IDENT LANGLE CONSTRUCTOR_IDENT COMMA USE
 ## type_use COMMA
 ##
 
-In separated nonempty list(comma,type use) after type ,, expected separated nonempty list(comma,type use).
+Expected `)` or `>`. You may be missing a closing `)`.
 
 parse_program: CONSTRUCTOR_IDENT COLON IDENT LANGLE CONSTRUCTOR_IDENT RPAREN
 ##
@@ -366,7 +366,7 @@ parse_program: CONSTRUCTOR_IDENT COLON IDENT LANGLE CONSTRUCTOR_IDENT RPAREN
 ## In state 62, spurious reduction of production loption(separated_nonempty_list(COMMA,type_use)) -> separated_nonempty_list(COMMA,type_use)
 ##
 
-In named type after qualified identifier < loption(separated nonempty list(comma,type use)), expected >.
+Malformed named type. Expected `>`. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_IDENT COLON CODATA LPAREN CONSTRUCTOR_IDENT UNIT
 ##
@@ -379,7 +379,7 @@ parse_program: CONSTRUCTOR_IDENT COLON CODATA LPAREN CONSTRUCTOR_IDENT UNIT
 ## LPAREN type_use
 ##
 
-In tuple type after ( type, expected , ).
+Malformed tuple type. Expected `,` here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_IDENT COLON CODATA LPAREN CONSTRUCTOR_IDENT COMMA USE
 ##
@@ -392,7 +392,7 @@ parse_program: CONSTRUCTOR_IDENT COLON CODATA LPAREN CONSTRUCTOR_IDENT COMMA USE
 ## LPAREN type_use COMMA
 ##
 
-In tuple type after ( type ,, expected ).
+Malformed tuple type. Expected `)` to close `(`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_IDENT COLON CODATA LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT RANGLE
 ##
@@ -410,7 +410,7 @@ parse_program: CONSTRUCTOR_IDENT COLON CODATA LPAREN CONSTRUCTOR_IDENT COMMA CON
 ## In state 56, spurious reduction of production separated_nonempty_list(COMMA,type_use) -> type_use
 ##
 
-In tuple type after ( type , separated nonempty list(comma,type use), expected ).
+Malformed tuple type. Expected `)` to close `(`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_IDENT COLON CODATA LBRACK USE
 ##
@@ -424,7 +424,7 @@ parse_program: CONSTRUCTOR_IDENT COLON CODATA LBRACK USE
 ## LBRACK
 ##
 
-In array type after [, expected type ].
+Malformed array type. Expected `use`, `_`, `type`, or `*`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CODATA LBRACK CBV USE
 ##
@@ -436,7 +436,7 @@ parse_program: CODATA LBRACK CBV USE
 ## LBRACK CBV
 ##
 
-In mode after [ cbv, expected ].
+Malformed evaluation mode annotation. Expected `]` to close `[`. Mode annotations must be exactly `[cbv]` or `[cbn]`.
 
 parse_program: CODATA LBRACK CBN USE
 ##
@@ -448,7 +448,7 @@ parse_program: CODATA LBRACK CBN USE
 ## LBRACK CBN
 ##
 
-In mode after [ cbn, expected ].
+Malformed evaluation mode annotation. Expected `]` to close `[`. Mode annotations must be exactly `[cbv]` or `[cbn]`.
 
 parse_program: CONSTRUCTOR_IDENT COLON CODATA LBRACK CONSTRUCTOR_IDENT UNIT
 ##
@@ -460,7 +460,7 @@ parse_program: CONSTRUCTOR_IDENT COLON CODATA LBRACK CONSTRUCTOR_IDENT UNIT
 ## LBRACK type_use
 ##
 
-In array type after [ type, expected ].
+Malformed array type. Expected `]` to close `[`. You may be missing a closing `)`.
 
 parse_program: CONSTRUCTOR_IDENT COLON CODATA LBRACK CBN RBRACK USE
 ##
@@ -472,7 +472,7 @@ parse_program: CONSTRUCTOR_IDENT COLON CODATA LBRACK CBN RBRACK USE
 ## shape mode
 ##
 
-In shaped type after shape mode, expected raw type.
+Malformed shaped type. Expected `use`, `_`, `type`, or `*`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CODATA IDENT EQUALS LBRACK USE
 ##
@@ -484,44 +484,48 @@ parse_program: CODATA IDENT EQUALS LBRACK USE
 ## LBRACK
 ##
 
-In array type after [, expected type ].
+Malformed array type. Expected `use`, `_`, `type`, or `*`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: PROC USE
 ##
 ## Ends in an error in state: 84.
 ##
+## proc_definition -> PROC . untyped_binder_strict LANGLE loption(separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT)) RANGLE proc_binders proc_body [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ## proc_definition -> PROC . untyped_binder_strict proc_binders proc_body [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
+## proc_definition -> PROC . REC untyped_binder_strict LANGLE loption(separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT)) RANGLE proc_binders proc_body [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ## proc_definition -> PROC . REC untyped_binder_strict proc_binders proc_body [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
 ## The known suffix of the stack is as follows:
 ## PROC
 ##
 
-In proc definition after proc, expected untyped binder strict parameter list procedure body.
+Malformed procedure definition. Expected a binder name here. Use `proc f ... = ...` (optionally `rec` and effects in `<...>`).
 
 parse_program: PROC REC USE
 ##
 ## Ends in an error in state: 85.
 ##
+## proc_definition -> PROC REC . untyped_binder_strict LANGLE loption(separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT)) RANGLE proc_binders proc_body [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ## proc_definition -> PROC REC . untyped_binder_strict proc_binders proc_body [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
 ## The known suffix of the stack is as follows:
 ## PROC REC
 ##
 
-In proc definition after proc rec, expected untyped binder strict parameter list procedure body.
+Malformed procedure definition. Expected a binder name here. Use `proc f ... = ...` (optionally `rec` and effects in `<...>`).
 
 parse_program: PROC REC IDENT USE
 ##
 ## Ends in an error in state: 87.
 ##
+## proc_definition -> PROC REC untyped_binder_strict . LANGLE loption(separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT)) RANGLE proc_binders proc_body [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ## proc_definition -> PROC REC untyped_binder_strict . proc_binders proc_body [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
 ## The known suffix of the stack is as follows:
 ## PROC REC untyped_binder_strict
 ##
 
-In proc definition after proc rec untyped binder strict, expected parameter list procedure body.
+Malformed procedure definition. Expected `<`. Use `proc f ... = ...` (optionally `rec` and effects in `<...>`).
 
 parse_program: PROC IDENT LPAREN USE
 ##
@@ -533,7 +537,7 @@ parse_program: PROC IDENT LPAREN USE
 ## LPAREN
 ##
 
-In parameter list after (, expected loption(separated nonempty list(comma,typed binder)) ).
+Malformed proc binders. Expected `{`.
 
 parse_program: LET LPAREN USE
 ##
@@ -545,7 +549,7 @@ parse_program: LET LPAREN USE
 ## LPAREN
 ##
 
-In typed binder after (, expected typed binder aux ).
+Malformed typed binder. Expected a typed binder here. You may be missing a closing `)`.
 
 parse_program: LET IDENT USE
 ##
@@ -557,7 +561,7 @@ parse_program: LET IDENT USE
 ## untyped_binder
 ##
 
-In typed binder aux after untyped binder, expected : type.
+Malformed typed binder. Expected `:` here. You may be missing a closing `)`.
 
 parse_program: LET IDENT COLON USE
 ##
@@ -569,7 +573,7 @@ parse_program: LET IDENT COLON USE
 ## untyped_binder COLON
 ##
 
-In typed binder aux after untyped binder :, expected type.
+Malformed typed binder. Expected `->`, `)`, `<-`, or `=`, or another valid token. You may be missing a closing `)`.
 
 parse_program: LET LPAREN IDENT COLON CONSTRUCTOR_IDENT UNIT
 ##
@@ -581,7 +585,7 @@ parse_program: LET LPAREN IDENT COLON CONSTRUCTOR_IDENT UNIT
 ## LPAREN typed_binder_aux
 ##
 
-In typed binder after ( typed binder aux, expected ).
+Malformed typed binder. Expected `)` to close `(`.
 
 parse_program: PROC IDENT LPAREN IDENT COLON CONSTRUCTOR_IDENT UNIT
 ##
@@ -594,7 +598,7 @@ parse_program: PROC IDENT LPAREN IDENT COLON CONSTRUCTOR_IDENT UNIT
 ## typed_binder
 ##
 
-In separated nonempty list(comma,typed binder) after typed binder, expected valid continuation.
+Expected `)`. You may be missing a closing `)`.
 
 parse_program: PROC IDENT LPAREN IDENT COLON CONSTRUCTOR_IDENT COMMA USE
 ##
@@ -606,23 +610,47 @@ parse_program: PROC IDENT LPAREN IDENT COLON CONSTRUCTOR_IDENT COMMA USE
 ## typed_binder COMMA
 ##
 
-In separated nonempty list(comma,typed binder) after typed binder ,, expected separated nonempty list(comma,typed binder).
+Expected `)`. You may be missing a closing `)`.
 
-parse_program: PROC REC IDENT LPAREN RPAREN USE
+parse_program: PROC REC IDENT LANGLE USE
 ##
 ## Ends in an error in state: 104.
 ##
-## proc_definition -> PROC REC untyped_binder_strict proc_binders . proc_body [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
+## proc_definition -> PROC REC untyped_binder_strict LANGLE . loption(separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT)) RANGLE proc_binders proc_body [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
 ## The known suffix of the stack is as follows:
-## PROC REC untyped_binder_strict proc_binders
+## PROC REC untyped_binder_strict LANGLE
 ##
 
-In proc definition after proc rec untyped binder strict parameter list, expected procedure body.
+Malformed procedure definition. Use `proc f ... = ...` (optionally `rec` and effects in `<...>`).
+
+parse_program: PROC REC IDENT LANGLE RANGLE USE
+##
+## Ends in an error in state: 106.
+##
+## proc_definition -> PROC REC untyped_binder_strict LANGLE loption(separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT)) RANGLE . proc_binders proc_body [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
+##
+## The known suffix of the stack is as follows:
+## PROC REC untyped_binder_strict LANGLE loption(separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT)) RANGLE
+##
+
+Malformed procedure definition. Expected procedure parameters here. Use `proc f ... = ...` (optionally `rec` and effects in `<...>`).
+
+parse_program: PROC REC IDENT LANGLE RANGLE LPAREN RPAREN USE
+##
+## Ends in an error in state: 107.
+##
+## proc_definition -> PROC REC untyped_binder_strict LANGLE loption(separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT)) RANGLE proc_binders . proc_body [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
+##
+## The known suffix of the stack is as follows:
+## PROC REC untyped_binder_strict LANGLE loption(separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT)) RANGLE proc_binders
+##
+
+Malformed procedure definition. Expected a procedure body here. Use `proc f ... = ...` (optionally `rec` and effects in `<...>`).
 
 parse_program: PROC IDENT LPAREN RPAREN LBRACE USE
 ##
-## Ends in an error in state: 105.
+## Ends in an error in state: 108.
 ##
 ## proc_body -> LBRACE . statement RBRACE [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -630,11 +658,11 @@ parse_program: PROC IDENT LPAREN RPAREN LBRACE USE
 ## LBRACE
 ##
 
-In procedure body after {, expected statement }.
+Malformed proc body.
 
 parse_program: DO STAR USE
 ##
-## Ends in an error in state: 106.
+## Ends in an error in state: 109.
 ##
 ## arith_command -> STAR . LPAREN term COMMA term BAR term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -642,11 +670,11 @@ parse_program: DO STAR USE
 ## STAR
 ##
 
-In arith command after star, expected ( term , term | term.
+Malformed arithmetic command. Expected `(`. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO STAR LPAREN USE
 ##
-## Ends in an error in state: 107.
+## Ends in an error in state: 110.
 ##
 ## arith_command -> STAR LPAREN . term COMMA term BAR term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -654,11 +682,11 @@ parse_program: DO STAR LPAREN USE
 ## STAR LPAREN
 ##
 
-In arith command after star (, expected term , term | term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_LPAREN NEG USE
 ##
-## Ends in an error in state: 109.
+## Ends in an error in state: 112.
 ##
 ## active_number_term -> NEG . term [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
 ##
@@ -666,11 +694,11 @@ parse_program: CONSTRUCTOR_LPAREN NEG USE
 ## NEG
 ##
 
-In active number term after neg, expected term.
+Malformed arithmetic expression. Expected an expression here. Check operator placement and surrounding operands. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: NAMESPACE_IDENT USE
 ##
-## Ends in an error in state: 110.
+## Ends in an error in state: 113.
 ##
 ## namespaced(CONSTRUCTOR_IDENT) -> NAMESPACE_IDENT . namespaced(CONSTRUCTOR_IDENT) [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK LBRACE IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
 ## namespaced(CONSTRUCTOR_LPAREN) -> NAMESPACE_IDENT . namespaced(CONSTRUCTOR_LPAREN) [ NUMBER NEG NAMESPACE_IDENT MINUS MATCH LPAREN LBRACK LBRACE IDENT EXIT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT ]
@@ -680,11 +708,11 @@ parse_program: NAMESPACE_IDENT USE
 ## NAMESPACE_IDENT
 ##
 
-In qualified constructor after namespace identifier, expected qualified constructor.
+Expected `use`, `_`, `type`, or `*`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_LPAREN MINUS USE
 ##
-## Ends in an error in state: 115.
+## Ends in an error in state: 118.
 ##
 ## active_number_term -> MINUS . term [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
 ##
@@ -692,11 +720,11 @@ parse_program: CONSTRUCTOR_LPAREN MINUS USE
 ## MINUS
 ##
 
-In active number term after minus, expected term.
+Malformed arithmetic expression. Expected an expression here. Check operator placement and surrounding operands. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: MATCH USE
 ##
-## Ends in an error in state: 116.
+## Ends in an error in state: 119.
 ##
 ## indirect_term -> MATCH . match_body [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK LBRACE IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
 ##
@@ -704,11 +732,11 @@ parse_program: MATCH USE
 ## MATCH
 ##
 
-In indirect term after match, expected match body.
+Malformed expression. Expected `use`, `_`, `type`, or `*`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: MATCH LBRACE USE
 ##
-## Ends in an error in state: 117.
+## Ends in an error in state: 120.
 ##
 ## match_body -> LBRACE . option(BAR) separated_nonempty_list(option(BAR),match_case) RBRACE [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK LBRACE IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
 ##
@@ -716,11 +744,11 @@ parse_program: MATCH LBRACE USE
 ## LBRACE
 ##
 
-In match body after {, expected option(bar) separated nonempty list(option(bar),match case) }.
+Malformed match body. Expected `use`, `_`, `type`, or `*`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: MATCH LBRACE BAR USE
 ##
-## Ends in an error in state: 119.
+## Ends in an error in state: 122.
 ##
 ## match_body -> LBRACE option(BAR) . separated_nonempty_list(option(BAR),match_case) RBRACE [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK LBRACE IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
 ##
@@ -728,11 +756,11 @@ parse_program: MATCH LBRACE BAR USE
 ## LBRACE option(BAR)
 ##
 
-In match body after { option(bar), expected separated nonempty list(option(bar),match case) }.
+Malformed match body. Expected `use`, `_`, `type`, or `*`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: MATCH LBRACE NAMESPACE_IDENT USE
 ##
-## Ends in an error in state: 121.
+## Ends in an error in state: 124.
 ##
 ## namespaced(CONSTRUCTOR_IDENT) -> NAMESPACE_IDENT . namespaced(CONSTRUCTOR_IDENT) [ LTRARROW ]
 ## namespaced(CONSTRUCTOR_LPAREN) -> NAMESPACE_IDENT . namespaced(CONSTRUCTOR_LPAREN) [ UNDERSCORE LPAREN IDENT ]
@@ -741,11 +769,11 @@ parse_program: MATCH LBRACE NAMESPACE_IDENT USE
 ## NAMESPACE_IDENT
 ##
 
-In qualified constructor after namespace identifier, expected qualified constructor.
+Expected `<-`.
 
 parse_program: MATCH LBRACE LPAREN USE
 ##
-## Ends in an error in state: 122.
+## Ends in an error in state: 125.
 ##
 ## tuple_pattern -> LPAREN . RPAREN [ LTRARROW ]
 ## tuple_pattern -> LPAREN . binder COMMA RPAREN [ LTRARROW ]
@@ -756,11 +784,11 @@ parse_program: MATCH LBRACE LPAREN USE
 ## LPAREN
 ##
 
-In tuple pattern after (, expected ).
+Malformed tuple pattern. Expected `)` to close `(`. Tuple patterns require commas and a closing `)`.
 
 parse_program: CONSTRUCTOR_LPAREN LBRACE IDENT USE
 ##
-## Ends in an error in state: 124.
+## Ends in an error in state: 127.
 ##
 ## binder -> untyped_binder . [ RTLARROW RPAREN LTRARROW COMMA ]
 ## typed_binder_aux -> untyped_binder . COLON type_use [ RTLARROW RPAREN LTRARROW COMMA ]
@@ -769,11 +797,11 @@ parse_program: CONSTRUCTOR_LPAREN LBRACE IDENT USE
 ## untyped_binder
 ##
 
-In binder after untyped binder, expected valid continuation.
+Malformed binder. Expected `->`, `)`, `<-`, or `,`. You may be missing a closing `)`.
 
 parse_program: MATCH LBRACE LPAREN IDENT COLON CONSTRUCTOR_IDENT UNIT
 ##
-## Ends in an error in state: 125.
+## Ends in an error in state: 128.
 ##
 ## typed_binder -> typed_binder_aux . [ COMMA ]
 ## typed_binder -> LPAREN typed_binder_aux . RPAREN [ LTRARROW COMMA ]
@@ -782,11 +810,11 @@ parse_program: MATCH LBRACE LPAREN IDENT COLON CONSTRUCTOR_IDENT UNIT
 ## LPAREN typed_binder_aux
 ##
 
-In typed binder after typed binder aux, expected valid continuation.
+Malformed typed binder. Expected `,`.
 
 parse_program: MATCH LBRACE LPAREN IDENT RTLARROW
 ##
-## Ends in an error in state: 127.
+## Ends in an error in state: 130.
 ##
 ## tuple_pattern -> LPAREN binder . COMMA RPAREN [ LTRARROW ]
 ## tuple_pattern -> LPAREN binder . COMMA separated_nonempty_list(COMMA,binder) RPAREN [ LTRARROW ]
@@ -798,14 +826,14 @@ parse_program: MATCH LBRACE LPAREN IDENT RTLARROW
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 124, spurious reduction of production binder -> untyped_binder
+## In state 127, spurious reduction of production binder -> untyped_binder
 ##
 
-In tuple pattern after ( binder, expected , ).
+Malformed tuple pattern. Expected `,` here. Tuple patterns require commas and a closing `)`.
 
 parse_program: MATCH LBRACE LPAREN IDENT COMMA USE
 ##
-## Ends in an error in state: 128.
+## Ends in an error in state: 131.
 ##
 ## tuple_pattern -> LPAREN binder COMMA . RPAREN [ LTRARROW ]
 ## tuple_pattern -> LPAREN binder COMMA . separated_nonempty_list(COMMA,binder) RPAREN [ LTRARROW ]
@@ -814,11 +842,11 @@ parse_program: MATCH LBRACE LPAREN IDENT COMMA USE
 ## LPAREN binder COMMA
 ##
 
-In tuple pattern after ( binder ,, expected ).
+Malformed tuple pattern. Expected `)` to close `(`. Tuple patterns require commas and a closing `)`.
 
 parse_program: MATCH LBRACE LPAREN IDENT COMMA IDENT LTRARROW
 ##
-## Ends in an error in state: 130.
+## Ends in an error in state: 133.
 ##
 ## tuple_pattern -> LPAREN binder COMMA separated_nonempty_list(COMMA,binder) . RPAREN [ LTRARROW ]
 ##
@@ -829,15 +857,15 @@ parse_program: MATCH LBRACE LPAREN IDENT COMMA IDENT LTRARROW
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 124, spurious reduction of production binder -> untyped_binder
-## In state 132, spurious reduction of production separated_nonempty_list(COMMA,binder) -> binder
+## In state 127, spurious reduction of production binder -> untyped_binder
+## In state 135, spurious reduction of production separated_nonempty_list(COMMA,binder) -> binder
 ##
 
-In tuple pattern after ( binder , separated nonempty list(comma,binder), expected ).
+Malformed tuple pattern. Expected `)` to close `(`. Tuple patterns require commas and a closing `)`.
 
 parse_program: MATCH LBRACE CONSTRUCTOR_LPAREN IDENT RTLARROW
 ##
-## Ends in an error in state: 132.
+## Ends in an error in state: 135.
 ##
 ## separated_nonempty_list(COMMA,binder) -> binder . [ RPAREN LTRARROW ]
 ## separated_nonempty_list(COMMA,binder) -> binder . COMMA separated_nonempty_list(COMMA,binder) [ RPAREN LTRARROW ]
@@ -849,14 +877,14 @@ parse_program: MATCH LBRACE CONSTRUCTOR_LPAREN IDENT RTLARROW
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 124, spurious reduction of production binder -> untyped_binder
+## In state 127, spurious reduction of production binder -> untyped_binder
 ##
 
-In separated nonempty list(comma,binder) after binder, expected valid continuation.
+Expected `)` or `<-`. You may be missing a closing `)`.
 
 parse_program: MATCH LBRACE CONSTRUCTOR_LPAREN IDENT COMMA USE
 ##
-## Ends in an error in state: 133.
+## Ends in an error in state: 136.
 ##
 ## separated_nonempty_list(COMMA,binder) -> binder COMMA . separated_nonempty_list(COMMA,binder) [ RPAREN LTRARROW ]
 ##
@@ -864,11 +892,11 @@ parse_program: MATCH LBRACE CONSTRUCTOR_LPAREN IDENT COMMA USE
 ## binder COMMA
 ##
 
-In separated nonempty list(comma,binder) after binder ,, expected separated nonempty list(comma,binder).
+Expected `)` or `<-`. You may be missing a closing `)`.
 
 parse_program: MATCH LBRACE CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 138.
+## Ends in an error in state: 141.
 ##
 ## match_case -> pattern . LTRARROW statement [ UNDERSCORE RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
 ##
@@ -876,11 +904,11 @@ parse_program: MATCH LBRACE CONSTRUCTOR_IDENT USE
 ## pattern
 ##
 
-In match case after pattern, expected <- statement.
+Malformed match case. Expected `<-` here.
 
 parse_program: MATCH LBRACE IDENT LTRARROW USE
 ##
-## Ends in an error in state: 139.
+## Ends in an error in state: 142.
 ##
 ## match_case -> pattern LTRARROW . statement [ UNDERSCORE RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
 ##
@@ -888,11 +916,11 @@ parse_program: MATCH LBRACE IDENT LTRARROW USE
 ## pattern LTRARROW
 ##
 
-In match case after pattern <-, expected statement.
+Malformed match case. Expected `_`, `}`, a number, or a namespaced identifier, or another valid token.
 
 parse_program: DO SLASH USE
 ##
-## Ends in an error in state: 140.
+## Ends in an error in state: 143.
 ##
 ## arith_command -> SLASH . LPAREN term COMMA term BAR term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -900,11 +928,11 @@ parse_program: DO SLASH USE
 ## SLASH
 ##
 
-In arith command after slash, expected ( term , term | term.
+Malformed arithmetic command. Expected `(`. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO SLASH LPAREN USE
 ##
-## Ends in an error in state: 141.
+## Ends in an error in state: 144.
 ##
 ## arith_command -> SLASH LPAREN . term COMMA term BAR term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -912,11 +940,11 @@ parse_program: DO SLASH LPAREN USE
 ## SLASH LPAREN
 ##
 
-In arith command after slash (, expected term , term | term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: LPAREN USE
 ##
-## Ends in an error in state: 142.
+## Ends in an error in state: 145.
 ##
 ## indirect_term -> LPAREN . term RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK LBRACE IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
 ## product_term -> LPAREN . RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK LBRACE IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
@@ -927,11 +955,11 @@ parse_program: LPAREN USE
 ## LPAREN
 ##
 
-In indirect term after (, expected term ).
+Malformed expression. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: LBRACK USE
 ##
-## Ends in an error in state: 144.
+## Ends in an error in state: 147.
 ##
 ## array_term -> LBRACK . loption(separated_nonempty_list(COMMA,term)) RBRACK [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK LBRACE IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
 ##
@@ -939,11 +967,11 @@ parse_program: LBRACK USE
 ## LBRACK
 ##
 
-In array term after [, expected loption(separated nonempty list(comma,term)) ].
+Malformed array term. Expected `use`, `_`, `type`, or `*`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_LPAREN LBRACE USE
 ##
-## Ends in an error in state: 145.
+## Ends in an error in state: 148.
 ##
 ## naked_mu_term -> LBRACE . binder LTRARROW statement RBRACE [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
 ##
@@ -951,11 +979,11 @@ parse_program: CONSTRUCTOR_LPAREN LBRACE USE
 ## LBRACE
 ##
 
-In naked mu term after {, expected binder <- statement }.
+Malformed naked mu term. Expected a binder here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_LPAREN LBRACE IDENT RTLARROW
 ##
-## Ends in an error in state: 146.
+## Ends in an error in state: 149.
 ##
 ## naked_mu_term -> LBRACE binder . LTRARROW statement RBRACE [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
 ##
@@ -966,14 +994,14 @@ parse_program: CONSTRUCTOR_LPAREN LBRACE IDENT RTLARROW
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 124, spurious reduction of production binder -> untyped_binder
+## In state 127, spurious reduction of production binder -> untyped_binder
 ##
 
-In naked mu term after { binder, expected <- statement }.
+Malformed naked mu term. Expected `<-` here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_LPAREN LBRACE IDENT LTRARROW USE
 ##
-## Ends in an error in state: 147.
+## Ends in an error in state: 150.
 ##
 ## naked_mu_term -> LBRACE binder LTRARROW . statement RBRACE [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
 ##
@@ -981,11 +1009,11 @@ parse_program: CONSTRUCTOR_LPAREN LBRACE IDENT LTRARROW USE
 ## LBRACE binder LTRARROW
 ##
 
-In naked mu term after { binder <-, expected statement }.
+Malformed naked mu term. Expected `use`, `_`, `type`, or `*`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO PLUS USE
 ##
-## Ends in an error in state: 148.
+## Ends in an error in state: 151.
 ##
 ## arith_command -> PLUS . LPAREN term COMMA term BAR term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -993,11 +1021,11 @@ parse_program: DO PLUS USE
 ## PLUS
 ##
 
-In arith command after plus, expected ( term , term | term.
+Malformed arithmetic command. Expected `(`. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO PLUS LPAREN USE
 ##
-## Ends in an error in state: 149.
+## Ends in an error in state: 152.
 ##
 ## arith_command -> PLUS LPAREN . term COMMA term BAR term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -1005,11 +1033,11 @@ parse_program: DO PLUS LPAREN USE
 ## PLUS LPAREN
 ##
 
-In arith command after plus (, expected term , term | term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO PLUS LPAREN CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 151.
+## Ends in an error in state: 154.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
 ## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
@@ -1025,14 +1053,14 @@ parse_program: DO PLUS LPAREN CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands.
 
 parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT STAR USE
 ##
-## Ends in an error in state: 152.
+## Ends in an error in state: 155.
 ##
 ## active_number_term -> term STAR . term [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
 ##
@@ -1040,11 +1068,11 @@ parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT STAR USE
 ## term STAR
 ##
 
-In active number term after term star, expected term.
+Malformed arithmetic expression. Expected an expression here. Check operator placement and surrounding operands. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_LPAREN USE
 ##
-## Ends in an error in state: 157.
+## Ends in an error in state: 160.
 ##
 ## cons_term -> namespaced(CONSTRUCTOR_LPAREN) . separated_nonempty_list(COMMA,term) RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK LBRACE IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
 ##
@@ -1052,11 +1080,11 @@ parse_program: CONSTRUCTOR_LPAREN USE
 ## namespaced(CONSTRUCTOR_LPAREN)
 ##
 
-In cons term after namespaced(constructor lparen), expected separated nonempty list(comma,term) ).
+Malformed cons term. Expected `use`, `_`, `type`, or `*`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 158.
+## Ends in an error in state: 161.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH RPAREN RBRACK PLUS PERCENT MINUS COMMA ]
 ## active_number_term -> term . MINUS term [ STAR SLASH RPAREN RBRACK PLUS PERCENT MINUS COMMA ]
@@ -1073,14 +1101,14 @@ parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT SLASH USE
 ##
-## Ends in an error in state: 159.
+## Ends in an error in state: 162.
 ##
 ## active_number_term -> term SLASH . term [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
 ##
@@ -1088,11 +1116,11 @@ parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT SLASH USE
 ## term SLASH
 ##
 
-In active number term after term slash, expected term.
+Malformed arithmetic expression. Expected an expression here. Check operator placement and surrounding operands. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT UNIT
 ##
-## Ends in an error in state: 163.
+## Ends in an error in state: 166.
 ##
 ## indirect_term -> indirect_term . COLON type_use [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
 ## term -> indirect_term . [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
@@ -1101,11 +1129,11 @@ parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT UNIT
 ## indirect_term
 ##
 
-In indirect term after indirect term, expected : type.
+Malformed expression. Expected `:` here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_IDENT COLON USE
 ##
-## Ends in an error in state: 164.
+## Ends in an error in state: 167.
 ##
 ## indirect_term -> indirect_term COLON . type_use [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK LBRACE IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
 ##
@@ -1113,11 +1141,11 @@ parse_program: CONSTRUCTOR_IDENT COLON USE
 ## indirect_term COLON
 ##
 
-In indirect term after indirect term :, expected type.
+Malformed expression. Expected `use`, `_`, `type`, or `*`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT PLUS USE
 ##
-## Ends in an error in state: 169.
+## Ends in an error in state: 172.
 ##
 ## active_number_term -> term PLUS . term [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
 ##
@@ -1125,11 +1153,11 @@ parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT PLUS USE
 ## term PLUS
 ##
 
-In active number term after term plus, expected term.
+Malformed arithmetic expression. Expected an expression here. Check operator placement and surrounding operands. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT PLUS LBRACE IDENT LTRARROW CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT RBRACE UNIT
 ##
-## Ends in an error in state: 170.
+## Ends in an error in state: 173.
 ##
 ## active_number_term -> term . PLUS term [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
 ## active_number_term -> term PLUS term . [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
@@ -1142,11 +1170,11 @@ parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT PLUS LBRACE IDENT LTRARROW C
 ## term PLUS term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT PERCENT USE
 ##
-## Ends in an error in state: 171.
+## Ends in an error in state: 174.
 ##
 ## active_number_term -> term PERCENT . term [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
 ##
@@ -1154,11 +1182,11 @@ parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT PERCENT USE
 ## term PERCENT
 ##
 
-In active number term after term percent, expected term.
+Malformed arithmetic expression. Expected an expression here. Check operator placement and surrounding operands. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT MINUS USE
 ##
-## Ends in an error in state: 173.
+## Ends in an error in state: 176.
 ##
 ## active_number_term -> term MINUS . term [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
 ##
@@ -1166,11 +1194,11 @@ parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT MINUS USE
 ## term MINUS
 ##
 
-In active number term after term minus, expected term.
+Malformed arithmetic expression. Expected an expression here. Check operator placement and surrounding operands. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT MINUS LBRACE IDENT LTRARROW CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT RBRACE UNIT
 ##
-## Ends in an error in state: 174.
+## Ends in an error in state: 177.
 ##
 ## active_number_term -> term . PLUS term [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
 ## active_number_term -> term . MINUS term [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
@@ -1183,11 +1211,11 @@ parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT MINUS LBRACE IDENT LTRARROW 
 ## term MINUS term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA USE
 ##
-## Ends in an error in state: 175.
+## Ends in an error in state: 178.
 ##
 ## separated_nonempty_list(COMMA,term) -> term COMMA . separated_nonempty_list(COMMA,term) [ RPAREN RBRACK ]
 ##
@@ -1195,11 +1223,11 @@ parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA USE
 ## term COMMA
 ##
 
-In separated nonempty list(comma,term) after term ,, expected separated nonempty list(comma,term).
+Expected `)` or `]`. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT RBRACK
 ##
-## Ends in an error in state: 177.
+## Ends in an error in state: 180.
 ##
 ## cons_term -> namespaced(CONSTRUCTOR_LPAREN) separated_nonempty_list(COMMA,term) . RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK LBRACE IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
 ##
@@ -1210,15 +1238,15 @@ parse_program: CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT RBRACK
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
-## In state 158, spurious reduction of production separated_nonempty_list(COMMA,term) -> term
+## In state 166, spurious reduction of production term -> indirect_term
+## In state 161, spurious reduction of production separated_nonempty_list(COMMA,term) -> term
 ##
 
-In cons term after namespaced(constructor lparen) separated nonempty list(comma,term), expected ).
+Malformed cons term. Expected `)` to close `(`. You may be missing a closing `]`.
 
 parse_program: DO PLUS LPAREN CONSTRUCTOR_IDENT COMMA USE
 ##
-## Ends in an error in state: 179.
+## Ends in an error in state: 182.
 ##
 ## arith_command -> PLUS LPAREN term COMMA . term BAR term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -1226,11 +1254,11 @@ parse_program: DO PLUS LPAREN CONSTRUCTOR_IDENT COMMA USE
 ## PLUS LPAREN term COMMA
 ##
 
-In arith command after plus ( term ,, expected term | term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO PLUS LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 180.
+## Ends in an error in state: 183.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS BAR ]
 ## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS BAR ]
@@ -1246,14 +1274,14 @@ parse_program: DO PLUS LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands.
 
 parse_program: DO PLUS LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR USE
 ##
-## Ends in an error in state: 181.
+## Ends in an error in state: 184.
 ##
 ## arith_command -> PLUS LPAREN term COMMA term BAR . term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -1261,11 +1289,11 @@ parse_program: DO PLUS LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR USE
 ## PLUS LPAREN term COMMA term BAR
 ##
 
-In arith command after plus ( term , term |, expected term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO PLUS LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 182.
+## Ends in an error in state: 185.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
 ## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
@@ -1281,14 +1309,14 @@ parse_program: DO PLUS LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR CONS
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands. You may be missing a closing `)`.
 
 parse_program: DO PERCENT USE
 ##
-## Ends in an error in state: 184.
+## Ends in an error in state: 187.
 ##
 ## arith_command -> PERCENT . LPAREN term COMMA term BAR term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -1296,11 +1324,11 @@ parse_program: DO PERCENT USE
 ## PERCENT
 ##
 
-In arith command after percent, expected ( term , term | term.
+Malformed arithmetic command. Expected `(`. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO PERCENT LPAREN USE
 ##
-## Ends in an error in state: 185.
+## Ends in an error in state: 188.
 ##
 ## arith_command -> PERCENT LPAREN . term COMMA term BAR term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -1308,11 +1336,11 @@ parse_program: DO PERCENT LPAREN USE
 ## PERCENT LPAREN
 ##
 
-In arith command after percent (, expected term , term | term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO PERCENT LPAREN CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 186.
+## Ends in an error in state: 189.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
 ## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
@@ -1328,14 +1356,14 @@ parse_program: DO PERCENT LPAREN CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands.
 
 parse_program: DO PERCENT LPAREN CONSTRUCTOR_IDENT COMMA USE
 ##
-## Ends in an error in state: 187.
+## Ends in an error in state: 190.
 ##
 ## arith_command -> PERCENT LPAREN term COMMA . term BAR term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -1343,11 +1371,11 @@ parse_program: DO PERCENT LPAREN CONSTRUCTOR_IDENT COMMA USE
 ## PERCENT LPAREN term COMMA
 ##
 
-In arith command after percent ( term ,, expected term | term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO PERCENT LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 188.
+## Ends in an error in state: 191.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS BAR ]
 ## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS BAR ]
@@ -1363,14 +1391,14 @@ parse_program: DO PERCENT LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands.
 
 parse_program: DO PERCENT LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR USE
 ##
-## Ends in an error in state: 189.
+## Ends in an error in state: 192.
 ##
 ## arith_command -> PERCENT LPAREN term COMMA term BAR . term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -1378,11 +1406,11 @@ parse_program: DO PERCENT LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR U
 ## PERCENT LPAREN term COMMA term BAR
 ##
 
-In arith command after percent ( term , term |, expected term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO PERCENT LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 190.
+## Ends in an error in state: 193.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
 ## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
@@ -1398,14 +1426,14 @@ parse_program: DO PERCENT LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR C
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands. You may be missing a closing `)`.
 
 parse_program: DO NEG USE
 ##
-## Ends in an error in state: 192.
+## Ends in an error in state: 195.
 ##
 ## active_number_term -> NEG . term [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT ]
 ## arith_command -> NEG . LPAREN term BAR term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
@@ -1414,11 +1442,11 @@ parse_program: DO NEG USE
 ## NEG
 ##
 
-In active number term after neg, expected term.
+Malformed arithmetic expression. Expected an expression here. Check operator placement and surrounding operands.
 
 parse_program: DO NEG LPAREN USE
 ##
-## Ends in an error in state: 193.
+## Ends in an error in state: 196.
 ##
 ## arith_command -> NEG LPAREN . term BAR term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ## indirect_term -> LPAREN . term RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
@@ -1430,11 +1458,11 @@ parse_program: DO NEG LPAREN USE
 ## NEG LPAREN
 ##
 
-In arith command after neg (, expected term | term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO NEG LPAREN CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 194.
+## Ends in an error in state: 197.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
 ## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
@@ -1453,14 +1481,14 @@ parse_program: DO NEG LPAREN CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands. You may be missing a closing `)`.
 
 parse_program: LPAREN CONSTRUCTOR_IDENT COMMA USE
 ##
-## Ends in an error in state: 196.
+## Ends in an error in state: 199.
 ##
 ## product_term -> LPAREN term COMMA . RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK LBRACE IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
 ## product_term -> LPAREN term COMMA . separated_nonempty_list(COMMA,term) RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK LBRACE IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
@@ -1469,11 +1497,11 @@ parse_program: LPAREN CONSTRUCTOR_IDENT COMMA USE
 ## LPAREN term COMMA
 ##
 
-In product term after ( term ,, expected ).
+Malformed product expression. Expected `)` to close `(`. Check operator placement and surrounding operands. You may be missing a closing `]`.
 
 parse_program: LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT RBRACK
 ##
-## Ends in an error in state: 198.
+## Ends in an error in state: 201.
 ##
 ## product_term -> LPAREN term COMMA separated_nonempty_list(COMMA,term) . RPAREN [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK LBRACE IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
 ##
@@ -1484,15 +1512,15 @@ parse_program: LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT RBRACK
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
-## In state 158, spurious reduction of production separated_nonempty_list(COMMA,term) -> term
+## In state 166, spurious reduction of production term -> indirect_term
+## In state 161, spurious reduction of production separated_nonempty_list(COMMA,term) -> term
 ##
 
-In product term after ( term , separated nonempty list(comma,term), expected ).
+Malformed product expression. Expected `)` to close `(`. Check operator placement and surrounding operands. You may be missing a closing `]`.
 
 parse_program: DO NEG LPAREN CONSTRUCTOR_IDENT BAR USE
 ##
-## Ends in an error in state: 200.
+## Ends in an error in state: 203.
 ##
 ## arith_command -> NEG LPAREN term BAR . term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -1500,11 +1528,11 @@ parse_program: DO NEG LPAREN CONSTRUCTOR_IDENT BAR USE
 ## NEG LPAREN term BAR
 ##
 
-In arith command after neg ( term |, expected term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO NEG LPAREN CONSTRUCTOR_IDENT BAR CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 201.
+## Ends in an error in state: 204.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
 ## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
@@ -1520,14 +1548,14 @@ parse_program: DO NEG LPAREN CONSTRUCTOR_IDENT BAR CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands. You may be missing a closing `)`.
 
 parse_program: DO MINUS USE
 ##
-## Ends in an error in state: 204.
+## Ends in an error in state: 207.
 ##
 ## active_number_term -> MINUS . term [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT ]
 ## arith_command -> MINUS . LPAREN term BAR term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
@@ -1537,11 +1565,11 @@ parse_program: DO MINUS USE
 ## MINUS
 ##
 
-In active number term after minus, expected term.
+Malformed arithmetic expression. Expected an expression here. Check operator placement and surrounding operands.
 
 parse_program: DO MINUS LPAREN USE
 ##
-## Ends in an error in state: 205.
+## Ends in an error in state: 208.
 ##
 ## arith_command -> MINUS LPAREN . term BAR term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ## arith_command -> MINUS LPAREN . term COMMA term BAR term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
@@ -1554,11 +1582,11 @@ parse_program: DO MINUS LPAREN USE
 ## MINUS LPAREN
 ##
 
-In arith command after minus (, expected term | term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 206.
+## Ends in an error in state: 209.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
 ## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
@@ -1578,14 +1606,14 @@ parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands. You may be missing a closing `)`.
 
 parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT COMMA USE
 ##
-## Ends in an error in state: 207.
+## Ends in an error in state: 210.
 ##
 ## arith_command -> MINUS LPAREN term COMMA . term BAR term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ## product_term -> LPAREN term COMMA . RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
@@ -1595,11 +1623,11 @@ parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT COMMA USE
 ## MINUS LPAREN term COMMA
 ##
 
-In arith command after minus ( term ,, expected term | term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 208.
+## Ends in an error in state: 211.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
 ## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
@@ -1617,14 +1645,14 @@ parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands. You may be missing a closing `)`.
 
 parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR USE
 ##
-## Ends in an error in state: 209.
+## Ends in an error in state: 212.
 ##
 ## arith_command -> MINUS LPAREN term COMMA term BAR . term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -1632,11 +1660,11 @@ parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR USE
 ## MINUS LPAREN term COMMA term BAR
 ##
 
-In arith command after minus ( term , term |, expected term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 210.
+## Ends in an error in state: 213.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
 ## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
@@ -1652,14 +1680,14 @@ parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR CON
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands. You may be missing a closing `)`.
 
 parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT BAR USE
 ##
-## Ends in an error in state: 212.
+## Ends in an error in state: 215.
 ##
 ## arith_command -> MINUS LPAREN term BAR . term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -1667,11 +1695,11 @@ parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT BAR USE
 ## MINUS LPAREN term BAR
 ##
 
-In arith command after minus ( term |, expected term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT BAR CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 213.
+## Ends in an error in state: 216.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
 ## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
@@ -1687,14 +1715,14 @@ parse_program: DO MINUS LPAREN CONSTRUCTOR_IDENT BAR CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands. You may be missing a closing `)`.
 
 parse_program: DO MATCH USE
 ##
-## Ends in an error in state: 216.
+## Ends in an error in state: 219.
 ##
 ## cutlet -> MATCH . indirect_term match_body [ USE UNDERSCORE TYPE RPAREN RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ## indirect_term -> MATCH . match_body [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
@@ -1703,11 +1731,11 @@ parse_program: DO MATCH USE
 ## MATCH
 ##
 
-In cutlet after match, expected indirect term match body.
+Malformed let-cut command. Expected `use`, `_`, `type`, or `)`, or another valid token. You may be missing a closing `)`.
 
 parse_program: DO MATCH CONSTRUCTOR_IDENT UNIT
 ##
-## Ends in an error in state: 218.
+## Ends in an error in state: 221.
 ##
 ## cutlet -> MATCH indirect_term . match_body [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ## indirect_term -> indirect_term . COLON type_use [ LBRACE COLON ]
@@ -1716,11 +1744,11 @@ parse_program: DO MATCH CONSTRUCTOR_IDENT UNIT
 ## MATCH indirect_term
 ##
 
-In cutlet after match indirect term, expected match body.
+Malformed let-cut command. Expected `use`, `_`, `type`, or `)`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO LPAREN USE
 ##
-## Ends in an error in state: 220.
+## Ends in an error in state: 223.
 ##
 ## indirect_term -> LPAREN . term RPAREN [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
 ## non_fork_statement -> LPAREN . statement RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
@@ -1732,11 +1760,11 @@ parse_program: DO LPAREN USE
 ## LPAREN
 ##
 
-In indirect term after (, expected term ).
+Malformed expression. Expected an expression here.
 
 parse_program: DO LBRACK NEG USE
 ##
-## Ends in an error in state: 221.
+## Ends in an error in state: 224.
 ##
 ## active_number_term -> NEG . term [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA ]
 ## arith_command -> NEG . LPAREN term BAR term RPAREN [ UNDERSCORE RPAREN RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
@@ -1745,11 +1773,11 @@ parse_program: DO LBRACK NEG USE
 ## NEG
 ##
 
-In active number term after neg, expected term.
+Malformed arithmetic expression. Expected an expression here. Check operator placement and surrounding operands. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO LBRACK NEG LPAREN USE
 ##
-## Ends in an error in state: 222.
+## Ends in an error in state: 225.
 ##
 ## arith_command -> NEG LPAREN . term BAR term RPAREN [ UNDERSCORE RPAREN RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
 ## indirect_term -> LPAREN . term RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
@@ -1761,11 +1789,11 @@ parse_program: DO LBRACK NEG LPAREN USE
 ## NEG LPAREN
 ##
 
-In arith command after neg (, expected term | term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`.
 
 parse_program: DO LBRACK NEG LPAREN CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 223.
+## Ends in an error in state: 226.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
 ## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
@@ -1784,14 +1812,14 @@ parse_program: DO LBRACK NEG LPAREN CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands. You may be missing a closing `)`.
 
 parse_program: DO LBRACK MINUS USE
 ##
-## Ends in an error in state: 224.
+## Ends in an error in state: 227.
 ##
 ## active_number_term -> MINUS . term [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA ]
 ## arith_command -> MINUS . LPAREN term BAR term RPAREN [ UNDERSCORE RPAREN RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
@@ -1801,11 +1829,11 @@ parse_program: DO LBRACK MINUS USE
 ## MINUS
 ##
 
-In active number term after minus, expected term.
+Malformed arithmetic expression. Expected an expression here. Check operator placement and surrounding operands. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO LBRACK MINUS LPAREN USE
 ##
-## Ends in an error in state: 225.
+## Ends in an error in state: 228.
 ##
 ## arith_command -> MINUS LPAREN . term BAR term RPAREN [ UNDERSCORE RPAREN RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
 ## arith_command -> MINUS LPAREN . term COMMA term BAR term RPAREN [ UNDERSCORE RPAREN RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
@@ -1818,11 +1846,11 @@ parse_program: DO LBRACK MINUS LPAREN USE
 ## MINUS LPAREN
 ##
 
-In arith command after minus (, expected term | term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`.
 
 parse_program: DO LBRACK MINUS LPAREN CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 226.
+## Ends in an error in state: 229.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
 ## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA BAR ]
@@ -1842,14 +1870,14 @@ parse_program: DO LBRACK MINUS LPAREN CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands. You may be missing a closing `)`.
 
 parse_program: DO LBRACK MINUS LPAREN CONSTRUCTOR_IDENT COMMA USE
 ##
-## Ends in an error in state: 227.
+## Ends in an error in state: 230.
 ##
 ## arith_command -> MINUS LPAREN term COMMA . term BAR term RPAREN [ UNDERSCORE RPAREN RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
 ## product_term -> LPAREN term COMMA . RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
@@ -1859,11 +1887,11 @@ parse_program: DO LBRACK MINUS LPAREN CONSTRUCTOR_IDENT COMMA USE
 ## MINUS LPAREN term COMMA
 ##
 
-In arith command after minus ( term ,, expected term | term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`.
 
 parse_program: DO LBRACK LPAREN USE
 ##
-## Ends in an error in state: 228.
+## Ends in an error in state: 231.
 ##
 ## indirect_term -> LPAREN . term RPAREN [ STAR SLASH SEMICOLON RPAREN RBRACK PLUS PERCENT MINUS DOT COMMA COLON ]
 ## non_fork_statement -> LPAREN . statement RPAREN [ UNDERSCORE RPAREN RBRACE NUMBER NAMESPACE_IDENT LPAREN IDENT CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT BAR ]
@@ -1875,11 +1903,11 @@ parse_program: DO LBRACK LPAREN USE
 ## LPAREN
 ##
 
-In indirect term after (, expected term ).
+Malformed expression. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO LET USE
 ##
-## Ends in an error in state: 229.
+## Ends in an error in state: 232.
 ##
 ## cutlet -> LET . binder RTLARROW term IN statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ## cutlet -> LET . REC binder RTLARROW term IN statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
@@ -1888,11 +1916,11 @@ parse_program: DO LET USE
 ## LET
 ##
 
-In cutlet after let, expected binder -> term in statement.
+Malformed let-cut command. Expected a binder here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO LET REC USE
 ##
-## Ends in an error in state: 230.
+## Ends in an error in state: 233.
 ##
 ## cutlet -> LET REC . binder RTLARROW term IN statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -1900,11 +1928,11 @@ parse_program: DO LET REC USE
 ## LET REC
 ##
 
-In cutlet after let rec, expected binder -> term in statement.
+Malformed let-cut command. Expected a binder here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO LET REC IDENT RPAREN
 ##
-## Ends in an error in state: 231.
+## Ends in an error in state: 234.
 ##
 ## cutlet -> LET REC binder . RTLARROW term IN statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -1915,14 +1943,14 @@ parse_program: DO LET REC IDENT RPAREN
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 124, spurious reduction of production binder -> untyped_binder
+## In state 127, spurious reduction of production binder -> untyped_binder
 ##
 
-In cutlet after let rec binder, expected -> term in statement.
+Malformed let-cut command. Expected `->` here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO LET REC IDENT RTLARROW USE
 ##
-## Ends in an error in state: 232.
+## Ends in an error in state: 235.
 ##
 ## cutlet -> LET REC binder RTLARROW . term IN statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -1930,11 +1958,11 @@ parse_program: DO LET REC IDENT RTLARROW USE
 ## LET REC binder RTLARROW
 ##
 
-In cutlet after let rec binder ->, expected term in statement.
+Malformed let-cut command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO LET REC IDENT RTLARROW CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 233.
+## Ends in an error in state: 236.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS IN ]
 ## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS IN ]
@@ -1950,14 +1978,14 @@ parse_program: DO LET REC IDENT RTLARROW CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands.
 
 parse_program: DO LET REC IDENT RTLARROW CONSTRUCTOR_IDENT IN USE
 ##
-## Ends in an error in state: 234.
+## Ends in an error in state: 237.
 ##
 ## cutlet -> LET REC binder RTLARROW term IN . statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -1965,11 +1993,11 @@ parse_program: DO LET REC IDENT RTLARROW CONSTRUCTOR_IDENT IN USE
 ## LET REC binder RTLARROW term IN
 ##
 
-In cutlet after let rec binder -> term in, expected statement.
+Malformed let-cut command. Expected `use`, `_`, `type`, or `)`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO CONSTRUCTOR_IDENT SEMICOLON MATCH USE
 ##
-## Ends in an error in state: 235.
+## Ends in an error in state: 238.
 ##
 ## cutlet -> MATCH . indirect_term match_body [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ## indirect_term -> MATCH . match_body [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT COLON ]
@@ -1978,11 +2006,11 @@ parse_program: DO CONSTRUCTOR_IDENT SEMICOLON MATCH USE
 ## MATCH
 ##
 
-In cutlet after match, expected indirect term match body.
+Malformed let-cut command. Expected `use`, `_`, `type`, or `)`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO LBRACK USE
 ##
-## Ends in an error in state: 236.
+## Ends in an error in state: 239.
 ##
 ## array_term -> LBRACK . loption(separated_nonempty_list(COMMA,term)) RBRACK [ STAR SLASH SEMICOLON RPAREN PLUS PERCENT MINUS DOT COMMA COLON ]
 ## fork_command -> LBRACK . non_fork_statement BAR non_fork_statement RBRACK [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
@@ -1991,11 +2019,11 @@ parse_program: DO LBRACK USE
 ## LBRACK
 ##
 
-In array term after [, expected loption(separated nonempty list(comma,term)) ].
+Malformed array term. Expected `*`, `/`, `;`, or `)`, or another valid token. You may be missing a closing `)`.
 
 parse_program: DO LBRACK CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 237.
+## Ends in an error in state: 240.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH SEMICOLON RBRACK PLUS PERCENT MINUS DOT COMMA ]
 ## active_number_term -> term . MINUS term [ STAR SLASH SEMICOLON RBRACK PLUS PERCENT MINUS DOT COMMA ]
@@ -2014,14 +2042,14 @@ parse_program: DO LBRACK CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands. You may be missing a closing `]`.
 
 parse_program: DO CONSTRUCTOR_IDENT SEMICOLON USE
 ##
-## Ends in an error in state: 238.
+## Ends in an error in state: 241.
 ##
 ## cutlet -> term SEMICOLON . statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2029,11 +2057,11 @@ parse_program: DO CONSTRUCTOR_IDENT SEMICOLON USE
 ## term SEMICOLON
 ##
 
-In cutlet after term semicolon, expected statement.
+Malformed let-cut command. Expected `use`, `_`, `type`, or `)`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 239.
+## Ends in an error in state: 242.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT ]
 ## active_number_term -> term . MINUS term [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT ]
@@ -2050,14 +2078,14 @@ parse_program: DO CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands.
 
 parse_program: DO CONSTRUCTOR_IDENT DOT USE
 ##
-## Ends in an error in state: 240.
+## Ends in an error in state: 243.
 ##
 ## command -> term DOT . term [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2065,11 +2093,11 @@ parse_program: DO CONSTRUCTOR_IDENT DOT USE
 ## term DOT
 ##
 
-In command after term ., expected term.
+Malformed command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT SEMICOLON
 ##
-## Ends in an error in state: 241.
+## Ends in an error in state: 244.
 ##
 ## active_number_term -> term . PLUS term [ USE UNDERSCORE TYPE STAR SLASH RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ## active_number_term -> term . MINUS term [ USE UNDERSCORE TYPE STAR SLASH RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
@@ -2085,14 +2113,14 @@ parse_program: DO CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT SEMICOLON
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO LBRACK CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 249.
+## Ends in an error in state: 252.
 ##
 ## fork_command -> LBRACK non_fork_statement . BAR non_fork_statement RBRACK [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2103,16 +2131,16 @@ parse_program: DO LBRACK CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
-## In state 241, spurious reduction of production command -> term DOT term
-## In state 246, spurious reduction of production non_fork_statement -> command
+## In state 166, spurious reduction of production term -> indirect_term
+## In state 244, spurious reduction of production command -> term DOT term
+## In state 249, spurious reduction of production non_fork_statement -> command
 ##
 
-In fork command after [ non fork statement, expected | non fork statement ].
+Malformed fork command. Expected `|`. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO LBRACK CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT BAR USE
 ##
-## Ends in an error in state: 250.
+## Ends in an error in state: 253.
 ##
 ## fork_command -> LBRACK non_fork_statement BAR . non_fork_statement RBRACK [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2120,11 +2148,11 @@ parse_program: DO LBRACK CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT BAR USE
 ## LBRACK non_fork_statement BAR
 ##
 
-In fork command after [ non fork statement |, expected non fork statement ].
+Malformed fork command. Expected `use`, `_`, `type`, or `)`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO LBRACK CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT BAR CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 251.
+## Ends in an error in state: 254.
 ##
 ## fork_command -> LBRACK non_fork_statement BAR non_fork_statement . RBRACK [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2135,16 +2163,16 @@ parse_program: DO LBRACK CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT BAR CONSTRUCTOR
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
-## In state 241, spurious reduction of production command -> term DOT term
-## In state 246, spurious reduction of production non_fork_statement -> command
+## In state 166, spurious reduction of production term -> indirect_term
+## In state 244, spurious reduction of production command -> term DOT term
+## In state 249, spurious reduction of production non_fork_statement -> command
 ##
 
-In fork command after [ non fork statement | non fork statement, expected ].
+Malformed fork command. Expected `]` to close `[`. You may be missing a closing `)`.
 
 parse_program: LBRACK CONSTRUCTOR_IDENT RPAREN
 ##
-## Ends in an error in state: 253.
+## Ends in an error in state: 256.
 ##
 ## array_term -> LBRACK loption(separated_nonempty_list(COMMA,term)) . RBRACK [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK LBRACE IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA COLON CODATA BAR ]
 ##
@@ -2155,16 +2183,16 @@ parse_program: LBRACK CONSTRUCTOR_IDENT RPAREN
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
-## In state 158, spurious reduction of production separated_nonempty_list(COMMA,term) -> term
-## In state 248, spurious reduction of production loption(separated_nonempty_list(COMMA,term)) -> separated_nonempty_list(COMMA,term)
+## In state 166, spurious reduction of production term -> indirect_term
+## In state 161, spurious reduction of production separated_nonempty_list(COMMA,term) -> term
+## In state 251, spurious reduction of production loption(separated_nonempty_list(COMMA,term)) -> separated_nonempty_list(COMMA,term)
 ##
 
-In array term after [ loption(separated nonempty list(comma,term)), expected ].
+Malformed array term. Expected `]` to close `[`. You may be missing a closing `)`.
 
 parse_program: DO LET IDENT RPAREN
 ##
-## Ends in an error in state: 256.
+## Ends in an error in state: 259.
 ##
 ## cutlet -> LET binder . RTLARROW term IN statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2175,14 +2203,14 @@ parse_program: DO LET IDENT RPAREN
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 124, spurious reduction of production binder -> untyped_binder
+## In state 127, spurious reduction of production binder -> untyped_binder
 ##
 
-In cutlet after let binder, expected -> term in statement.
+Malformed let-cut command. Expected `->` here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO LET IDENT RTLARROW USE
 ##
-## Ends in an error in state: 257.
+## Ends in an error in state: 260.
 ##
 ## cutlet -> LET binder RTLARROW . term IN statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2190,11 +2218,11 @@ parse_program: DO LET IDENT RTLARROW USE
 ## LET binder RTLARROW
 ##
 
-In cutlet after let binder ->, expected term in statement.
+Malformed let-cut command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO LET IDENT RTLARROW CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 258.
+## Ends in an error in state: 261.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS IN ]
 ## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS IN ]
@@ -2210,14 +2238,14 @@ parse_program: DO LET IDENT RTLARROW CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands.
 
 parse_program: DO LET IDENT RTLARROW CONSTRUCTOR_IDENT IN USE
 ##
-## Ends in an error in state: 259.
+## Ends in an error in state: 262.
 ##
 ## cutlet -> LET binder RTLARROW term IN . statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2225,11 +2253,11 @@ parse_program: DO LET IDENT RTLARROW CONSTRUCTOR_IDENT IN USE
 ## LET binder RTLARROW term IN
 ##
 
-In cutlet after let binder -> term in, expected statement.
+Malformed let-cut command. Expected `use`, `_`, `type`, or `)`, or another valid token. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO LPAREN CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 261.
+## Ends in an error in state: 264.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH SEMICOLON RPAREN PLUS PERCENT MINUS DOT COMMA ]
 ## active_number_term -> term . MINUS term [ STAR SLASH SEMICOLON RPAREN PLUS PERCENT MINUS DOT COMMA ]
@@ -2249,14 +2277,14 @@ parse_program: DO LPAREN CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands. You may be missing a closing `)`.
 
 parse_program: DO LPAREN CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 262.
+## Ends in an error in state: 265.
 ##
 ## non_fork_statement -> LPAREN statement . RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2267,17 +2295,17 @@ parse_program: DO LPAREN CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
-## In state 241, spurious reduction of production command -> term DOT term
-## In state 246, spurious reduction of production non_fork_statement -> command
-## In state 243, spurious reduction of production statement -> non_fork_statement
+## In state 166, spurious reduction of production term -> indirect_term
+## In state 244, spurious reduction of production command -> term DOT term
+## In state 249, spurious reduction of production non_fork_statement -> command
+## In state 246, spurious reduction of production statement -> non_fork_statement
 ##
 
-In non fork statement after ( statement, expected ).
+Malformed non fork statement. Expected `)` to close `(`. You may be missing a closing `]`.
 
 parse_program: CONSTRUCTOR_LPAREN LBRACE IDENT LTRARROW CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 264.
+## Ends in an error in state: 267.
 ##
 ## naked_mu_term -> LBRACE binder LTRARROW statement . RBRACE [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT OPEN NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
 ##
@@ -2288,17 +2316,17 @@ parse_program: CONSTRUCTOR_LPAREN LBRACE IDENT LTRARROW CONSTRUCTOR_IDENT DOT CO
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
-## In state 241, spurious reduction of production command -> term DOT term
-## In state 246, spurious reduction of production non_fork_statement -> command
-## In state 243, spurious reduction of production statement -> non_fork_statement
+## In state 166, spurious reduction of production term -> indirect_term
+## In state 244, spurious reduction of production command -> term DOT term
+## In state 249, spurious reduction of production non_fork_statement -> command
+## In state 246, spurious reduction of production statement -> non_fork_statement
 ##
 
-In naked mu term after { binder <- statement, expected }.
+Malformed naked mu term. Expected `}` to close `{`. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: LPAREN CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 266.
+## Ends in an error in state: 269.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA ]
 ## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA ]
@@ -2316,14 +2344,14 @@ parse_program: LPAREN CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands. You may be missing a closing `)`.
 
 parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 267.
+## Ends in an error in state: 270.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
 ## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
@@ -2339,14 +2367,14 @@ parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands.
 
 parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT COMMA USE
 ##
-## Ends in an error in state: 268.
+## Ends in an error in state: 271.
 ##
 ## arith_command -> SLASH LPAREN term COMMA . term BAR term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2354,11 +2382,11 @@ parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT COMMA USE
 ## SLASH LPAREN term COMMA
 ##
 
-In arith command after slash ( term ,, expected term | term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 269.
+## Ends in an error in state: 272.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS BAR ]
 ## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS BAR ]
@@ -2374,14 +2402,14 @@ parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands.
 
 parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR USE
 ##
-## Ends in an error in state: 270.
+## Ends in an error in state: 273.
 ##
 ## arith_command -> SLASH LPAREN term COMMA term BAR . term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2389,11 +2417,11 @@ parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR USE
 ## SLASH LPAREN term COMMA term BAR
 ##
 
-In arith command after slash ( term , term |, expected term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 271.
+## Ends in an error in state: 274.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
 ## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
@@ -2409,14 +2437,14 @@ parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR CON
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands. You may be missing a closing `)`.
 
 parse_program: MATCH LBRACE CONSTRUCTOR_LPAREN USE
 ##
-## Ends in an error in state: 274.
+## Ends in an error in state: 277.
 ##
 ## pattern -> namespaced(CONSTRUCTOR_LPAREN) . separated_nonempty_list(COMMA,binder) RPAREN [ LTRARROW ]
 ##
@@ -2424,11 +2452,11 @@ parse_program: MATCH LBRACE CONSTRUCTOR_LPAREN USE
 ## namespaced(CONSTRUCTOR_LPAREN)
 ##
 
-In pattern after namespaced(constructor lparen), expected separated nonempty list(comma,binder) ).
+Malformed pattern. Expected `<-`.
 
 parse_program: MATCH LBRACE CONSTRUCTOR_LPAREN IDENT LTRARROW
 ##
-## Ends in an error in state: 275.
+## Ends in an error in state: 278.
 ##
 ## pattern -> namespaced(CONSTRUCTOR_LPAREN) separated_nonempty_list(COMMA,binder) . RPAREN [ LTRARROW ]
 ##
@@ -2439,15 +2467,15 @@ parse_program: MATCH LBRACE CONSTRUCTOR_LPAREN IDENT LTRARROW
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 124, spurious reduction of production binder -> untyped_binder
-## In state 132, spurious reduction of production separated_nonempty_list(COMMA,binder) -> binder
+## In state 127, spurious reduction of production binder -> untyped_binder
+## In state 135, spurious reduction of production separated_nonempty_list(COMMA,binder) -> binder
 ##
 
-In pattern after namespaced(constructor lparen) separated nonempty list(comma,binder), expected ).
+Malformed pattern. Expected `)` to close `(`.
 
 parse_program: MATCH LBRACE IDENT LTRARROW CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 278.
+## Ends in an error in state: 281.
 ##
 ## separated_nonempty_list(option(BAR),match_case) -> match_case . [ RBRACE ]
 ## separated_nonempty_list(option(BAR),match_case) -> match_case . option(BAR) separated_nonempty_list(option(BAR),match_case) [ RBRACE ]
@@ -2459,18 +2487,18 @@ parse_program: MATCH LBRACE IDENT LTRARROW CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
-## In state 241, spurious reduction of production command -> term DOT term
-## In state 246, spurious reduction of production non_fork_statement -> command
-## In state 243, spurious reduction of production statement -> non_fork_statement
-## In state 273, spurious reduction of production match_case -> pattern LTRARROW statement
+## In state 166, spurious reduction of production term -> indirect_term
+## In state 244, spurious reduction of production command -> term DOT term
+## In state 249, spurious reduction of production non_fork_statement -> command
+## In state 246, spurious reduction of production statement -> non_fork_statement
+## In state 276, spurious reduction of production match_case -> pattern LTRARROW statement
 ##
 
-In separated nonempty list(option(bar),match case) after match case, expected valid continuation.
+Expected `}`.
 
 parse_program: MATCH LBRACE IDENT LTRARROW CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT BAR USE
 ##
-## Ends in an error in state: 279.
+## Ends in an error in state: 282.
 ##
 ## separated_nonempty_list(option(BAR),match_case) -> match_case option(BAR) . separated_nonempty_list(option(BAR),match_case) [ RBRACE ]
 ##
@@ -2478,11 +2506,11 @@ parse_program: MATCH LBRACE IDENT LTRARROW CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDE
 ## match_case option(BAR)
 ##
 
-In separated nonempty list(option(bar),match case) after match case option(bar), expected separated nonempty list(option(bar),match case).
+Expected `}`.
 
 parse_program: MATCH LBRACE IDENT RTLARROW
 ##
-## Ends in an error in state: 281.
+## Ends in an error in state: 284.
 ##
 ## pattern -> binder . [ LTRARROW ]
 ## tuple_pattern -> binder . COMMA separated_nonempty_list(COMMA,binder) [ LTRARROW ]
@@ -2494,14 +2522,14 @@ parse_program: MATCH LBRACE IDENT RTLARROW
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 124, spurious reduction of production binder -> untyped_binder
+## In state 127, spurious reduction of production binder -> untyped_binder
 ##
 
-In pattern after binder, expected valid continuation.
+Malformed pattern. Expected `<-`.
 
 parse_program: MATCH LBRACE IDENT COMMA USE
 ##
-## Ends in an error in state: 282.
+## Ends in an error in state: 285.
 ##
 ## tuple_pattern -> binder COMMA . separated_nonempty_list(COMMA,binder) [ LTRARROW ]
 ##
@@ -2509,11 +2537,11 @@ parse_program: MATCH LBRACE IDENT COMMA USE
 ## binder COMMA
 ##
 
-In tuple pattern after binder ,, expected separated nonempty list(comma,binder).
+Malformed tuple pattern. Expected `<-`. Tuple patterns require commas and a closing `)`.
 
 parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 284.
+## Ends in an error in state: 287.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
 ## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
@@ -2529,14 +2557,14 @@ parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands.
 
 parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT COMMA USE
 ##
-## Ends in an error in state: 285.
+## Ends in an error in state: 288.
 ##
 ## arith_command -> STAR LPAREN term COMMA . term BAR term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2544,11 +2572,11 @@ parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT COMMA USE
 ## STAR LPAREN term COMMA
 ##
 
-In arith command after star ( term ,, expected term | term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 286.
+## Ends in an error in state: 289.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS BAR ]
 ## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS BAR ]
@@ -2564,14 +2592,14 @@ parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT USE
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands.
 
 parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR USE
 ##
-## Ends in an error in state: 287.
+## Ends in an error in state: 290.
 ##
 ## arith_command -> STAR LPAREN term COMMA term BAR . term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2579,11 +2607,11 @@ parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR USE
 ## STAR LPAREN term COMMA term BAR
 ##
 
-In arith command after star ( term , term |, expected term ).
+Malformed arithmetic command. Expected an expression here. You may be missing a closing `)`. You may be missing a closing `]`.
 
 parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 288.
+## Ends in an error in state: 291.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
 ## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
@@ -2599,14 +2627,14 @@ parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR CONS
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
+## In state 166, spurious reduction of production term -> indirect_term
 ##
 
-In active number term after term, expected plus term.
+Malformed arithmetic expression. Expected `+`. Check operator placement and surrounding operands. You may be missing a closing `)`.
 
 parse_program: PROC IDENT LPAREN RPAREN LBRACE CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 290.
+## Ends in an error in state: 293.
 ##
 ## proc_body -> LBRACE statement . RBRACE [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2617,29 +2645,78 @@ parse_program: PROC IDENT LPAREN RPAREN LBRACE CONSTRUCTOR_IDENT DOT CONSTRUCTOR
 ## This implies that, although the LR(1) items shown above provide an
 ## accurate view of the past (what has been recognized so far), they
 ## may provide an INCOMPLETE view of the future (what was expected next).
-## In state 163, spurious reduction of production term -> indirect_term
-## In state 241, spurious reduction of production command -> term DOT term
-## In state 246, spurious reduction of production non_fork_statement -> command
-## In state 243, spurious reduction of production statement -> non_fork_statement
+## In state 166, spurious reduction of production term -> indirect_term
+## In state 244, spurious reduction of production command -> term DOT term
+## In state 249, spurious reduction of production non_fork_statement -> command
+## In state 246, spurious reduction of production statement -> non_fork_statement
 ##
 
-In procedure body after { statement, expected }.
+Malformed proc body. Expected `}` to close `{`.
+
+parse_program: PROC REC IDENT LPAREN RPAREN USE
+##
+## Ends in an error in state: 296.
+##
+## proc_definition -> PROC REC untyped_binder_strict proc_binders . proc_body [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
+##
+## The known suffix of the stack is as follows:
+## PROC REC untyped_binder_strict proc_binders
+##
+
+Malformed procedure definition. Expected a procedure body here. Use `proc f ... = ...` (optionally `rec` and effects in `<...>`).
 
 parse_program: PROC IDENT USE
 ##
-## Ends in an error in state: 293.
+## Ends in an error in state: 298.
 ##
+## proc_definition -> PROC untyped_binder_strict . LANGLE loption(separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT)) RANGLE proc_binders proc_body [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ## proc_definition -> PROC untyped_binder_strict . proc_binders proc_body [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
 ## The known suffix of the stack is as follows:
 ## PROC untyped_binder_strict
 ##
 
-In proc definition after proc untyped binder strict, expected parameter list procedure body.
+Malformed procedure definition. Expected `<`. Use `proc f ... = ...` (optionally `rec` and effects in `<...>`).
+
+parse_program: PROC IDENT LANGLE USE
+##
+## Ends in an error in state: 299.
+##
+## proc_definition -> PROC untyped_binder_strict LANGLE . loption(separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT)) RANGLE proc_binders proc_body [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
+##
+## The known suffix of the stack is as follows:
+## PROC untyped_binder_strict LANGLE
+##
+
+Malformed procedure definition. Use `proc f ... = ...` (optionally `rec` and effects in `<...>`).
+
+parse_program: PROC IDENT LANGLE RANGLE USE
+##
+## Ends in an error in state: 301.
+##
+## proc_definition -> PROC untyped_binder_strict LANGLE loption(separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT)) RANGLE . proc_binders proc_body [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
+##
+## The known suffix of the stack is as follows:
+## PROC untyped_binder_strict LANGLE loption(separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT)) RANGLE
+##
+
+Malformed procedure definition. Expected procedure parameters here. Use `proc f ... = ...` (optionally `rec` and effects in `<...>`).
+
+parse_program: PROC IDENT LANGLE RANGLE LPAREN RPAREN USE
+##
+## Ends in an error in state: 302.
+##
+## proc_definition -> PROC untyped_binder_strict LANGLE loption(separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT)) RANGLE proc_binders . proc_body [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
+##
+## The known suffix of the stack is as follows:
+## PROC untyped_binder_strict LANGLE loption(separated_nonempty_list(COMMA,CONSTRUCTOR_IDENT)) RANGLE proc_binders
+##
+
+Malformed procedure definition. Expected a procedure body here. Use `proc f ... = ...` (optionally `rec` and effects in `<...>`).
 
 parse_program: PROC IDENT LPAREN RPAREN USE
 ##
-## Ends in an error in state: 294.
+## Ends in an error in state: 304.
 ##
 ## proc_definition -> PROC untyped_binder_strict proc_binders . proc_body [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2647,11 +2724,11 @@ parse_program: PROC IDENT LPAREN RPAREN USE
 ## PROC untyped_binder_strict proc_binders
 ##
 
-In proc definition after proc untyped binder strict parameter list, expected procedure body.
+Malformed procedure definition. Expected a procedure body here. Use `proc f ... = ...` (optionally `rec` and effects in `<...>`).
 
 parse_program: OPEN USE
 ##
-## Ends in an error in state: 296.
+## Ends in an error in state: 306.
 ##
 ## open_statement -> OPEN . namespaced(any_ident) [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2659,11 +2736,11 @@ parse_program: OPEN USE
 ## OPEN
 ##
 
-In open statement after open, expected module path.
+Malformed import/open statement. Expected a qualified name here. Use `use A.B as Alias` or `open A.B`.
 
 parse_program: LET USE
 ##
-## Ends in an error in state: 298.
+## Ends in an error in state: 308.
 ##
 ## let_definition -> LET . typed_binder EQUALS def_term [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ## let_definition -> LET . REC typed_binder EQUALS def_term [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
@@ -2672,11 +2749,11 @@ parse_program: LET USE
 ## LET
 ##
 
-In let definition after let, expected typed binder = def term.
+Malformed let definition. Expected a typed binder, like `x : T` here. Use `let x : T = expr` (or `let rec ...`).
 
 parse_program: LET REC USE
 ##
-## Ends in an error in state: 299.
+## Ends in an error in state: 309.
 ##
 ## let_definition -> LET REC . typed_binder EQUALS def_term [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2684,11 +2761,11 @@ parse_program: LET REC USE
 ## LET REC
 ##
 
-In let definition after let rec, expected typed binder = def term.
+Malformed let definition. Expected a typed binder, like `x : T` here. Use `let x : T = expr` (or `let rec ...`).
 
 parse_program: LET REC IDENT COLON CONSTRUCTOR_IDENT UNIT
 ##
-## Ends in an error in state: 300.
+## Ends in an error in state: 310.
 ##
 ## let_definition -> LET REC typed_binder . EQUALS def_term [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2696,11 +2773,11 @@ parse_program: LET REC IDENT COLON CONSTRUCTOR_IDENT UNIT
 ## LET REC typed_binder
 ##
 
-In let definition after let rec typed binder, expected = def term.
+Malformed let definition. Expected `=` here. Use `let x : T = expr` (or `let rec ...`).
 
 parse_program: LET REC IDENT COLON CONSTRUCTOR_IDENT EQUALS USE
 ##
-## Ends in an error in state: 301.
+## Ends in an error in state: 311.
 ##
 ## let_definition -> LET REC typed_binder EQUALS . def_term [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2708,11 +2785,11 @@ parse_program: LET REC IDENT COLON CONSTRUCTOR_IDENT EQUALS USE
 ## LET REC typed_binder EQUALS
 ##
 
-In let definition after let rec typed binder =, expected def term.
+Malformed let definition. Expected an expression here. Use `let x : T = expr` (or `let rec ...`).
 
 parse_program: LET IDENT COLON CONSTRUCTOR_IDENT EQUALS CONSTRUCTOR_IDENT UNIT
 ##
-## Ends in an error in state: 303.
+## Ends in an error in state: 313.
 ##
 ## def_term -> indirect_term . [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ## indirect_term -> indirect_term . COLON type_use [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COLON CODATA ]
@@ -2721,11 +2798,11 @@ parse_program: LET IDENT COLON CONSTRUCTOR_IDENT EQUALS CONSTRUCTOR_IDENT UNIT
 ## indirect_term
 ##
 
-In def term after indirect term, expected valid continuation.
+Malformed def term.
 
 parse_program: LET IDENT COLON CONSTRUCTOR_IDENT UNIT
 ##
-## Ends in an error in state: 305.
+## Ends in an error in state: 315.
 ##
 ## let_definition -> LET typed_binder . EQUALS def_term [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2733,11 +2810,11 @@ parse_program: LET IDENT COLON CONSTRUCTOR_IDENT UNIT
 ## LET typed_binder
 ##
 
-In let definition after let typed binder, expected = def term.
+Malformed let definition. Expected `=` here. Use `let x : T = expr` (or `let rec ...`).
 
 parse_program: LET IDENT COLON CONSTRUCTOR_IDENT EQUALS USE
 ##
-## Ends in an error in state: 306.
+## Ends in an error in state: 316.
 ##
 ## let_definition -> LET typed_binder EQUALS . def_term [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2745,11 +2822,11 @@ parse_program: LET IDENT COLON CONSTRUCTOR_IDENT EQUALS USE
 ## LET typed_binder EQUALS
 ##
 
-In let definition after let typed binder =, expected def term.
+Malformed let definition. Expected an expression here. Use `let x : T = expr` (or `let rec ...`).
 
 parse_program: DO USE
 ##
-## Ends in an error in state: 308.
+## Ends in an error in state: 318.
 ##
 ## do_term -> DO . LBRACE untyped_binder RBRACE statement [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ## do_term -> DO . statement [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
@@ -2758,11 +2835,11 @@ parse_program: DO USE
 ## DO
 ##
 
-In do term after do, expected { untyped binder } statement.
+Malformed expression in `do` block. Expected `{`.
 
 parse_program: DO LBRACE USE
 ##
-## Ends in an error in state: 309.
+## Ends in an error in state: 319.
 ##
 ## do_term -> DO LBRACE . untyped_binder RBRACE statement [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ## naked_mu_term -> LBRACE . binder LTRARROW statement RBRACE [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT ]
@@ -2771,11 +2848,11 @@ parse_program: DO LBRACE USE
 ## DO LBRACE
 ##
 
-In do term after do {, expected untyped binder } statement.
+Malformed expression in `do` block.
 
 parse_program: DO LBRACE IDENT USE
 ##
-## Ends in an error in state: 310.
+## Ends in an error in state: 320.
 ##
 ## binder -> untyped_binder . [ LTRARROW ]
 ## do_term -> DO LBRACE untyped_binder . RBRACE statement [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
@@ -2785,11 +2862,11 @@ parse_program: DO LBRACE IDENT USE
 ## DO LBRACE untyped_binder
 ##
 
-In binder after untyped binder, expected valid continuation.
+Malformed binder. Expected `<-`.
 
 parse_program: DO LBRACE IDENT RBRACE USE
 ##
-## Ends in an error in state: 311.
+## Ends in an error in state: 321.
 ##
 ## do_term -> DO LBRACE untyped_binder RBRACE . statement [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2797,11 +2874,11 @@ parse_program: DO LBRACE IDENT RBRACE USE
 ## DO LBRACE untyped_binder RBRACE
 ##
 
-In do term after do { untyped binder }, expected statement.
+Malformed expression in `do` block.
 
 parse_program: OPEN CONSTRUCTOR_IDENT UNIT
 ##
-## Ends in an error in state: 316.
+## Ends in an error in state: 326.
 ##
 ## maybe_delimited(top_level_item(mod_item)) -> top_level_item(mod_item) . option(DELIMITER) [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2809,11 +2886,11 @@ parse_program: OPEN CONSTRUCTOR_IDENT UNIT
 ## top_level_item(mod_item)
 ##
 
-In maybe delimited(top level item(mod item)) after top level item(mod item), expected option(delimiter).
+Expected `use`, `type`, `proc`, or `open`, or another valid token.
 
 parse_program: CODATA USE
 ##
-## Ends in an error in state: 320.
+## Ends in an error in state: 330.
 ##
 ## type_definition -> shape . mode kind_binder EQUALS full_raw_type [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ## type_definition -> shape . kind_binder EQUALS full_raw_type [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
@@ -2822,11 +2899,11 @@ parse_program: CODATA USE
 ## shape
 ##
 
-In type definition after shape, expected mode type name (optionally with type parameters) = full raw type.
+Malformed type definition. Expected a mode annotation, either `[cbv]` or `[cbn]` here. Use `type name <...> = ...`.
 
 parse_program: CODATA LBRACK USE
 ##
-## Ends in an error in state: 321.
+## Ends in an error in state: 331.
 ##
 ## mode -> LBRACK . CBV RBRACK [ IDENT ]
 ## mode -> LBRACK . CBN RBRACK [ IDENT ]
@@ -2835,11 +2912,11 @@ parse_program: CODATA LBRACK USE
 ## LBRACK
 ##
 
-In mode after [, expected cbv ].
+Malformed evaluation mode annotation. Expected `cbv`. Mode annotations must be exactly `[cbv]` or `[cbn]`.
 
 parse_program: CODATA LBRACK CBN RBRACK USE
 ##
-## Ends in an error in state: 322.
+## Ends in an error in state: 332.
 ##
 ## type_definition -> shape mode . kind_binder EQUALS full_raw_type [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2847,11 +2924,11 @@ parse_program: CODATA LBRACK CBN RBRACK USE
 ## shape mode
 ##
 
-In type definition after shape mode, expected type name (optionally with type parameters) = full raw type.
+Malformed type definition. Expected a type name (and optional type parameters) here. Use `type name <...> = ...`.
 
 parse_program: CODATA LBRACK CBN RBRACK IDENT LANGLE RANGLE USE
 ##
-## Ends in an error in state: 323.
+## Ends in an error in state: 333.
 ##
 ## type_definition -> shape mode kind_binder . EQUALS full_raw_type [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2859,11 +2936,11 @@ parse_program: CODATA LBRACK CBN RBRACK IDENT LANGLE RANGLE USE
 ## shape mode kind_binder
 ##
 
-In type definition after shape mode type name (optionally with type parameters), expected = full raw type.
+Malformed type definition. Expected `=` here. Use `type name <...> = ...`.
 
 parse_program: CODATA LBRACK CBN RBRACK IDENT EQUALS USE
 ##
-## Ends in an error in state: 324.
+## Ends in an error in state: 334.
 ##
 ## type_definition -> shape mode kind_binder EQUALS . full_raw_type [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2871,11 +2948,11 @@ parse_program: CODATA LBRACK CBN RBRACK IDENT EQUALS USE
 ## shape mode kind_binder EQUALS
 ##
 
-In type definition after shape mode type name (optionally with type parameters) =, expected full raw type.
+Malformed type definition. Use `type name <...> = ...`.
 
 parse_program: CODATA IDENT EQUALS BAR USE
 ##
-## Ends in an error in state: 327.
+## Ends in an error in state: 337.
 ##
 ## variant_raw_type -> option(BAR) . separated_nonempty_list(BAR,variant) [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2883,11 +2960,11 @@ parse_program: CODATA IDENT EQUALS BAR USE
 ## option(BAR)
 ##
 
-In variant raw type after option(bar), expected separated nonempty list(bar,variant).
+Malformed variant raw type.
 
 parse_program: CODATA IDENT EQUALS CONSTRUCTOR_LPAREN USE
 ##
-## Ends in an error in state: 328.
+## Ends in an error in state: 338.
 ##
 ## variant -> CONSTRUCTOR_LPAREN . separated_nonempty_list(COMMA,type_use) RPAREN [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2895,11 +2972,11 @@ parse_program: CODATA IDENT EQUALS CONSTRUCTOR_LPAREN USE
 ## CONSTRUCTOR_LPAREN
 ##
 
-In variant after constructor lparen, expected separated nonempty list(comma,type use) ).
+Malformed variant.
 
 parse_program: CODATA IDENT EQUALS CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT RANGLE
 ##
-## Ends in an error in state: 329.
+## Ends in an error in state: 339.
 ##
 ## variant -> CONSTRUCTOR_LPAREN separated_nonempty_list(COMMA,type_use) . RPAREN [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2913,11 +2990,11 @@ parse_program: CODATA IDENT EQUALS CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT RANGLE
 ## In state 56, spurious reduction of production separated_nonempty_list(COMMA,type_use) -> type_use
 ##
 
-In variant after constructor lparen separated nonempty list(comma,type use), expected ).
+Malformed variant. Expected `)` to close `(`.
 
 parse_program: CODATA IDENT EQUALS CONSTRUCTOR_IDENT UNIT
 ##
-## Ends in an error in state: 332.
+## Ends in an error in state: 342.
 ##
 ## separated_nonempty_list(BAR,variant) -> variant . [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ## separated_nonempty_list(BAR,variant) -> variant . BAR separated_nonempty_list(BAR,variant) [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
@@ -2926,11 +3003,11 @@ parse_program: CODATA IDENT EQUALS CONSTRUCTOR_IDENT UNIT
 ## variant
 ##
 
-In separated nonempty list(bar,variant) after variant, expected valid continuation.
+Expected `use`, `type`, `proc`, or `open`, or another valid token.
 
 parse_program: CODATA IDENT EQUALS CONSTRUCTOR_IDENT BAR USE
 ##
-## Ends in an error in state: 333.
+## Ends in an error in state: 343.
 ##
 ## separated_nonempty_list(BAR,variant) -> variant BAR . separated_nonempty_list(BAR,variant) [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2938,11 +3015,11 @@ parse_program: CODATA IDENT EQUALS CONSTRUCTOR_IDENT BAR USE
 ## variant BAR
 ##
 
-In separated nonempty list(bar,variant) after variant |, expected separated nonempty list(bar,variant).
+Expected `use`, `type`, `proc`, or `open`, or another valid token.
 
 parse_program: CODATA IDENT LANGLE RANGLE USE
 ##
-## Ends in an error in state: 337.
+## Ends in an error in state: 347.
 ##
 ## type_definition -> shape kind_binder . EQUALS full_raw_type [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2950,11 +3027,11 @@ parse_program: CODATA IDENT LANGLE RANGLE USE
 ## shape kind_binder
 ##
 
-In type definition after shape type name (optionally with type parameters), expected = full raw type.
+Malformed type definition. Expected `=` here. Use `type name <...> = ...`.
 
 parse_program: CODATA IDENT EQUALS USE
 ##
-## Ends in an error in state: 338.
+## Ends in an error in state: 348.
 ##
 ## type_definition -> shape kind_binder EQUALS . full_raw_type [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2962,11 +3039,11 @@ parse_program: CODATA IDENT EQUALS USE
 ## shape kind_binder EQUALS
 ##
 
-In type definition after shape type name (optionally with type parameters) =, expected full raw type.
+Malformed type definition. Use `type name <...> = ...`.
 
 parse_program: CONSTRUCTOR_IDENT DELIMITER UNIT
 ##
-## Ends in an error in state: 346.
+## Ends in an error in state: 356.
 ##
 ## list(maybe_delimited(top_level_item(mod_item))) -> maybe_delimited(top_level_item(mod_item)) . list(maybe_delimited(top_level_item(mod_item))) [ EOF ]
 ##
@@ -2974,11 +3051,11 @@ parse_program: CONSTRUCTOR_IDENT DELIMITER UNIT
 ## maybe_delimited(top_level_item(mod_item))
 ##
 
-In list(maybe delimited(top level item(mod item))) after maybe delimited(top level item(mod item)), expected list(maybe delimited(top level item(mod item))).
+Unexpected trailing input.
 
 parse_program: CONSTRUCTOR_IDENT UNIT
 ##
-## Ends in an error in state: 349.
+## Ends in an error in state: 359.
 ##
 ## indirect_term -> indirect_term . COLON type_use [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COLON CODATA ]
 ## top_level_term -> indirect_term . [ USE TYPE PROC OPEN NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
@@ -2987,11 +3064,11 @@ parse_program: CONSTRUCTOR_IDENT UNIT
 ## indirect_term
 ##
 
-In indirect term after indirect term, expected : type.
+Malformed expression. Expected `:` here.
 
 parse_signature: UNIT
 ##
-## Ends in an error in state: 352.
+## Ends in an error in state: 362.
 ##
 ## parse_signature' -> . parse_signature [ # ]
 ##
@@ -2999,11 +3076,11 @@ parse_signature: UNIT
 ##
 ##
 
-In parse signature, expected parse signature.
+Malformed parse signature'.
 
 parse_signature: LET USE
 ##
-## Ends in an error in state: 353.
+## Ends in an error in state: 363.
 ##
 ## term_signature -> LET . untyped_binder_strict EQUALS type_use [ USE OPEN LET EOF DELIMITER DATA CODATA ]
 ##
@@ -3011,11 +3088,11 @@ parse_signature: LET USE
 ## LET
 ##
 
-In term signature after let, expected untyped binder strict = type.
+Malformed term signature. Expected a binder name here.
 
 parse_signature: LET IDENT USE
 ##
-## Ends in an error in state: 354.
+## Ends in an error in state: 364.
 ##
 ## term_signature -> LET untyped_binder_strict . EQUALS type_use [ USE OPEN LET EOF DELIMITER DATA CODATA ]
 ##
@@ -3023,11 +3100,11 @@ parse_signature: LET IDENT USE
 ## LET untyped_binder_strict
 ##
 
-In term signature after let untyped binder strict, expected = type.
+Malformed term signature. Expected `=` here.
 
 parse_signature: LET IDENT EQUALS USE
 ##
-## Ends in an error in state: 355.
+## Ends in an error in state: 365.
 ##
 ## term_signature -> LET untyped_binder_strict EQUALS . type_use [ USE OPEN LET EOF DELIMITER DATA CODATA ]
 ##
@@ -3035,11 +3112,11 @@ parse_signature: LET IDENT EQUALS USE
 ## LET untyped_binder_strict EQUALS
 ##
 
-In term signature after let untyped binder strict =, expected type.
+Malformed term signature. Expected `use`, `open`, `let`, or a declaration separator, or another valid token.
 
 parse_signature: OPEN CONSTRUCTOR_IDENT UNIT
 ##
-## Ends in an error in state: 358.
+## Ends in an error in state: 368.
 ##
 ## maybe_delimited(top_level_item(sig_item)) -> top_level_item(sig_item) . option(DELIMITER) [ USE OPEN LET EOF DATA CODATA ]
 ##
@@ -3047,11 +3124,11 @@ parse_signature: OPEN CONSTRUCTOR_IDENT UNIT
 ## top_level_item(sig_item)
 ##
 
-In maybe delimited(top level item(sig item)) after top level item(sig item), expected option(delimiter).
+Expected `use`, `open`, `let`, or `data`, or another valid token.
 
 parse_signature: CODATA USE
 ##
-## Ends in an error in state: 362.
+## Ends in an error in state: 372.
 ##
 ## type_signature -> shape . mode kind_binder EQUALS full_raw_type [ USE OPEN LET EOF DELIMITER DATA CODATA ]
 ## type_signature -> shape . kind_binder EQUALS full_raw_type [ USE OPEN LET EOF DELIMITER DATA CODATA ]
@@ -3060,11 +3137,11 @@ parse_signature: CODATA USE
 ## shape
 ##
 
-In type signature after shape, expected mode type name (optionally with type parameters) = full raw type.
+Malformed type signature. Expected a mode annotation, either `[cbv]` or `[cbn]` here. Use `name : Type`.
 
 parse_signature: CODATA LBRACK CBN RBRACK USE
 ##
-## Ends in an error in state: 363.
+## Ends in an error in state: 373.
 ##
 ## type_signature -> shape mode . kind_binder EQUALS full_raw_type [ USE OPEN LET EOF DELIMITER DATA CODATA ]
 ##
@@ -3072,11 +3149,11 @@ parse_signature: CODATA LBRACK CBN RBRACK USE
 ## shape mode
 ##
 
-In type signature after shape mode, expected type name (optionally with type parameters) = full raw type.
+Malformed type signature. Expected a type name (and optional type parameters) here. Use `name : Type`.
 
 parse_signature: CODATA LBRACK CBN RBRACK IDENT LANGLE RANGLE USE
 ##
-## Ends in an error in state: 364.
+## Ends in an error in state: 374.
 ##
 ## type_signature -> shape mode kind_binder . EQUALS full_raw_type [ USE OPEN LET EOF DELIMITER DATA CODATA ]
 ##
@@ -3084,11 +3161,11 @@ parse_signature: CODATA LBRACK CBN RBRACK IDENT LANGLE RANGLE USE
 ## shape mode kind_binder
 ##
 
-In type signature after shape mode type name (optionally with type parameters), expected = full raw type.
+Malformed type signature. Expected `=` here. Use `name : Type`.
 
 parse_signature: CODATA LBRACK CBN RBRACK IDENT EQUALS USE
 ##
-## Ends in an error in state: 365.
+## Ends in an error in state: 375.
 ##
 ## type_signature -> shape mode kind_binder EQUALS . full_raw_type [ USE OPEN LET EOF DELIMITER DATA CODATA ]
 ##
@@ -3096,11 +3173,11 @@ parse_signature: CODATA LBRACK CBN RBRACK IDENT EQUALS USE
 ## shape mode kind_binder EQUALS
 ##
 
-In type signature after shape mode type name (optionally with type parameters) =, expected full raw type.
+Malformed type signature. Expected `use`, `open`, `let`, or a declaration separator, or another valid token. Use `name : Type`.
 
 parse_signature: CODATA IDENT LANGLE RANGLE USE
 ##
-## Ends in an error in state: 367.
+## Ends in an error in state: 377.
 ##
 ## type_signature -> shape kind_binder . EQUALS full_raw_type [ USE OPEN LET EOF DELIMITER DATA CODATA ]
 ##
@@ -3108,11 +3185,11 @@ parse_signature: CODATA IDENT LANGLE RANGLE USE
 ## shape kind_binder
 ##
 
-In type signature after shape type name (optionally with type parameters), expected = full raw type.
+Malformed type signature. Expected `=` here. Use `name : Type`.
 
 parse_signature: CODATA IDENT EQUALS USE
 ##
-## Ends in an error in state: 368.
+## Ends in an error in state: 378.
 ##
 ## type_signature -> shape kind_binder EQUALS . full_raw_type [ USE OPEN LET EOF DELIMITER DATA CODATA ]
 ##
@@ -3120,11 +3197,11 @@ parse_signature: CODATA IDENT EQUALS USE
 ## shape kind_binder EQUALS
 ##
 
-In type signature after shape type name (optionally with type parameters) =, expected full raw type.
+Malformed type signature. Expected `use`, `open`, `let`, or a declaration separator, or another valid token. Use `name : Type`.
 
 parse_signature: OPEN CONSTRUCTOR_IDENT DELIMITER UNIT
 ##
-## Ends in an error in state: 372.
+## Ends in an error in state: 382.
 ##
 ## list(maybe_delimited(top_level_item(sig_item))) -> maybe_delimited(top_level_item(sig_item)) . list(maybe_delimited(top_level_item(sig_item))) [ EOF ]
 ##
@@ -3132,4 +3209,5 @@ parse_signature: OPEN CONSTRUCTOR_IDENT DELIMITER UNIT
 ## maybe_delimited(top_level_item(sig_item))
 ##
 
-In list(maybe delimited(top level item(sig item))) after maybe delimited(top level item(sig item)), expected list(maybe delimited(top level item(sig item))).
+Unexpected trailing input.
+
