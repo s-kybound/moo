@@ -1172,9 +1172,10 @@ and tycheck_module
   new_top_level_items, after_defs_knowledge, after_defs_tydef_env
 ;;
 
-let tycheck_program (modu : Ast.core_ann Ast.module_) : typed_module * tydef_env =
+let tycheck_program (modu : Ast.core_ann Ast.module_) tydef_env : typed_module * tydef_env
+  =
   let modu = tycheck_module_of_ast modu in
-  let out, _, env = tycheck_module IMap.empty modu Top in
+  let out, _, env = tycheck_module IMap.empty modu tydef_env in
   out, env
 ;;
 

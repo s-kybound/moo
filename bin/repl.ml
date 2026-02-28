@@ -56,13 +56,17 @@ end
 
 module State = struct
   let current_history : string History.t option ref = ref None
+  let current_ty_env : Syntax.Type.tydef_env ref = ref Syntax.Type.Top
   let set_history t = current_history := Some t
+  let set_ty_env env = current_ty_env := env
 
   let get_history () =
     match !current_history with
     | None -> raise (Failure "Tried to get uninitialized history")
     | Some e -> e
   ;;
+
+  let get_ty_env () = !current_ty_env
 end
 
 let print_ast ?(ann_show = fun _ s -> s) ast =
@@ -95,6 +99,7 @@ let parse_to_core_ast ?k input =
 module Command = struct
   type t =
     | Quit
+    | Clear
     | Help
     | Step of string
     | Show of string
@@ -102,6 +107,7 @@ module Command = struct
 
   let completions =
     [ [ "!q"; "!quit"; "!exit" ], [], "Exit REPL"
+    ; [ "!clear" ], [], "Clear REPL environment"
     ; [ "!help" ], [], "Show help"
     ; [ "!step" ], [ "prog" ], "Step through program"
     ; [ "!show" ], [ "prog" ], "Visualize given program"
@@ -126,6 +132,8 @@ module Command = struct
     let line = String.trim line in
     if line = "!q" || line = "!quit" || line = "!exit"
     then Quit
+    else if line = "!clear"
+    then Clear
     else if line = "!help"
     then Help
     else if String.starts_with ~prefix:"!step " line
@@ -136,15 +144,16 @@ module Command = struct
   ;;
 end
 
-let eval_module input =
-  let tychecked, tenv = Typechecker.Bidir.tycheck_program input in
+let eval_module input ty_env =
+  let tychecked, out_ty_env = Typechecker.Bidir.tycheck_program input ty_env in
   (* print_ast ~ann_show:Typechecker.Bidir.bidir_ann_show tychecked; *)
-  let converted = Core.Tycheck_to_ir.tycheck_command_of_module tenv tychecked in
+  let converted = Core.Tycheck_to_ir.tycheck_command_of_module out_ty_env tychecked in
   let converted = Core.Runner.state_of_command converted in
-  ignore (Core.Runner.eval_program converted)
+  ignore (Core.Runner.eval_program converted);
+  out_ty_env
 ;;
 
-let step_module input =
+let step_module input ty_env =
   let show_state (control, stash, _env) =
     Printf.printf "Control Stack:\n";
     List.iter
@@ -179,18 +188,25 @@ let step_module input =
       print_error "Step-through for Receive not implemented."
     | Error exn :: _ -> print_error (Printexc.to_string exn)
   in
-  let tychecked, tenv = Typechecker.Bidir.tycheck_program input in
+  let tychecked, tenv = Typechecker.Bidir.tycheck_program input ty_env in
   let converted = Core.Tycheck_to_ir.tycheck_command_of_module tenv tychecked in
   let converted = Core.Runner.state_of_command converted in
   Printf.printf
     "Stepping through program. Press any key to step through the program, !q to quit\n%!";
-  step_loop [ Step converted ]
+  step_loop [ Step converted ];
+  tenv
+;;
+
+let show_module input ty_env =
+  print_ast input;
+  ty_env
 ;;
 
 let init_repl () =
   LNoise.set_multiline true;
   let max_length = 1000 in
   State.set_history (History.init 1000 "");
+  State.set_ty_env Syntax.Type.Top;
   match LNoise.history_set ~max_length with
   | Error s -> raise (Failure s)
   | Ok () ->
@@ -224,7 +240,11 @@ let rec repl_loop (kont : (Error.kont * (Ast.core_ann Ast.module_ -> 'a) * strin
     let full_input =
       if String.trim previous_input = "" then input else previous_input ^ "\n" ^ input
     in
-    try f (parse_to_core_ast ?k input) with
+    let ty_env = State.get_ty_env () in
+    try
+      let out_ty_env = f (parse_to_core_ast ?k input) ty_env in
+      State.set_ty_env out_ty_env
+    with
     | Error.Early_eof k -> repl_loop (Some (k, f, full_input))
     | e ->
       print_exception_with_context full_input e;
@@ -249,11 +269,15 @@ let rec repl_loop (kont : (Error.kont * (Ast.core_ann Ast.module_ -> 'a) * strin
      | _, Command.Help ->
        Command.show_help ();
        repl_loop kont
+     | _, Command.Clear ->
+       State.set_ty_env Syntax.Type.Top;
+       print_endline "Cleared REPL environment.";
+       repl_loop None
      | None, Command.Step expr ->
        attempt_eval expr step_module;
        repl_loop None
      | None, Command.Show expr ->
-       attempt_eval expr print_ast;
+       attempt_eval expr show_module;
        repl_loop None
      | Some (k, f, previous_input), _ ->
        (* we need to consider the newlines here for correctness *)
