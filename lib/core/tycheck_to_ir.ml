@@ -84,22 +84,34 @@ let rec tycheck_to_ir_command tydef_env (c : typed_command) : Ir.command =
         { focus_term = tycheck_to_ir_term tydef_env r_term
         ; unfocus_term = tycheck_to_ir_term tydef_env l_term
         }
-  | Ast.Arith (Ast.Unop { op = top; in_term = tin_term; out_term = tout_term }) ->
-    Ir.Arith
-      (Ir.Unop
-         { op = tycheck_to_ir_unop top
-         ; in_focus_term = tycheck_to_ir_term tydef_env tin_term
-         ; out_unfocus_term = tycheck_to_ir_term tydef_env tout_term
-         })
-  | Ast.Arith
-      (Ast.Bop { op = top; l_term = tl_term; r_term = tr_term; out_term = tout_term }) ->
-    Ir.Arith
-      (Ir.Bop
-         { op = tycheck_to_ir_bop top
-         ; l_focus_term = tycheck_to_ir_term tydef_env tl_term
-         ; r_focus_term = tycheck_to_ir_term tydef_env tr_term
-         ; out_unfocus_term = tycheck_to_ir_term tydef_env tout_term
-         })
+  | Ast.Arith (Ast.Unop { out_term; _ } as a) | Ast.Arith (Ast.Bop { out_term; _ } as a)
+    ->
+    let right_focus =
+      let out_ann, _ = out_term in
+      match out_ann.ty with
+      | Some tyu -> should_focus_left tyu tydef_env
+      | None -> assert false
+    in
+    let left_focus = not right_focus in
+    begin match a with
+    | Ast.Unop { op; in_term; out_term } ->
+      Ir.Arith
+        (Ir.Unop
+           { op = tycheck_to_ir_unop op
+           ; in_term = tycheck_to_ir_term tydef_env in_term
+           ; out_term = tycheck_to_ir_term tydef_env out_term
+           ; left_focus
+           })
+    | Ast.Bop { op; l_term; r_term; out_term } ->
+      Ir.Arith
+        (Ir.Bop
+           { op = tycheck_to_ir_bop op
+           ; l_focus_term = tycheck_to_ir_term tydef_env l_term
+           ; r_focus_term = tycheck_to_ir_term tydef_env r_term
+           ; out_term = tycheck_to_ir_term tydef_env out_term
+           ; left_focus
+           })
+    end
   | Ast.Fork (c1, c2) ->
     Ir.Fork (tycheck_to_ir_command tydef_env c1, tycheck_to_ir_command tydef_env c2)
 

@@ -52,31 +52,35 @@ let rec show_term term =
   | Num n -> Int64.to_string n
   | Rec (name, t) -> Printf.sprintf "[rec %s] %s" name (show_term t)
   | Arr terms -> Printf.sprintf "[%s]" (String.concat ", " (List.map show_term terms))
+  | Val v -> show_value v
   | Exit -> "exit"
 
 and show_command command =
   match command with
   | Core { focus_term; unfocus_term } ->
     Printf.sprintf "%s >> %s" (show_term focus_term) (show_term unfocus_term)
-  | Arith (Unop { op; in_focus_term; out_unfocus_term }) ->
+  | Arith (Unop { op; in_term; out_term; left_focus }) ->
+    let direction = if left_focus then ">>" else "<<" in
     Printf.sprintf
-      "%s(%s >> %s)"
+      "%s(%s %s %s)"
       (show_unop op)
-      (show_term in_focus_term)
-      (show_term out_unfocus_term)
-  | Arith (Bop { op; l_focus_term; r_focus_term; out_unfocus_term }) ->
+      (show_term in_term)
+      direction
+      (show_term out_term)
+  | Arith (Bop { op; l_focus_term; r_focus_term; out_term; left_focus }) ->
+    let direction = if left_focus then ">>" else "<<" in
     Printf.sprintf
-      "%s(%s, %s >> %s)"
+      "%s(%s, %s %s %s)"
       (show_bop op)
       (show_term l_focus_term)
       (show_term r_focus_term)
-      (show_term out_unfocus_term)
+      direction
+      (show_term out_term)
   | Fork (cmd1, cmd2) ->
     Printf.sprintf "[%s | %s]" (show_command cmd1) (show_command cmd2)
   | ModEndHole -> "MOD_END_HOLE"
-;;
 
-let show_instruction instr =
+and show_instruction instr =
   match instr with
   | Force -> "FORCE"
   | Cut -> "CUT"
@@ -86,18 +90,18 @@ let show_instruction instr =
   | Arr_instr arity -> Printf.sprintf "ARR(%d)" arity
   | Unop_instr op -> Printf.sprintf "UNOP(%s)" (show_unop op)
   | Bop_instr op -> Printf.sprintf "BOP(%s)" (show_bop op)
-;;
+  | Set_instr name -> Printf.sprintf "SET(%s)" name
+  | Exit_env -> "EXIT_ENV"
 
-let show_control_item ci =
+and show_control_item ci =
   match ci with
   | I instr -> "I: " ^ show_instruction instr
   | T term -> "T: " ^ show_term term
   | C cmd -> "C: " ^ show_command cmd
-;;
 
-let rec show_value v =
+and show_value v =
   match v with
-  | VMu _ -> "<mu>"
+  | VMu (name, _, _, _) -> Printf.sprintf "<mu %s>" name
   | VConstruction (name, args) ->
     let args_str = String.concat ", " (List.map show_value args) in
     Printf.sprintf "%s(%s)" name args_str
@@ -110,4 +114,5 @@ let rec show_value v =
   | VMatcher _ -> "<match>"
   | VNum n -> Int64.to_string n
   | VExit -> "exit"
+  | VHole -> "<hole>"
 ;;

@@ -40,8 +40,9 @@ type term =
   | Tuple of term list
   | Matcher of (form * command) list
   | Num of int64
-  | Rec of string * term (* TODO - recursive terms have yet to be figured out *)
+  | Rec of string * term
   | Arr of term list
+  | Val of value
   | Exit
 
 and command =
@@ -56,17 +57,19 @@ and command =
 and arith_command =
   | Unop of
       { op : unop
-      ; in_focus_term : term
-      ; out_unfocus_term : term
+      ; in_term : term
+      ; out_term : term
+      ; left_focus : bool
       }
   | Bop of
       { op : bop
       ; l_focus_term : term
       ; r_focus_term : term
-      ; out_unfocus_term : term
+      ; out_term : term
+      ; left_focus : bool
       }
 
-type instruction =
+and instruction =
   | Force
   | Cut
   | Spawn of command
@@ -75,15 +78,17 @@ type instruction =
   | Con_instr of name * int
   | Tup_instr of int
   | Arr_instr of int
+  | Set_instr of name (* sets the nearest binding to the value on the stack *)
+  | Exit_env
+(* exits the current environment, returning control to the parent environment *)
 
-type control_item =
+and control_item =
   | I of instruction
   | T of term
   | C of command
 
-type control = control_item list
-
-type stash = value list
+and control = control_item list
+and stash = value list
 
 and environment_frame =
   | Top
@@ -101,6 +106,8 @@ and value =
   | VMatcher of (form * command) list * environment_frame
   | VNum of int64
   | VExit
+  | VHole
+(* placeholder value for recursive terms that will be updated to the correct value once done *)
 
 let empty_environment : environment_frame = Top
 

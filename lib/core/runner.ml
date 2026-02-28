@@ -72,7 +72,7 @@ let pattern_match (forms : (form * 'a) list) (value : value)
   aux forms
 ;;
 
-type channel = unit (* TODO *)
+type channel (* TODO *)
 
 type program_step =
   | Step of state
@@ -82,11 +82,34 @@ type program_step =
   | Send of value * channel * state
   | Receive of channel * (value -> state)
 
+(* updates an environment frame with a value for a term.
+ * ONLY used for recursive values. *)
+let update_env (env : environment_frame) (name : name) (new_value : value) : unit =
+  let rec aux current_env =
+    match current_env with
+    | Top -> raise (AssertionError ("unbound variable: " ^ name))
+    | Frame ({ parent; binding; value } as f) ->
+      if binding = name
+      then (
+        match value with
+        | VHole -> f.value <- new_value
+        | _ ->
+          raise
+            (AssertionError ("attempt to update non-hole value for variable: " ^ name)))
+      else aux parent
+  in
+  aux env
+;;
+
 let eval_state (state : state) : program_step =
   match state with
   | [], _, _ -> raise (AssertionError "empty control stack")
+  | _, s, _ when List.exists (fun v -> v = VHole) s ->
+    raise (AssertionError "encountered hole value on stack")
+  (* terms *)
   | T term :: c', s, e -> begin
     match term with
+    | Val v -> Step (c', v :: s, e)
     | NeedsForce t -> Step (force_term t @ c', s, e)
     | Mu (name, cmd) -> Step (c', VMu (name, [ C cmd ], [], e) :: s, e)
     | Variable name -> begin
@@ -107,7 +130,20 @@ let eval_state (state : state) : program_step =
       Step (term_eval_sequence @ c', s, e)
     | Matcher patterns_cmds -> Step (c', VMatcher (patterns_cmds, e) :: s, e)
     | Num n -> Step (c', VNum n :: s, e)
-    | Rec (_name, _t) -> raise Not_implemented
+    | Rec (name, t) ->
+      (* Idea - 
+       * 1. extend the environment with a placeholder value for
+       *    the recursive term
+       * 2. evaluate the recursive term in this environment
+       * 3. update the placeholder value in the environment
+       *    to the evaluated value of the term
+       * 4. exit the environment, and leave the term value
+       *    on the stack to be used by the rest of the 
+       *    computation
+       *)
+      let new_e = extend_env e [ name, VHole ] in
+      let new_c = T t :: I (Set_instr name) :: I Exit_env :: c' in
+      Step (new_c, s, new_e)
     | Arr terms ->
       let term_eval_sequence =
         List.map (fun t -> T t) terms @ [ I (Arr_instr (List.length terms)) ]
@@ -121,7 +157,8 @@ let eval_state (state : state) : program_step =
     (* the captured mu has everything required, except it needs to resume with the 
      * value of the rest of the continuation. 
      * hence it captures the current continuation, and leaves a stack with the variable
-     * at the top of the stack *)
+     * at the top of the stack. 
+     *)
     let captured_mu = VMu (k_name, T (Variable k_name) :: c', s', e) in
     let new_e = extend_env mu_e [ name, captured_mu ] in
     Step (mu_c, mu_s, new_e)
@@ -130,8 +167,12 @@ let eval_state (state : state) : program_step =
     Step (c', v :: s', e)
   | I Cut :: _c', unfocus_val :: focus_val :: _s', _e ->
     (match focus_val, unfocus_val with
+     | VHole, _ | _, VHole -> raise (AssertionError "cannot cut with a hole value")
+     (* cutting a mu value will force it, so we can just step into it directly without modifying the control stack or anything *)
      (* "active" computation binding *)
-     | VMu _, _ -> raise (AssertionError "focused value cannot be a mu thunk")
+     | VMu (name, mu_c, mu_s, mu_e), v ->
+       let new_e = extend_env mu_e [ name, v ] in
+       Step (mu_c, mu_s, new_e)
      | _, VMu (name, mu_c, mu_s, mu_e) ->
        let new_e = extend_env mu_e [ name, focus_val ] in
        Step (mu_c, mu_s, new_e)
@@ -227,7 +268,14 @@ let eval_state (state : state) : program_step =
     let args = List.rev (List.take arity s) in
     let s' = List.drop arity s in
     Step (c', VArr (Array.of_list args) :: s', e)
+  | I Exit_env :: c', s, Frame { parent; _ } -> Step (c', s, parent)
+  | I (Set_instr name) :: c', v :: s', e ->
+    update_env e name v;
+    Step (c', v :: s', e)
   (* invalid instruction states *)
+  | I Exit_env :: _, _, Top ->
+    raise (AssertionError "cannot exit environment from top-level")
+  | I (Set_instr _) :: _, _, _ -> raise (AssertionError "stack underflow on set")
   | I Force :: _, [], _ -> raise (AssertionError "stack underflow on force")
   | I Cut :: _, _, _ -> raise (AssertionError "stack underflow on cut")
   | I (Unop_instr _) :: _, _, _ -> raise (AssertionError "stack underflow on unop")
@@ -235,6 +283,7 @@ let eval_state (state : state) : program_step =
   | I (Con_instr _) :: _, _, _ -> raise (AssertionError "stack underflow on constructor")
   | I (Tup_instr _) :: _, _, _ -> raise (AssertionError "stack underflow on tuple")
   | I (Arr_instr _) :: _, _, _ -> raise (AssertionError "stack underflow on array")
+  (* values on the control stack *)
   (* commands *)
   | C cmd :: c', s, e ->
   match cmd with
@@ -242,18 +291,27 @@ let eval_state (state : state) : program_step =
   | Fork (cmd1, cmd2) -> Step (I (Spawn cmd2) :: C cmd1 :: c', s, e)
   | Core { focus_term; unfocus_term } ->
     Step (force_term focus_term @ (T unfocus_term :: I Cut :: c'), s, e)
-  | Arith (Unop { op; in_focus_term; out_unfocus_term }) ->
-    Step
-      ( force_term in_focus_term @ (I (Unop_instr op) :: T out_unfocus_term :: I Cut :: c')
-      , s
-      , e )
-  | Arith (Bop { op; l_focus_term; r_focus_term; out_unfocus_term }) ->
-    Step
-      ( force_term l_focus_term
-        @ force_term r_focus_term
-        @ (I (Bop_instr op) :: T out_unfocus_term :: I Cut :: c')
-      , s
-      , e )
+  | Arith (Unop { op; in_term; out_term; left_focus }) ->
+    if left_focus
+    then Step (force_term in_term @ (I (Unop_instr op) :: T out_term :: I Cut :: c'), s, e)
+    else Step (force_term out_term @ (T in_term :: I (Unop_instr op) :: I Cut :: c'), s, e)
+  | Arith (Bop { op; l_focus_term; r_focus_term; out_term; left_focus }) ->
+    if left_focus
+    then
+      Step
+        ( force_term l_focus_term
+          @ force_term r_focus_term
+          @ (I (Bop_instr op) :: T out_term :: I Cut :: c')
+        , s
+        , e )
+    else
+      Step
+        ( force_term out_term
+          @ force_term l_focus_term
+          @ force_term r_focus_term
+          @ (I (Bop_instr op) :: I Cut :: c')
+        , s
+        , e )
 ;;
 
 let state_of_command (cmd : command) : state = [ C cmd ], [], Ir.empty_environment
@@ -283,3 +341,19 @@ let eval_program (initial_state : state) : int64 * environment_frame =
   in
   runner Int64.zero Ir.empty_environment None
 ;;
+
+(*
+notes: 
+let x : data[cbn] raw64 = (1 + 2) ;; do 
+x . match {
+  | x -> exit . x  
+}
+
+works
+
+let x : data[cbn] raw64 = (1 + 2) ;; do 
++(x, 3 | exit)
+
+
+let rec x : data[cbn] raw64 = (1 + x) ;;
+*)
