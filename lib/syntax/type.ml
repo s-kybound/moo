@@ -1,6 +1,7 @@
 open Utils.Fresh
 open Ast
 
+exception MalformedType of name * string
 exception TypeNotFound of name
 exception TypeInstantiationFailure of name * int * int
 
@@ -12,17 +13,17 @@ type tydef_env =
       ; ty : ty
       }
 
-let lookup (name : name) (tydef_env : tydef_env) : ty * string list =
+let lookup_opt (name : name) (tydef_env : tydef_env) : (ty * string list) option =
   match name with
   | Base n ->
     let rec aux env =
       match env with
-      | Top -> raise (TypeNotFound name)
+      | Top -> None
       | TyFrame { parent; var = ty_name, abstracts; ty } ->
-        if ty_name = n then ty, abstracts else aux parent
+        if ty_name = n then Some (ty, abstracts) else aux parent
     in
     aux tydef_env
-  | Namespaced _ -> failwith "lookup: namespaced types not supported"
+  | Namespaced _ -> failwith "lookup_opt: namespaced types not supported"
 ;;
 
 let has_type_name (type_name : string) (tydef_env : tydef_env) : bool =
@@ -124,8 +125,11 @@ module Substitute = struct
 
   let resolve_parameterized_ty (ty : ty) (tydef_env : tydef_env) : ty =
     match ty with
+    | Raw _ -> ty
     | Named (name, ty_uses) ->
-      let found_ty, abstracts = lookup name tydef_env in
+    match lookup_opt name tydef_env with
+    | None -> raise (TypeNotFound name)
+    | Some (found_ty, abstracts) ->
       if List.length abstracts <> List.length ty_uses
       then
         raise
@@ -133,7 +137,6 @@ module Substitute = struct
       else (
         let bindings = List.combine abstracts ty_uses in
         ty_replace bindings found_ty)
-    | Raw _ -> ty
   ;;
 end
 
@@ -504,4 +507,62 @@ let most_specific_tyu (tyu1 : ty_use) (tyu2 : ty_use) (tydef_env : tydef_env) : 
     | AbstractIntroducer _, _ | _, AbstractIntroducer _ ->
       failwith "TODO: most_specific_tyu does not yet support abstract introducers"
     | Weak _, tyu -> tyu)
+;;
+
+let validate_tydef ((name, abstracts) : kind_binder) ty tydef_env =
+  let rec validate_tydef_ty abs_vars (ty : ty) : unit =
+    match ty with
+    | Raw (_, _, raw_ty) -> validate_tydef_raw_ty abs_vars raw_ty
+    | Named (Base name', ty_uses) when name' = name ->
+      (* valid if it's a self use, or some use already possible in the type environment *)
+      List.iter (validate_tydef_tyu abs_vars) ty_uses;
+      if not (List.length ty_uses = List.length abstracts)
+      then
+        raise
+          (TypeInstantiationFailure (Base name, List.length abstracts, List.length ty_uses))
+      else ()
+    | Named (n, ty_uses) ->
+      List.iter (validate_tydef_tyu abs_vars) ty_uses;
+      (match lookup_opt n tydef_env with
+       | None -> raise (TypeNotFound n)
+       (* invariant - any type in the tydef environment is already 
+        * well formed *)
+       | Some (_, found_abstracts) ->
+         if not (List.length ty_uses = List.length found_abstracts)
+         then
+           raise
+             (TypeInstantiationFailure
+                (n, List.length found_abstracts, List.length ty_uses))
+         else ())
+  and validate_tydef_raw_ty abs_vars (raw_ty : raw_ty) : unit =
+    match raw_ty with
+    | Raw64 -> ()
+    | Product ty_uses -> List.iter (validate_tydef_tyu abs_vars) ty_uses
+    | Array ty_use -> validate_tydef_tyu abs_vars ty_use
+    | Variant vs ->
+      let constr_names = List.map (fun { constr_name; _ } -> constr_name) vs in
+      if
+        List.length constr_names
+        <> List.length (List.sort_uniq String.compare constr_names)
+      then raise (MalformedType (Base name, "constructor names must be unique"))
+      else
+        List.iter
+          (fun { constr_args; _ } -> List.iter (validate_tydef_tyu abs_vars) constr_args)
+          vs
+  and validate_tydef_tyu abs_vars (tyu : ty_use) : unit =
+    match tyu with
+    | Polarised (_, ty) -> validate_tydef_ty abs_vars ty
+    | Abstract { name = abstract_name; _ } ->
+      if not (List.mem abstract_name abs_vars)
+      then raise (TypeNotFound (Base abstract_name))
+      else ()
+    | AbstractIntroducer (abstract_name, tyu) ->
+      validate_tydef_tyu (abstract_name :: abs_vars) tyu
+    | Weak _ -> assert false (* not possible in a tydef *)
+  in
+  match ty with
+  (* ensure that the type doesn't just name itself *)
+  | Named (Base name', _) when name' = name ->
+    raise (MalformedType (Base name, "type cannot be fully defined in terms of itself"))
+  | _ -> validate_tydef_ty abstracts ty
 ;;

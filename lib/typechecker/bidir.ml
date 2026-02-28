@@ -1108,11 +1108,23 @@ let rec tycheck_mod_tli
     if Type.has_binding tbinder tydef_env
     then type_error (Printf.sprintf "type %s is already defined in this module" ty_name)
     else (
-      match validate_ty ty tydef_env with
-      | Ok ty ->
+      try
+        Type.validate_tydef tbinder ty tydef_env;
         let new_tydef_env = TyFrame { parent = tydef_env; var = tbinder; ty } in
         Ast.TypeDef (tbinder, ty), knowledge, new_tydef_env
-      | Error e -> type_error (Printf.sprintf "in definition of type %s: %s" ty_name e))
+      with
+      | Type.TypeNotFound n ->
+        type_error (Printf.sprintf "type %s is not found" (Syntax.Pretty.show_name n))
+      | Type.TypeInstantiationFailure (name, expected_arity, actual_arity) ->
+        type_error
+          (Printf.sprintf
+             "type %s expects %d arguments but got %d"
+             (Syntax.Pretty.show_name name)
+             expected_arity
+             actual_arity)
+      | Type.MalformedType (name, msg) ->
+        type_error
+          (Printf.sprintf "type %s is malformed: %s" (Syntax.Pretty.show_name name) msg))
   | Ast.Term term ->
     let tterm, _, synth_knowledge = synthesize knowledge term tydef_env in
     (* if the top level term returns an unknown type, it is most likely of form
