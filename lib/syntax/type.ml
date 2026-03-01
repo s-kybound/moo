@@ -313,7 +313,7 @@ let rec is_constructor_tyu ~update (tyu : ty_use) (tydef_env : tydef_env) : bool
 let is_constructor_tyu_forced tyu tydef_env =
   match is_constructor_tyu ~update:true tyu tydef_env with
   | Some is_constructor -> is_constructor
-  | None -> assert false
+  | None -> assert false (* update makes this case impossible *)
 ;;
 
 (* should only be None if the tyu is an unknown variable, but we only call this on tyus we know are constructors or destructors *)

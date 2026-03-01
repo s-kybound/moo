@@ -137,7 +137,9 @@ let surface_pattern_to_ast_pattern (pat : Surface.pattern)
   let binder_fold (acc_binders, acc_ty_uses) (binder : Surface.binder) =
     let name = surface_binder_name_to_ast_binder binder.name in
     if List.mem name acc_binders
-    then raise (Failure "Duplicate binder in pattern")
+    then
+      raise
+        (Error.SyntaxError { span = None; message = "Duplicate binder name in pattern" })
     else (
       match binder.typ with
       | None -> name :: acc_binders, acc_ty_uses

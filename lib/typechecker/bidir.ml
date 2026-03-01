@@ -547,7 +547,8 @@ and check
     else (
       let is_constructor, raw_ty = Type.tyu_to_raw_ty expected_type tydef_env in
       begin match is_constructor, raw_ty with
-      | false, _ -> assert false
+      | false, _ ->
+        assert false (* impossible, as we just verified that this is a constructor *)
       | _, Product expected_tys ->
         if List.length terms <> List.length expected_tys
         then
@@ -638,7 +639,8 @@ and check
     else (
       let is_constructor, raw_ty = Type.tyu_to_raw_ty expected_type tydef_env in
       begin match is_constructor, raw_ty with
-      | false, _ -> assert false
+      | false, _ ->
+        assert false (* impossible, as we just verified that this is a constructor *)
       | _, Array expected_elem_ty ->
         let new_terms, knowledge =
           List.fold_left
