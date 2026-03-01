@@ -430,10 +430,10 @@ and unify_weak_with_tyu
       | Some is_constructor, None ->
         is_constructor == is_constructor_tyu_forced compared_tyu tydef_env
       | None, Some raw_ty ->
-        let _, _, _, ty_raw_ty = tyu_to_raw_ty_strict compared_tyu tydef_env in
+        let _, ty_raw_ty = tyu_to_raw_ty compared_tyu tydef_env in
         raw_ty_equal raw_ty ty_raw_ty tydef_env
       | Some is_constructor, Some raw_ty ->
-        let _, _, _, ty_raw_ty = tyu_to_raw_ty_strict compared_tyu tydef_env in
+        let _, ty_raw_ty = tyu_to_raw_ty compared_tyu tydef_env in
         is_constructor == is_constructor_tyu_forced compared_tyu tydef_env
         && raw_ty_equal raw_ty ty_raw_ty tydef_env
     in
