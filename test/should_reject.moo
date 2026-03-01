@@ -6,3 +6,7 @@ do
   let x <- { _ -> exit . 0 } in
   let y <- { _ -> exit . 0 } in
   x . y
+
+/* It turns out that if we have an unused "empty" variable, the typechecker is smart enough
+ * to complain about it and reject the program, which is a nice bonus!
+ */
