@@ -62,7 +62,7 @@ let rec validate_tyu (tyu : Ast.ty_use) (tydef_env : tydef_env)
     | Error msg -> Error msg
   end
   | Ast.Abstract _ -> Ok tyu
-  | Ast.Weak { meta; _ } ->
+  | Ast.Weak { link = { meta; _ } } ->
   match meta.cell with
   | Unified tyu -> begin
     match validate_tyu tyu tydef_env with
@@ -441,7 +441,7 @@ let recursive_name_in_unguarded_position (name : string) (term : typed_term) : b
  * if we can't determine whether it is lazy, assume it is not. *)
 let rec is_lazy_tyu tyu tydef_env =
   match tyu with
-  | Ast.Weak { meta; negated } -> begin
+  | Ast.Weak { link = { meta; negated } } -> begin
     match meta.cell with
     | Unified tyu ->
       let tyu_to_compare = if negated then Type.negate_tyu tyu else tyu in

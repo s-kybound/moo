@@ -34,10 +34,12 @@ and ty_use =
       ; name : string
       }
   (* for type inference *)
-  | Weak of
-      { negated : bool
-      ; meta : meta_var
-      }
+  | Weak of { mutable link : weak_cell }
+
+and weak_cell =
+  { negated : bool
+  ; meta : meta_var
+  }
 
 and ty =
   | Named of name * ty_use list

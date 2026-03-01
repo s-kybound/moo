@@ -58,7 +58,7 @@ let cutlet_let
 
 let make_proc_type (abstracts : string list) (param_types : Ast.ty_use list) : Ast.ty_use =
   let base_type =
-    Ast.Polarised (Ast.Plus, Ast.Raw (Ast.By_name, Ast.Codata, Ast.Product param_types))
+    Ast.Polarised (Ast.Plus, Ast.Raw (Ast.By_value, Ast.Codata, Ast.Product param_types))
   in
   List.fold_right
     (fun abstract_name acc -> Ast.AbstractIntroducer (abstract_name, acc))

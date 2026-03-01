@@ -49,7 +49,7 @@ let rec show_ty_use tyu =
   | Polarised (pol, t) -> Printf.sprintf "%s%s" (show_polarity pol) (show_ty t)
   | Abstract { negated; name } -> if negated then Printf.sprintf "~%s" name else name
   | AbstractIntroducer (name, ty_use) -> Printf.sprintf "[%s]%s" name (show_ty_use ty_use)
-  | Weak { negated; meta } ->
+  | Weak { link = { negated; meta } } ->
   match describe_meta_var meta with
   | `Unknown id ->
     let prefix = if negated then "~" else "" in

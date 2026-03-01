@@ -45,7 +45,9 @@ let rec negate_tyu (ty_use : ty_use) : ty_use =
   | Polarised (Minus, mty) -> Polarised (Plus, mty)
   | Abstract { negated; name } -> Abstract { negated = not negated; name }
   | AbstractIntroducer (name, ty_use) -> AbstractIntroducer (name, negate_tyu ty_use)
-  | Weak { negated; meta } -> Weak { negated = not negated; meta }
+  | Weak { link = { negated; meta } } ->
+    let link = { negated = not negated; meta } in
+    Weak { link }
 ;;
 
 (*
@@ -63,13 +65,13 @@ module WeakTyu = struct
 
   let new_unknown_tyu () : ty_use =
     let meta = new_meta_var () in
-    Weak { negated = false; meta }
+    Weak { link = { negated = false; meta } }
   ;;
 
   let new_constructor_tyu raw : ty_use =
     let meta = new_meta_var () in
     meta.cell <- Inferred { constructor = Some true; raw_lower_bound = Some raw };
-    Weak { negated = false; meta }
+    Weak { link = { negated = false; meta } }
   ;;
 
   let new_destructor_tyu raw : ty_use =
@@ -79,7 +81,7 @@ module WeakTyu = struct
 
   let is_unknown tyu =
     match tyu with
-    | Weak { meta; _ } -> begin
+    | Weak { link = { meta; _ } } -> begin
       match meta.cell with
       | Inferred { constructor = None; raw_lower_bound = None } -> true
       | _ -> false
@@ -100,7 +102,8 @@ module Substitute = struct
       | Some ty_use -> if negated then negate_tyu ty_use else ty_use
       | None -> target
     end
-    | Weak { negated; meta } -> Weak { negated; meta = meta_var_replace bindings meta }
+    | Weak { link = { negated; meta } } ->
+      Weak { link = { negated; meta = meta_var_replace bindings meta } }
 
   and meta_var_replace (bindings : (string * ty_use) list) (meta : meta_var) : meta_var =
     match meta.cell with
@@ -166,7 +169,7 @@ let rec tyu_is_resolved (tyu : ty_use) : bool =
   | AbstractIntroducer _ ->
     failwith "TODO: get resolver to ignore introduced abstract names"
   | Abstract _ -> failwith "TODO: get resolver to ignore introduced abstract names"
-  | Weak { meta; _ } -> meta_var_is_resolved meta
+  | Weak { link = { meta; _ } } -> meta_var_is_resolved meta
 
 and meta_var_is_resolved m : bool =
   match m.cell with
@@ -221,7 +224,7 @@ let rec tyu_to_raw_ty_strict (tyu : ty_use) (tydef_env : tydef_env)
     tyu_to_raw_ty_strict
       tyu
       tydef_env (* TODO - emit the information on the abstract variable *)
-  | Weak { negated; meta } ->
+  | Weak { link = { negated; meta } } ->
   match meta.cell with
   | Unified tyu ->
     let m, p, s, r = tyu_to_raw_ty_strict tyu tydef_env in
@@ -255,7 +258,7 @@ let rec tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env) : bool * raw_ty =
     let message = Printf.sprintf "Cannot convert abstract type %s to raw type" name in
     raise (Error.TypeError { loc = None; message })
   | AbstractIntroducer (_, tyu) -> tyu_to_raw_ty tyu tydef_env
-  | Weak { negated; meta } ->
+  | Weak { link = { negated; meta } } ->
   match meta.cell with
   | Unified tyu ->
     let is_cons, raw_ty = tyu_to_raw_ty tyu tydef_env in
@@ -290,7 +293,7 @@ let rec is_constructor_tyu ~update (tyu : ty_use) (tydef_env : tydef_env) : bool
     (match pol, shape with
      | Plus, Data | Minus, Codata -> Some true
      | Plus, Codata | Minus, Data -> Some false)
-  | Weak { negated; meta } ->
+  | Weak { link = { negated; meta } } ->
   match meta.cell with
   | Unified tyu -> Option.map (( <> ) negated) (is_constructor_tyu ~update tyu tydef_env)
   | Inferred constraints ->
@@ -338,7 +341,8 @@ let rec tyu_equal (tyu1 : ty_use) (tyu2 : ty_use) tydef_env : bool =
       failwith "TODO: tyu_equal does not yet support abstract introducers"
     | AbstractIntroducer _, _ | _, AbstractIntroducer _ ->
       failwith "TODO: tyu_equal does not yet support abstract introducers"
-    | Weak { negated = neg1; meta = meta1 }, Weak { negated = neg2; meta = meta2 } ->
+    | ( Weak { link = { negated = neg1; meta = meta1 } as link1 }
+      , Weak ({ link = { negated = neg2; meta = meta2 } } as weak2) ) ->
       (* check if they are the same meta var, if so check if the negation flags match 
        * 3 cases to consider, since fully resolved tyus are handled above:
        * 1. they are the same meta var - then they are equal iff their negation flags match
@@ -366,12 +370,12 @@ let rec tyu_equal (tyu1 : ty_use) (tyu2 : ty_use) tydef_env : bool =
           | Ok (new_cons1, _) ->
             (* unify the first tyu with the second*)
             meta1.cell <- Inferred new_cons1;
-            let new_tyu2 = if neg2 then negate_tyu tyu1 else tyu1 in
-            meta2.cell <- Unified new_tyu2;
+            weak2.link <- link1;
             true
           | Error _ -> false
           end)
-    | Weak { negated; meta }, other_tyu | other_tyu, Weak { negated; meta } ->
+    | Weak { link = { negated; meta } }, other_tyu
+    | other_tyu, Weak { link = { negated; meta } } ->
       (* if the weak tyu is fully unsolved, we can just unify it with the other tyu *)
       unify_weak_with_tyu negated meta other_tyu tydef_env
     | _ ->

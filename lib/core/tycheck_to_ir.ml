@@ -56,7 +56,7 @@ let rec should_focus_left (tyu : Ast.ty_use) (tydef_env : Type.tydef_env) : bool
     end
   | Ast.AbstractIntroducer (_, tyu) -> should_focus_left tyu tydef_env
   | Ast.Abstract _ -> failwith "TODO: abstract types not supported yet"
-  | Ast.Weak { negated; meta } ->
+  | Ast.Weak { link = { negated; meta } } ->
   match meta.cell with
   | Unified tyu -> should_focus_left tyu tydef_env <> negated
   | Inferred { constructor = Some cons; _ } -> cons <> negated
