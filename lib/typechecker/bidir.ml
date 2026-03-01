@@ -572,7 +572,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
   end
   | Ast.Rec (Ast.Wildcard _, _) -> assert false (* impossible case, rejected by syntax *)
   | Ast.Rec ((Ast.Var (_, name) as tbinder), tterm) ->
-    let expr, inferred_tyu, demands = synthesize knowledge tterm tydef_env in
+    let inner_expr, inferred_tyu, demands = synthesize knowledge tterm tydef_env in
     let relevant_ids = binder_ids_of_binder tbinder in
     let binder_tyu =
       match type_of_usages relevant_ids demands tydef_env with
@@ -606,7 +606,9 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
               non-lazy type %s"
              name
              (Syntax.Pretty.show_ty_use tyu))
-      else annotate expr tyu, tyu, demands)
+      else (
+        let expr = ann, Ast.Rec (tbinder, inner_expr) in
+        annotate expr tyu, tyu, demands))
   | Ast.Mu (tbinder, tcommand) ->
     let tcommand, new_knowledge = typecheck_command knowledge tcommand tydef_env in
     let relevant_ids = binder_ids_of_binder tbinder in
@@ -1199,17 +1201,3 @@ let bidir_ann_show (ann : typed_ann) str : string =
 ;;
 
 let show_tychecked_program m = Syntax.Pretty.show_program ~ann_show:bidir_ann_show m
-
-(**
-data i64 = raw64
-proc rec factorial(x : i64, k : -i64) {
-  match x {
-    | 1 -> 1 . k
-    | x -> 
-      let recursive <- { k -> factorial . ((x - 1), k) } in
-      (x * recursive) . k
-  }
-}
-
-
-*)
