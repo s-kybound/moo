@@ -20,7 +20,11 @@ let show_bop op =
   | Shr -> ">>"
 ;;
 
-let show_name name = name
+let show_name name =
+  match name with
+  | Var s -> s
+  | Wildcard -> "_"
+;;
 
 let show_form form =
   match form with
@@ -35,8 +39,8 @@ let show_form form =
 let rec show_term term =
   match term with
   | NeedsForce t -> Printf.sprintf "force(%s)" (show_term t)
-  | Mu (name, cmd) -> Printf.sprintf "mu{ %s. %s }" name (show_command cmd)
-  | Variable name -> show_name name
+  | Mu (name, cmd) -> Printf.sprintf "mu{ %s. %s }" (show_name name) (show_command cmd)
+  | Variable name -> name
   | Construction { cons_name; cons_args } ->
     Printf.sprintf "%s(%s)" cons_name (String.concat ", " (List.map show_term cons_args))
   | Tuple [ term ] -> Printf.sprintf "(%s,)" (show_term term)
@@ -101,7 +105,7 @@ and show_control_item ci =
 
 and show_value v =
   match v with
-  | VMu (name, _, _, _) -> Printf.sprintf "<mu %s>" name
+  | VMu (name, _, _, _) -> Printf.sprintf "<mu %s>" (show_name name)
   | VConstruction (name, args) ->
     let args_str = String.concat ", " (List.map show_value args) in
     Printf.sprintf "%s(%s)" name args_str

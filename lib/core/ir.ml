@@ -14,14 +14,16 @@ type bop =
   | Shl
   | Shr
 
-type name = string
+type name =
+  | Var of string
+  | Wildcard
 
 (* NON-NESTED patterns for pattern matching *)
 type form =
   | Binder of name
   | Tuple of name list
   | Constr of
-      { form_name : name
+      { form_name : string
       ; form_args : name list
       }
   | Numeral of int64
@@ -32,9 +34,9 @@ type term =
      * instruct the runtime to force evaluation of
      * the specified term *)
   | Mu of name * command
-  | Variable of name
+  | Variable of string
   | Construction of
-      { cons_name : name
+      { cons_name : string
       ; cons_args : term list
       }
   | Tuple of term list
@@ -75,10 +77,10 @@ and instruction =
   | Spawn of command
   | Unop_instr of unop
   | Bop_instr of bop
-  | Con_instr of name * int
+  | Con_instr of string * int
   | Tup_instr of int
   | Arr_instr of int
-  | Set_instr of name (* sets the nearest binding to the value on the stack *)
+  | Set_instr of string (* sets the nearest binding to the value on the stack *)
   | Exit_env
 (* exits the current environment, returning control to the parent environment *)
 
@@ -100,7 +102,7 @@ and environment_frame =
 
 and value =
   | VMu of name * control * stash * environment_frame
-  | VConstruction of name * value list
+  | VConstruction of string * value list
   | VTuple of value list
   | VArr of value array
   | VMatcher of (form * command) list * environment_frame

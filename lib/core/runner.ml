@@ -15,12 +15,15 @@ let extend_env (env : environment_frame) (new_bindings : (name * value) list)
   : environment_frame
   =
   List.fold_left
-    (fun parent (binding, value) -> Frame { parent; binding; value })
+    (fun parent (binding, value) ->
+       match binding with
+       | Var name -> Frame { parent; binding = name; value }
+       | Wildcard -> parent)
     env
     new_bindings
 ;;
 
-let lookup (env : environment_frame) (name : name) : value option =
+let lookup (env : environment_frame) (name : string) : value option =
   let rec aux current_env =
     match current_env with
     | Top -> None
@@ -84,7 +87,7 @@ type program_step =
 
 (* updates an environment frame with a value for a term.
  * ONLY used for recursive values. *)
-let update_env (env : environment_frame) (name : name) (new_value : value) : unit =
+let update_env (env : environment_frame) (name : string) (new_value : value) : unit =
   let rec aux current_env =
     match current_env with
     | Top -> raise (AssertionError ("unbound variable: " ^ name))
@@ -141,7 +144,7 @@ let eval_state (state : state) : program_step =
        *    on the stack to be used by the rest of the 
        *    computation
        *)
-      let new_e = extend_env e [ name, VHole ] in
+      let new_e = extend_env e [ Var name, VHole ] in
       let new_c = T t :: I (Set_instr name) :: I Exit_env :: c' in
       Step (new_c, s, new_e)
     | Arr terms ->
@@ -159,7 +162,7 @@ let eval_state (state : state) : program_step =
      * hence it captures the current continuation, and leaves a stack with the variable
      * at the top of the stack. 
      *)
-    let captured_mu = VMu (k_name, T (Variable k_name) :: c', s', e) in
+    let captured_mu = VMu (Var k_name, T (Variable k_name) :: c', s', e) in
     let new_e = extend_env mu_e [ name, captured_mu ] in
     Step (mu_c, mu_s, new_e)
   | I Force :: c', v :: s', e ->

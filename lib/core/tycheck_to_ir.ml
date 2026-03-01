@@ -1,6 +1,5 @@
 open Syntax
 open Typechecker.Ty_ast
-open Utils.Fresh
 
 let tycheck_to_ir_unop (op : Ast.unop) : Ir.unop =
   match op with
@@ -22,7 +21,7 @@ let tycheck_to_ir_bop (op : Ast.bop) : Ir.bop =
   | Ast.Shr -> Ir.Shr
 ;;
 
-let ast_name_to_ir_name (n : Ast.name) : Ir.name =
+let ast_name_to_ir_name (n : Ast.name) : string =
   match n with
   | Base n -> n
   | Namespaced _ -> failwith "TODO: namespacing in typechecked AST to IR conversion"
@@ -30,8 +29,8 @@ let ast_name_to_ir_name (n : Ast.name) : Ir.name =
 
 let binder_to_ir_name (b : typed_binder) : Ir.name =
   match b with
-  | Ast.Var (_ann, name) -> name
-  | Ast.Wildcard _ann -> genvar "wildcard"
+  | Ast.Var (_ann, name) -> Var name
+  | Ast.Wildcard _ann -> Wildcard
 ;;
 
 let tycheck_to_ir_form (f : typed_pattern) : Ir.form =
@@ -147,8 +146,9 @@ and tycheck_to_ir_term tydef_env (t : typed_term) : Ir.term =
       in
       Ir.Matcher ir_branches
     | Ast.Num n -> Ir.Num n
-    | Ast.Rec (name, term) ->
-      Ir.Rec (binder_to_ir_name name, tycheck_to_ir_term tydef_env term)
+    | Ast.Rec (Ast.Wildcard _, _) ->
+      assert false (* wildcard binders are not allowed in rec terms *)
+    | Ast.Rec (Ast.Var (_, name), term) -> Ir.Rec (name, tycheck_to_ir_term tydef_env term)
     | Ast.Arr terms -> Ir.Arr (List.map (tycheck_to_ir_term tydef_env) terms)
     | Ast.Ann (term, _) -> tycheck_to_ir_term tydef_env term
     | Ast.Exit -> Ir.Exit
@@ -172,7 +172,7 @@ let tycheck_command_of_module tydef_env (defs : typed_module) : Ir.command =
     | Ast.Def (Ast.Term term) :: rest ->
       let rest_cmd = aux rest end_cmd in
       let t = tycheck_to_ir_term tydef_env term in
-      let rest_mu = Ir.Mu (genvar "toplevel", rest_cmd) in
+      let rest_mu = Ir.Mu (Wildcard, rest_cmd) in
       if term_focuses_left term tydef_env
       then Ir.Core { focus_term = t; unfocus_term = rest_mu }
       else Ir.Core { focus_term = rest_mu; unfocus_term = t }
