@@ -116,3 +116,14 @@ and show_value v =
   | VExit -> "exit"
   | VHole -> "<hole>"
 ;;
+
+let show_binding (binding, value) = Printf.sprintf "%s = %s" binding (show_value value)
+
+let env_to_bindings env =
+  let rec aux env acc =
+    match env with
+    | Top -> acc
+    | Frame { binding; value; parent } -> aux parent ((binding, value) :: acc)
+  in
+  aux env []
+;;

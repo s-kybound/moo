@@ -153,13 +153,18 @@ let eval_module input ty_env =
 ;;
 
 let step_module input ty_env =
-  let show_state (control, stash, _env) =
+  let show_state (control, stash, env) =
     Printf.printf "Control Stack:\n";
     List.iter
       (fun ci -> Printf.printf "  %s\n" (Core.Pretty.show_control_item ci))
       control;
     Printf.printf "Stash:\n";
     List.iter (fun v -> Printf.printf "  %s\n" (Core.Pretty.show_value v)) stash;
+    let bindings = Core.Pretty.env_to_bindings env in
+    Printf.printf "Environment:\n";
+    List.iter
+      (fun binding -> Printf.printf "  %s\n" (Core.Pretty.show_binding binding))
+      bindings;
     Printf.printf "\n%!"
   in
   let rec step_loop states =
