@@ -365,8 +365,8 @@ let rec tyu_equal (tyu1 : ty_use) (tyu2 : ty_use) tydef_env : bool =
           begin match unify_result with
           | Ok (new_cons1, _) ->
             (* unify the first tyu with the second*)
-            let new_tyu2 = if negate then negate_tyu tyu1 else tyu1 in
             meta1.cell <- Inferred new_cons1;
+            let new_tyu2 = if neg2 then negate_tyu tyu1 else tyu1 in
             meta2.cell <- Unified new_tyu2;
             true
           | Error _ -> false
@@ -558,7 +558,14 @@ let args_of_namespaced_variant (constr : name) (ty : ty) : ty_use list =
  * invariant: must be equal *)
 let most_specific_tyu (tyu1 : ty_use) (tyu2 : ty_use) (tydef_env : tydef_env) : ty_use =
   if not (tyu_equal tyu1 tyu2 tydef_env)
-  then failwith "most_specific_tyu: tyu1 and tyu2 are not equal"
+  then (
+    let message =
+      Printf.sprintf
+        "Cannot get most specific tyu of two tyus that are not equal: %s and %s"
+        (Pretty.show_ty_use tyu1)
+        (Pretty.show_ty_use tyu2)
+    in
+    raise (Error.TypeError { loc = None; message }))
   else (
     match tyu1, tyu2 with
     | Abstract _, Abstract _ -> tyu1 (* tyu_equal ensures that both are equal *)
