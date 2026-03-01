@@ -79,11 +79,14 @@ module WeakTyu = struct
     negate_tyu constructor_tyu
   ;;
 
+  (* checks if there isn't enough information in a tyu to determine
+   * some inferred type *)
   let is_unknown tyu =
     match tyu with
     | Weak { link = { meta; _ } } -> begin
       match meta.cell with
-      | Inferred { constructor = None; raw_lower_bound = None } -> true
+      | Inferred { constructor = None; raw_lower_bound = _ }
+      | Inferred { constructor = _; raw_lower_bound = None } -> true
       | _ -> false
     end
     | _ -> false

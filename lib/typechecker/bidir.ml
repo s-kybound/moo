@@ -5,8 +5,6 @@ open Converter
 
 (* a cocontextual typechecker that analyses a given program *)
 
-exception Underspecified
-
 let type_error ?loc message = raise (Syntax.Error.TypeError { loc; message })
 
 let type_mismatch ?loc expected actual msg =
@@ -823,9 +821,67 @@ and tycheck_module
   new_top_level_items, after_defs_knowledge, after_defs_tydef_env
 ;;
 
+(* do a second pass over the typechecked module to ensure that all types, even the inferred types,
+ * have enough information to be IR-converted *)
+let verify_well_typed (modu : typed_module) : unit =
+  let check_underspecified ann =
+    if WeakTyu.is_unknown (Option.get ann.ty)
+    then (
+      let message =
+        Printf.sprintf
+          "inferred type %s is underspecified"
+          (Syntax.Pretty.show_ty_use (Option.get ann.ty))
+      in
+      type_error ?loc:ann.loc message)
+    else ()
+  in
+  let rec verify_top_level_item (item : typed_mod_tli Ast.top_level_item) : unit =
+    match item with
+    | Ast.Open _ -> ()
+    | Ast.Def def -> verify_mod_tli def
+  and verify_mod_tli (def : typed_mod_tli) : unit =
+    match def with
+    | Ast.TermDef (_, tterm) | Ast.Term tterm ->
+      let ann, _ = tterm in
+      check_underspecified ann;
+      verify_term tterm
+    | Ast.TypeDef _ -> ()
+  and verify_term (term : typed_term) : unit =
+    let ann, node = term in
+    check_underspecified ann;
+    match node with
+    | Ast.Variable _ | Ast.Num _ | Ast.Exit -> ()
+    | Ast.Tuple terms -> List.iter verify_term terms
+    | Ast.Ann (tterm, _) -> verify_term tterm
+    | Ast.Rec (_, tterm) -> verify_term tterm
+    | Ast.Mu (_, cmd) -> verify_command cmd
+    | Ast.Matcher branches -> List.iter (fun (_, cmd) -> verify_command cmd) branches
+    | Ast.Construction { cons_args; _ } -> List.iter verify_term cons_args
+    | Ast.Arr terms -> List.iter verify_term terms
+  and verify_command (cmd : typed_command) : unit =
+    let _, node = cmd in
+    match node with
+    | Ast.Core { l_term; r_term } ->
+      verify_term l_term;
+      verify_term r_term
+    | Ast.Arith (Ast.Bop { l_term; r_term; out_term; _ }) ->
+      verify_term l_term;
+      verify_term r_term;
+      verify_term out_term
+    | Ast.Arith (Ast.Unop { in_term; out_term; _ }) ->
+      verify_term in_term;
+      verify_term out_term
+    | Ast.Fork (cmd1, cmd2) ->
+      verify_command cmd1;
+      verify_command cmd2
+  in
+  List.iter verify_top_level_item modu
+;;
+
 let tycheck_program (modu : Ast.core_ann Ast.module_) tydef_env : typed_module * tydef_env
   =
   let modu = tycheck_module_of_ast modu in
   let out, _, env = tycheck_module IMap.empty modu tydef_env in
+  verify_well_typed out;
   out, env
 ;;

@@ -62,8 +62,7 @@ let rec should_focus_left (tyu : Ast.ty_use) (tydef_env : Type.tydef_env) : bool
   | Inferred { constructor = None; _ } ->
     let message =
       Printf.sprintf
-        "Cannot determine polarity of a weak type variable that has not been unified yet \
-         (meta var id: %d)"
+        "Weak type variable ?%d is underspecified, cannot determine focus direction"
         meta.id
     in
     raise (Error.TypeError { loc = None; message })
