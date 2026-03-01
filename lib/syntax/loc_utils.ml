@@ -77,3 +77,24 @@ let display_multiline_span source_code (span : span) =
 ;;
 
 let display_span source_code (span : span) = display_multiline_span source_code span
+
+let span_size (span : span) : int * int =
+  let lines = span.end_pos.line - span.start_pos.line in
+  let cols = span.end_pos.col - span.start_pos.col in
+  lines, cols
+;;
+
+let compare_span_size_desc (span1 : span) (span2 : span) : int =
+  let lines1, cols1 = span_size span1 in
+  let lines2, cols2 = span_size span2 in
+  let by_lines = Int.compare lines2 lines1 in
+  if by_lines <> 0 then by_lines else Int.compare cols2 cols1
+;;
+
+let compare_opt_span_size_desc (loc1 : span option) (loc2 : span option) : int =
+  match loc1, loc2 with
+  | None, None -> 0
+  | None, Some _ -> 1
+  | Some _, None -> -1
+  | Some span1, Some span2 -> compare_span_size_desc span1 span2
+;;

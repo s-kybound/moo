@@ -835,6 +835,9 @@ let verify_well_typed (modu : typed_module) : unit =
       type_error ?loc:ann.loc message)
     else ()
   in
+  let ann_compare (a1, _) (a2, _) =
+    Syntax.Loc_utils.compare_opt_span_size_desc a1.loc a2.loc
+  in
   let rec verify_top_level_item (item : typed_mod_tli Ast.top_level_item) : unit =
     match item with
     | Ast.Open _ -> ()
@@ -843,37 +846,34 @@ let verify_well_typed (modu : typed_module) : unit =
     match def with
     | Ast.TermDef (_, tterm) | Ast.Term tterm ->
       let ann, _ = tterm in
-      check_underspecified ann;
-      verify_term tterm
+      verify_term tterm;
+      check_underspecified ann
     | Ast.TypeDef _ -> ()
+  and verify_terms (terms : typed_term list) : unit =
+    terms |> List.sort ann_compare |> List.iter verify_term
+  and verify_commands (cmds : typed_command list) : unit =
+    cmds |> List.sort ann_compare |> List.iter verify_command
   and verify_term (term : typed_term) : unit =
     let ann, node = term in
-    check_underspecified ann;
-    match node with
+    begin match node with
     | Ast.Variable _ | Ast.Num _ | Ast.Exit -> ()
-    | Ast.Tuple terms -> List.iter verify_term terms
+    | Ast.Tuple terms -> verify_terms terms
     | Ast.Ann (tterm, _) -> verify_term tterm
     | Ast.Rec (_, tterm) -> verify_term tterm
     | Ast.Mu (_, cmd) -> verify_command cmd
-    | Ast.Matcher branches -> List.iter (fun (_, cmd) -> verify_command cmd) branches
-    | Ast.Construction { cons_args; _ } -> List.iter verify_term cons_args
-    | Ast.Arr terms -> List.iter verify_term terms
+    | Ast.Matcher branches -> branches |> List.map snd |> verify_commands
+    | Ast.Construction { cons_args; _ } -> verify_terms cons_args
+    | Ast.Arr terms -> verify_terms terms
+    end;
+    check_underspecified ann
   and verify_command (cmd : typed_command) : unit =
     let _, node = cmd in
     match node with
-    | Ast.Core { l_term; r_term } ->
-      verify_term l_term;
-      verify_term r_term
+    | Ast.Core { l_term; r_term } -> verify_terms [ l_term; r_term ]
     | Ast.Arith (Ast.Bop { l_term; r_term; out_term; _ }) ->
-      verify_term l_term;
-      verify_term r_term;
-      verify_term out_term
-    | Ast.Arith (Ast.Unop { in_term; out_term; _ }) ->
-      verify_term in_term;
-      verify_term out_term
-    | Ast.Fork (cmd1, cmd2) ->
-      verify_command cmd1;
-      verify_command cmd2
+      verify_terms [ l_term; r_term; out_term ]
+    | Ast.Arith (Ast.Unop { in_term; out_term; _ }) -> verify_terms [ in_term; out_term ]
+    | Ast.Fork (cmd1, cmd2) -> verify_commands [ cmd1; cmd2 ]
   in
   List.iter verify_top_level_item modu
 ;;
