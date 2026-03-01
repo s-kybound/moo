@@ -621,14 +621,14 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
        let expr = ann, Ast.Mu (tbinder, tcommand) in
        annotate expr tyu, tyu, new_knowledge)
   | Ast.Matcher branches ->
-    let new_branches, most_specific_type, new_knowledge =
+    let new_branches, most_specific_type_of_consumed, new_knowledge =
       List.fold_left
-        (fun (branches_acc, most_specific_type, demands) (pattern, command) ->
+        (fun (branches_acc, most_specific_type_of_consumed, demands) (pattern, command) ->
            let new_command, tyu_of_pattern_opt, new_knowledge =
              match pattern with
              | Ast.Numeral _ ->
                let cmd, command_knowledge = typecheck_command demands command tydef_env in
-               cmd, Some (WeakTyu.new_destructor_tyu Raw64), command_knowledge
+               cmd, Some (WeakTyu.new_constructor_tyu Raw64), command_knowledge
              | Ast.Binder binder ->
                let unique_ids = binder_ids_of_binder binder in
                let cmd, command_knowledge = typecheck_command demands command tydef_env in
@@ -638,7 +638,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
                | Ok (Some result) ->
                  if not (Type.is_constructor_tyu_forced result tydef_env)
                  then type_error ?loc:ann.loc "variable is not a constructed item"
-                 else cmd, Some (Type.negate_tyu result), command_knowledge
+                 else cmd, Some result, command_knowledge
                end
              | Ast.Tup subpats ->
                let cmd, command_knowledge = typecheck_command demands command tydef_env in
@@ -653,7 +653,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
                    unique_ids
                in
                ( cmd
-               , Some (WeakTyu.new_destructor_tyu (Product types_of_binders))
+               , Some (WeakTyu.new_constructor_tyu (Product types_of_binders))
                , command_knowledge )
              | Ast.Constr { pat_name; pat_args } ->
              match
@@ -713,12 +713,10 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
                  let cmd, command_knowledge =
                    typecheck_command new_knowledge command tydef_env
                  in
-                 let acquired_tyu =
-                   negate_tyu (Ast.Polarised (polarity, ty_with_holes))
-                 in
+                 let acquired_tyu = Ast.Polarised (polarity, ty_with_holes) in
                  cmd, Some acquired_tyu, command_knowledge)
            in
-           match most_specific_type, tyu_of_pattern_opt with
+           match most_specific_type_of_consumed, tyu_of_pattern_opt with
            | continue, None | None, continue ->
              ( (pattern, new_command) :: branches_acc
              , continue
@@ -740,7 +738,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
         ([], None, knowledge)
         branches
     in
-    (match most_specific_type with
+    (match most_specific_type_of_consumed with
      | None ->
        let message =
          Printf.sprintf
@@ -748,8 +746,9 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
        in
        type_error ?loc:ann.loc message
      | Some tyu ->
+       let matcher_tyu = Type.negate_tyu tyu in
        let expr = ann, Ast.Matcher (List.rev new_branches) in
-       annotate expr tyu, tyu, new_knowledge)
+       annotate expr matcher_tyu, matcher_tyu, new_knowledge)
   | Ast.Construction { cons_name; cons_args } ->
     let typ =
       type_of_namespaced_constructor cons_name (List.length cons_args) tydef_env
@@ -1202,10 +1201,13 @@ let bidir_ann_show (ann : typed_ann) str : string =
 let show_tychecked_program m = Syntax.Pretty.show_program ~ann_show:bidir_ann_show m
 
 (**
+data i64 = raw64
 proc rec factorial(x : i64, k : -i64) {
   match x {
     | 1 -> 1 . k
-    | x -> (x * { out -> factorial.((x - 1), out) }) . k
+    | x -> 
+      let recursive <- { k -> factorial . ((x - 1), k) } in
+      (x * recursive) . k
   }
 }
 
