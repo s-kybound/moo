@@ -643,3 +643,27 @@ let validate_tydef ((name, abstracts) : kind_binder) ty tydef_env =
     raise (MalformedType (Base name, "type cannot be fully defined in terms of itself"))
   | _ -> validate_tydef_ty abstracts ty
 ;;
+
+(* used to determine whether a recursive binder is lazy. 
+ * if we can't determine whether it is lazy, assume it is not. *)
+let rec is_lazy_tyu tyu tydef_env =
+  match tyu with
+  | Ast.Weak { link = { meta; negated } } -> begin
+    match meta.cell with
+    | Unified tyu ->
+      let tyu_to_compare = if negated then negate_tyu tyu else tyu in
+      is_lazy_tyu tyu_to_compare tydef_env
+    (* inferred types are always assumed to be data[cbv], so check if it is a destructor *)
+    | Inferred { constructor = Some is_constructor; _ } -> not (is_constructor <> negated)
+    | Inferred { constructor = None; _ } -> false
+  end
+  | Ast.Abstract _ -> false
+  | Ast.AbstractIntroducer (_, inner_tyu) -> is_lazy_tyu inner_tyu tydef_env
+  | Ast.Polarised (pol, ty) ->
+    let mode, _, _ = ty_to_raw_ty ty tydef_env in
+    (match pol, mode with
+     | Plus, By_name -> true
+     | Minus, By_value -> true
+     | Plus, By_value -> false
+     | Minus, By_name -> false)
+;;

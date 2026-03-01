@@ -1,5 +1,5 @@
 open Syntax
-open Typechecker.Bidir
+open Typechecker.Ty_ast
 open Utils.Fresh
 
 let tycheck_to_ir_unop (op : Ast.unop) : Ir.unop =
