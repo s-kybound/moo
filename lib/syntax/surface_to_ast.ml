@@ -343,9 +343,8 @@ and surface_command_to_ast_command_node (cmd : Surface.command)
       match typ with
       | None -> surface_term_to_ast_term term
       | Some ty_use ->
-        let t = surface_term_to_ast_term term in
-        let ann, _ = t in
-        mk_term ~loc:ann (Ast.Ann (t, surface_ty_use_to_ast_ty_use ty_use))
+        let ann, t_node = surface_term_to_ast_term term in
+        mk_term ~loc:ann (Ast.Ann ((ann, t_node), surface_ty_use_to_ast_ty_use ty_use))
     in
     Ast.Core { l_term; r_term }
   | Surface.Ignore (term, rest) ->

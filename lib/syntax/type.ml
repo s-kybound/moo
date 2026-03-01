@@ -163,15 +163,34 @@ module Substitute = struct
   ;;
 end
 
+let canonical_ty (name : name) (ty_uses : ty_use list) (tydef_env : tydef_env) : ty =
+  let rec aux name ty_uses =
+    match Substitute.resolve_parameterized_ty (Named (name, ty_uses)) tydef_env with
+    | Raw _ -> Named (name, ty_uses)
+    | Named (new_name, new_tyu_uses) -> aux new_name new_tyu_uses
+  in
+  aux name ty_uses
+;;
+
+let is_variant_ty (ty : ty) (tydef_env : tydef_env) : bool =
+  match ty with
+  | Raw (_, _, Variant _) -> true
+  | Raw _ -> false
+  | Named (name, ty_uses) ->
+    let canonical = canonical_ty name ty_uses tydef_env in
+    (match Substitute.resolve_parameterized_ty canonical tydef_env with
+     | Raw (_, _, Variant _) -> true
+     | _ -> false)
+;;
+
 (* resolved - means there is no chance that the 
- * type is as resolved as it can be
+ * type can be further resolved
  *)
 let rec tyu_is_resolved (tyu : ty_use) : bool =
   match tyu with
   | Polarised (_, ty) -> ty_is_resolved ty
-  | AbstractIntroducer _ ->
-    failwith "TODO: get resolver to ignore introduced abstract names"
-  | Abstract _ -> failwith "TODO: get resolver to ignore introduced abstract names"
+  | AbstractIntroducer (_, tyu) -> tyu_is_resolved tyu
+  | Abstract _ -> true
   | Weak { link = { meta; _ } } -> meta_var_is_resolved meta
 
 and meta_var_is_resolved m : bool =
@@ -325,73 +344,86 @@ let is_constructor_tyu_forced tyu tydef_env =
 let is_constructor_tyu = is_constructor_tyu ~update:false
 
 let rec tyu_equal (tyu1 : ty_use) (tyu2 : ty_use) tydef_env : bool =
-  let compare_resolved tyu1 tyu2 =
-    let mode1, polarity1, chirality1, raw_ty1 = tyu_to_raw_ty_strict tyu1 tydef_env in
-    let mode2, polarity2, chirality2, raw_ty2 = tyu_to_raw_ty_strict tyu2 tydef_env in
-    if mode1 <> mode2 || polarity1 <> polarity2 || chirality1 <> chirality2
-    then false
-    else raw_ty_equal raw_ty1 raw_ty2 tydef_env
-  in
-  if tyu_is_resolved tyu1 && tyu_is_resolved tyu2
-  then compare_resolved tyu1 tyu2
-  else (
-    match tyu1, tyu2 with
-    | Abstract { negated = neg1; name = name1 }, Abstract { negated = neg2; name = name2 }
-      -> neg1 = neg2 && name1 = name2
-    | Abstract _, _ | _, Abstract _ -> false
-    | AbstractIntroducer _, AbstractIntroducer _ ->
-      (* check if the abstractIntroducers are alpha-equivalent, and if not if one is a subtype of the other *)
-      failwith "TODO: tyu_equal does not yet support abstract introducers"
-    | AbstractIntroducer _, _ | _, AbstractIntroducer _ ->
-      failwith "TODO: tyu_equal does not yet support abstract introducers"
-    | ( Weak { link = { negated = neg1; meta = meta1 } as link1 }
-      , Weak ({ link = { negated = neg2; meta = meta2 } } as weak2) ) ->
-      (* check if they are the same meta var, if so check if the negation flags match 
-       * 3 cases to consider, since fully resolved tyus are handled above:
-       * 1. they are the same meta var - then they are equal iff their negation flags match
-       * 2. they are different meta vars, but at least one is fully unsolved
-       * 3. both are partially solved - in this case we can attempt to unify the constraints and
-       *    complain if not possible
-       *)
-      if meta1.id = meta2.id
-      then neg1 = neg2
-      else (
-        match meta1.cell, meta2.cell with
-        | Unified _, Unified _ ->
-          assert false (* should have been caught by the resolved check above *)
-        | Unified sol1, Inferred _ ->
-          let compared_sol1 = if neg1 then negate_tyu sol1 else sol1 in
-          unify_weak_with_tyu neg2 meta2 compared_sol1 tydef_env
-        | Inferred _, Unified sol2 ->
-          let compared_sol2 = if neg2 then negate_tyu sol2 else sol2 in
-          unify_weak_with_tyu neg1 meta1 compared_sol2 tydef_env
-        | Inferred cons1, Inferred cons2 ->
-          (* in this case, there is a chance both cells are updated *)
-          let negate = neg1 <> neg2 in
-          let unify_result = unify_constraints ~negate cons1 cons2 tydef_env in
-          begin match unify_result with
-          | Ok (new_cons1, _) ->
-            (* unify the first tyu with the second*)
-            meta1.cell <- Inferred new_cons1;
-            weak2.link <- link1;
-            true
-          | Error _ -> false
-          end)
-    | Weak { link = { negated; meta } }, other_tyu
-    | other_tyu, Weak { link = { negated; meta } } ->
-      (* if the weak tyu is fully unsolved, we can just unify it with the other tyu *)
-      unify_weak_with_tyu negated meta other_tyu tydef_env
-    | _ ->
-      if (not (tyu_is_resolved tyu1)) || not (tyu_is_resolved tyu2)
-      then assert false (* everything here should be resolved *)
-      else compare_resolved tyu1 tyu2)
+  match tyu1, tyu2 with
+  | Abstract { negated = neg1; name = name1 }, Abstract { negated = neg2; name = name2 }
+    -> neg1 = neg2 && name1 = name2
+  | Abstract _, _ | _, Abstract _ -> false
+  | AbstractIntroducer _, AbstractIntroducer _ ->
+    (* check if the abstractIntroducers are alpha-equivalent, and if not if one is a subtype of the other *)
+    failwith "TODO: tyu_equal does not yet support abstract introducers"
+  | AbstractIntroducer _, _ | _, AbstractIntroducer _ ->
+    failwith "TODO: tyu_equal does not yet support abstract introducers"
+  | ( Weak { link = { negated = neg1; meta = meta1 } as link1 }
+    , Weak ({ link = { negated = neg2; meta = meta2 } } as weak2) ) ->
+    (* check if they are the same meta var, if so check if the negation flags match 
+     * 3 cases to consider, since fully resolved tyus are handled above:
+     * 1. they are the same meta var - then they are equal iff their negation flags match
+     * 2. they are different meta vars, but at least one is fully unsolved
+     * 3. both are partially solved - in this case we can attempt to unify the constraints and
+     *    complain if not possible
+     *)
+    if meta1.id = meta2.id
+    then neg1 = neg2
+    else (
+      match meta1.cell, meta2.cell with
+      | Unified tyu1, Unified tyu2 ->
+        let compared_tyu1 = if neg1 then negate_tyu tyu1 else tyu1 in
+        let compared_tyu2 = if neg2 then negate_tyu tyu2 else tyu2 in
+        tyu_equal compared_tyu1 compared_tyu2 tydef_env
+      | Unified sol1, Inferred _ ->
+        let compared_sol1 = if neg1 then negate_tyu sol1 else sol1 in
+        unify_weak_with_tyu neg2 meta2 compared_sol1 tydef_env
+      | Inferred _, Unified sol2 ->
+        let compared_sol2 = if neg2 then negate_tyu sol2 else sol2 in
+        unify_weak_with_tyu neg1 meta1 compared_sol2 tydef_env
+      | Inferred cons1, Inferred cons2 ->
+        (* in this case, there is a chance both cells are updated *)
+        let negate = neg1 <> neg2 in
+        let unify_result = unify_constraints ~negate cons1 cons2 tydef_env in
+        begin match unify_result with
+        | Ok (new_cons1, _) ->
+          (* unify the first tyu with the second*)
+          meta1.cell <- Inferred new_cons1;
+          weak2.link <- link1;
+          true
+        | Error _ -> false
+        end)
+  | Weak { link = { negated; meta } }, other_tyu
+  | other_tyu, Weak { link = { negated; meta } } ->
+    (* if the weak tyu is fully unsolved, we can just unify it with the other tyu *)
+    unify_weak_with_tyu negated meta other_tyu tydef_env
+  | Polarised (polarity1, ty1), Polarised (polarity2, ty2) ->
+    polarity1 = polarity2 && ty_equal ty1 ty2 tydef_env
 
 and ty_equal (ty1 : ty) (ty2 : ty) tydef_env : bool =
-  let mode1, shape1, raw_ty1 = ty_to_raw_ty ty1 tydef_env in
-  let mode2, shape2, raw_ty2 = ty_to_raw_ty ty2 tydef_env in
-  if mode1 <> mode2 || shape1 <> shape2
-  then false
-  else raw_ty_equal raw_ty1 raw_ty2 tydef_env
+  match ty1, ty2 with
+  | Named (name1, ty_uses1), Named (name2, ty_uses2) ->
+    let canonical1 = canonical_ty name1 ty_uses1 tydef_env in
+    let canonical2 = canonical_ty name2 ty_uses2 tydef_env in
+    (* variants are treated differently - they use curry-style typing *)
+    if is_variant_ty canonical1 tydef_env && is_variant_ty canonical2 tydef_env
+    then variant_equal canonical1 canonical2 tydef_env
+    else (
+      let resolved1 = Substitute.resolve_parameterized_ty canonical1 tydef_env in
+      let resolved2 = Substitute.resolve_parameterized_ty canonical2 tydef_env in
+      ty_equal resolved1 resolved2 tydef_env)
+  | Raw (mode1, shape1, raw_ty1), Raw (mode2, shape2, raw_ty2) ->
+    mode1 = mode2 && shape1 = shape2 && raw_ty_equal raw_ty1 raw_ty2 tydef_env
+  | Raw (m1, s1, r1), ty | ty, Raw (m1, s1, r1) ->
+    if is_variant_ty ty tydef_env
+    then false
+    else (
+      (* everything else uses church style typing *)
+      let m2, s2, r2 = ty_to_raw_ty ty tydef_env in
+      m1 = m2 && s1 = s2 && raw_ty_equal r1 r2 tydef_env)
+
+and variant_equal (ty1 : ty) (ty2 : ty) tydef_env : bool =
+  match ty1, ty2 with
+  | Named (name1, ty_uses1), Named (name2, ty_uses2) ->
+    name1 = name2
+    && List.length ty_uses1 = List.length ty_uses2
+    && List.for_all2 (fun tyu1 tyu2 -> tyu_equal tyu1 tyu2 tydef_env) ty_uses1 ty_uses2
+  | _ -> assert false (* should have been checked by the caller *)
 
 and raw_ty_equal (rty1 : raw_ty) (rty2 : raw_ty) (tydef_env : tydef_env) : bool =
   match rty1, rty2 with
@@ -406,19 +438,9 @@ and raw_ty_equal (rty1 : raw_ty) (rty2 : raw_ty) (tydef_env : tydef_env) : bool 
   | Product _, _ | _, Product _ -> false
   | Array ty_use1, Array ty_use2 -> tyu_equal ty_use1 ty_use2 tydef_env
   | Array _, _ | _, Array _ -> false
-  | Variant variants1, Variant variants2 ->
-    List.length variants1 = List.length variants2
-    && List.for_all2
-         (fun { constr_name = name1; constr_args = args1 }
-           { constr_name = name2; constr_args = args2 } ->
-            name1 = name2
-            && List.length args1 = List.length args2
-            && List.for_all2
-                 (fun ty_use1 ty_use2 -> tyu_equal ty_use1 ty_use2 tydef_env)
-                 args1
-                 args2)
-         variants1
-         variants2
+  | Variant _, Variant _ ->
+    (* variants are never directly compared *)
+    assert false
 
 and unify_weak_with_tyu
       (negated : bool)
@@ -519,7 +541,7 @@ let type_of_raw_constructor
 
 (* given a constructor and a type, 
  * get the types of the constructor's arguments 
- ** invariant: type must match*)
+ ** invariant: type must match *)
 let args_of_raw_variant (constr : string) (ty : ty) : ty_use list =
   match ty with
   | Raw (_, _, Variant variants) ->
