@@ -28,7 +28,7 @@ and meta_var =
 
 and ty_use =
   | Polarised of polarity * ty
-  | AbstractIntroducer of string * ty_use
+  | AbstractIntroducer of unify_ty * ty_use
   | Abstract of
       { negated : bool
       ; name : string

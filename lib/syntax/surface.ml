@@ -33,9 +33,14 @@ type shape =
   | Data
   | Codata
 
+type unify_ty =
+  { name : string
+  ; left_focusing : bool
+  }
+
 type ty_use =
   | Polarised of polarity * ty
-  | AbstractIntroducer of string list * ty_use
+  | AbstractIntroducer of unify_ty list * ty_use
   | Abstract of
       { negated : bool
       ; name : string
@@ -100,7 +105,7 @@ and term_node =
   | Ann of term * ty_use
   | UnopTerm of unop * term
   | BopTerm of bop * term * term
-  | Proc of string list * binder list * command
+  | Proc of unify_ty list * binder list * command
   | Exit
 
 and command = command_node Loc.located

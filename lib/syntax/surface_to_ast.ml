@@ -56,7 +56,9 @@ let cutlet_let
   mk_core ~loc l_term r_term
 ;;
 
-let make_proc_type (abstracts : string list) (param_types : Ast.ty_use list) : Ast.ty_use =
+let make_proc_type (abstracts : Surface.unify_ty list) (param_types : Ast.ty_use list)
+  : Ast.ty_use
+  =
   let base_type =
     Ast.Polarised (Ast.Plus, Ast.Raw (Ast.By_value, Ast.Codata, Ast.Product param_types))
   in

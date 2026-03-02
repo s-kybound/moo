@@ -100,7 +100,7 @@ untyped_binder_strict:
 
 %inline
 abstract_list:
-  | LANGLE ts=separated_list(COMMA, CONSTRUCTOR_IDENT) RANGLE
+  | LANGLE ts=separated_list(COMMA, abstract_binder) RANGLE
       { ts }
   |   { [] }
 
@@ -185,16 +185,29 @@ let_definition:
   | LET b=typed_binder EQUALS t=def_term                { TermDef (b, t) }
   | LET REC b=typed_binder EQUALS t=def_term            { TermDef (b, mk_term $startpos $endpos (Rec (b, t))) }
 
+abstract_intro_list:
+  | LBRACK names=separated_nonempty_list(COMMA, abstract_intro) RBRACK
+      { names }
+  |   { [] }
+
 (* procedures are sugar over matchers,
  * they are useful enough to be granted
  * native representation *)
 proc_definition:
-  | PROC b=untyped_binder_strict ts=abstract_list params=proc_binders body=proc_body
-      { TermDef (b, mk_term $startpos $endpos (Proc (ts, params, body))) }
-  | PROC REC b=untyped_binder_strict ts=abstract_list params=proc_binders body=proc_body
+  | proc_body=proc_aux                                  { 
+                                                          let (b, body) = proc_body in
+                                                          TermDef (b, body) 
+                                                        }
+
+(* returns a tuple of the binder and the body. 
+ * so that we can use this in either definitions or matchlet definitions *)
+proc_aux:
+  | PROC b=untyped_binder_strict ts=abstract_intro_list params=proc_binders body=proc_body
+      { (b, mk_term $startpos $endpos (Proc (ts, params, body))) }
+  | PROC REC b=untyped_binder_strict ts=abstract_intro_list params=proc_binders body=proc_body
       {
         let proc = mk_recursive b (mk_term $startpos $endpos (Proc (ts, params, body))) in
-        TermDef (b, proc)
+        (b, proc)
       }
 
 proc_binders:
@@ -396,9 +409,15 @@ unify_type:
   | ABSTRACT unify_type_aux                             { $2 }
 
 unify_type_aux:
-  | LBRACK names=separated_nonempty_list(COMMA, abstract_binder) RBRACK 
+  | LBRACK names=separated_nonempty_list(COMMA, abstract_intro) RBRACK 
     t=type_use
       { AbstractIntroducer (names, t) }
+
+abstract_intro:
+  | abstract_binder RTLARROW                            { { name = $1; left_focusing = true } } (* left focusing *)
+  | abstract_binder LTRARROW                            { { name = $1; left_focusing = false } } (* right focusing *)
+  (* sugar: if no direction is specified, assume left (eager) *)
+  | abstract_binder                                     { { name = $1; left_focusing = true } }
 
 abstract_type:
   | name=abstract_binder                                { (name, false) }

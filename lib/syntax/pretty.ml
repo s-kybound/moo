@@ -44,11 +44,17 @@ let show_shape (s : shape) =
   | Codata -> "codata"
 ;;
 
+let show_unify_ty { name; left_focusing } =
+  let focus_str = if left_focusing then "<-" else "->" in
+  Printf.sprintf "%s%s" name focus_str
+;;
+
 let rec show_ty_use tyu =
   match tyu with
   | Polarised (pol, t) -> Printf.sprintf "%s%s" (show_polarity pol) (show_ty t)
   | Abstract { negated; name } -> if negated then Printf.sprintf "~%s" name else name
-  | AbstractIntroducer (name, ty_use) -> Printf.sprintf "[%s]%s" name (show_ty_use ty_use)
+  | AbstractIntroducer (ty, ty_use) ->
+    Printf.sprintf "[%s]%s" (show_unify_ty ty) (show_ty_use ty_use)
   | Weak { link = { negated; meta } } ->
   match describe_meta_var meta with
   | `Unknown id ->

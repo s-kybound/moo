@@ -97,9 +97,9 @@ module Substitute = struct
   let rec tyu_replace (bindings : (string * ty_use) list) (target : ty_use) : ty_use =
     match target with
     | Polarised (polarity, ty) -> Polarised (polarity, ty_replace bindings ty)
-    | AbstractIntroducer (name, ty_use) ->
+    | AbstractIntroducer ({ name; left_focusing }, ty_use) ->
       let new_bindings = List.remove_assoc name bindings in
-      AbstractIntroducer (name, tyu_replace new_bindings ty_use)
+      AbstractIntroducer ({ name; left_focusing }, tyu_replace new_bindings ty_use)
     | Abstract { negated; name } -> begin
       match List.assoc_opt name bindings with
       | Some ty_use -> if negated then negate_tyu ty_use else ty_use
@@ -652,7 +652,7 @@ let validate_tydef ((name, abstracts) : kind_binder) ty tydef_env =
       if not (List.mem abstract_name abs_vars)
       then raise (TypeNotFound (Base abstract_name))
       else ()
-    | AbstractIntroducer (abstract_name, tyu) ->
+    | AbstractIntroducer ({ name = abstract_name; _ }, tyu) ->
       validate_tydef_tyu (abstract_name :: abs_vars) tyu
     | Weak _ ->
       let message =
