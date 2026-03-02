@@ -250,6 +250,12 @@ cutlet:
         let t = mk_recursive b t in
         mk_command $startpos $endpos (Cutlet (b, t, s))
       }
+  (* proclet *)
+  | LET proc_aux=proc_aux IN s=statement
+      {
+        let (b, t) = proc_aux in
+        mk_command $startpos $endpos (Cutlet (b, t, s))
+      }
   (* ignored statement *)
   | ignored_term=term SEMICOLON rest=statement
       {

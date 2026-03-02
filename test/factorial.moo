@@ -26,7 +26,11 @@ proc rec factorial(x : i64, k : -i64) {
 
 ({ k -> factorial . (4, k) })
 
-proc rec factorial_tco(counter : i64, acc : i64, k : -i64) {
+/* tail recursive version of factorial, written with an internal
+ * tail recursive helper function. 
+ */
+proc factorial(x : i64, k : -i64) {
+  let proc rec factorial_tco(counter : i64, acc : i64, k : -i64) {
     match counter {
     | 1 -> acc . k
     | x ->
@@ -34,9 +38,7 @@ proc rec factorial_tco(counter : i64, acc : i64, k : -i64) {
        let new_acc <- acc * x in
        factorial_tco . (new_counter, new_acc, k)
     }
-}  
-
-proc factorial(x : i64, k : -i64) {
+  } in
   factorial_tco . (x, 1, k)
 } 
 
