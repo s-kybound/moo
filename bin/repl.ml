@@ -54,15 +54,20 @@ module History = struct
   let filter f t = t |> get_stack |> List.filter f
 end
 
+type module_context =
+  { ty_env : Typechecker.Bidir.module_type_context
+  ; term_env : Core.Ir.environment_frame
+  }
+
 module State = struct
   let current_history : string History.t option ref = ref None
 
-  let current_ty_module_context : Typechecker.Bidir.module_type_context ref =
-    ref Typechecker.Bidir.empty_type_context
+  let current_module_context : module_context ref =
+    ref { ty_env = Typechecker.Bidir.empty_type_context; term_env = Top }
   ;;
 
   let set_history t = current_history := Some t
-  let set_ty_module_context ctx = current_ty_module_context := ctx
+  let set_module_context ctx = current_module_context := ctx
 
   let get_history () =
     match !current_history with
@@ -70,7 +75,7 @@ module State = struct
     | Some e -> e
   ;;
 
-  let get_ty_module_context () = !current_ty_module_context
+  let get_module_context () = !current_module_context
 end
 
 let print_ast ?(ann_show = fun _ s -> s) ast =
@@ -147,16 +152,14 @@ module Command = struct
   ;;
 end
 
-let eval_module input ty_env =
-  let tychecked, out_ty_env = Typechecker.Bidir.tycheck_program input ty_env in
-  (* print_ast ~ann_show:Typechecker.Bidir.bidir_ann_show tychecked; *)
+let eval_module input context =
+  let tychecked, out_ty_env = Typechecker.Bidir.tycheck_program input context.ty_env in
   let converted = Core.Tycheck_to_ir.tycheck_command_of_module out_ty_env tychecked in
-  let converted = Core.Runner.state_of_command converted in
-  ignore (Core.Runner.eval_program converted);
-  out_ty_env
+  let final_env = Core.Runner.eval_program converted context.term_env in
+  { ty_env = out_ty_env; term_env = final_env }
 ;;
 
-let step_module input ty_env =
+let step_module input context =
   let show_state (control, stash, env) =
     Printf.printf "Control Stack:\n";
     List.iter
@@ -171,38 +174,47 @@ let step_module input ty_env =
       bindings;
     Printf.printf "\n%!"
   in
-  let rec step_loop states =
+  let step_loop (c, s, e) =
     let open Core.Runner in
-    match states with
-    | [] -> Printf.printf "No more states to step through.\n%!"
-    | Step state :: rest ->
-      show_state state;
-      begin match LNoise.linenoise "STEP> " with
-      | None -> ()
-      | Some s ->
-      match String.trim s with
-      | "!q" | "!quit" | "!exit" -> ()
-      | _ ->
-        let next_state = eval_state state in
-        step_loop (rest @ [ next_state ])
-      end
-    | Stop :: rest -> step_loop rest
-    | Split (state1, state2) :: rest ->
-      Printf.printf "Program split into two concurrent states.\n%!";
-      step_loop ((Step state1 :: rest) @ [ Step state2 ])
-    | Send (_v, _chan, _next) :: _rest ->
-      print_error "Step-through for Send not implemented."
-    | Receive (_chan, _cont) :: _rest ->
-      print_error "Step-through for Receive not implemented."
-    | Error exn :: _ -> print_error (Printexc.to_string exn)
+    let rec aux states last_env : Core.Ir.environment_frame =
+      match states with
+      | [] ->
+        Printf.printf "No more states to step through.\n%!";
+        last_env
+      | Step ((_, _, last_env) as state) :: rest ->
+        show_state state;
+        begin match LNoise.linenoise "STEP> " with
+        | None -> last_env
+        | Some s ->
+        match String.trim s with
+        | "!q" | "!quit" | "!exit" -> last_env
+        | _ ->
+          let next_state = eval_state state in
+          aux (rest @ [ next_state ]) last_env
+        end
+      | Stop :: rest -> aux rest last_env
+      | Split (state1, state2) :: rest ->
+        Printf.printf "Program split into two concurrent states.\n%!";
+        aux ((Step state1 :: rest) @ [ Step state2 ]) last_env
+      | Send (_v, _chan, _next) :: _rest ->
+        print_error "Step-through for Send not implemented.";
+        last_env
+      | Receive (_chan, _cont) :: _rest ->
+        print_error "Step-through for Receive not implemented.";
+        last_env
+      | Error exn :: _ ->
+        print_error (Printexc.to_string exn);
+        last_env
+    in
+    aux [ Core.Runner.Step (c, s, e) ] e
   in
-  let tychecked, tenv = Typechecker.Bidir.tycheck_program input ty_env in
+  let tychecked, tenv = Typechecker.Bidir.tycheck_program input context.ty_env in
   let converted = Core.Tycheck_to_ir.tycheck_command_of_module tenv tychecked in
-  let converted = Core.Runner.state_of_command converted in
+  let converted = Core.Runner.state_of_command converted context.term_env in
   Printf.printf
     "Stepping through program. Press any key to step through the program, !q to quit\n%!";
-  step_loop [ Step converted ];
-  tenv
+  let env = step_loop converted in
+  { ty_env = tenv; term_env = env }
 ;;
 
 let show_module input ty_env =
@@ -247,10 +259,10 @@ let rec repl_loop (kont : (Error.kont * (Ast.core_ann Ast.module_ -> 'a) * strin
     let full_input =
       if String.trim previous_input = "" then input else previous_input ^ "\n" ^ input
     in
-    let ty_module_context = State.get_ty_module_context () in
+    let module_context = State.get_module_context () in
     try
-      let out_ty_module_context = f (parse_to_core_ast ?k input) ty_module_context in
-      State.set_ty_module_context out_ty_module_context
+      let out_module_context = f (parse_to_core_ast ?k input) module_context in
+      State.set_module_context out_module_context
     with
     | Error.Early_eof k -> repl_loop (Some (k, f, full_input))
     | e ->
@@ -277,7 +289,8 @@ let rec repl_loop (kont : (Error.kont * (Ast.core_ann Ast.module_ -> 'a) * strin
        Command.show_help ();
        repl_loop kont
      | _, Command.Clear ->
-       State.set_ty_module_context Typechecker.Bidir.empty_type_context;
+       State.set_module_context
+         { ty_env = Typechecker.Bidir.empty_type_context; term_env = Top };
        print_endline "Cleared REPL environment.";
        repl_loop None
      | None, Command.Step expr ->
