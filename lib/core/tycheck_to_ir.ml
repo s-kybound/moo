@@ -155,7 +155,11 @@ and tycheck_to_ir_term tydef_env (t : typed_term) : Ir.term =
   if term_focuses_left t tydef_env then Ir.NeedsForce new_t else new_t
 ;;
 
-let tycheck_command_of_module tydef_env (defs : typed_module) : Ir.command =
+let tycheck_command_of_module
+      (type_context : Typechecker.Bidir.module_type_context)
+      (defs : typed_module)
+  : Ir.command
+  =
   let rec aux (defs : typed_mod_tli Ast.top_level_item list) end_cmd : Ir.command =
     match defs with
     | [] -> end_cmd
@@ -163,16 +167,16 @@ let tycheck_command_of_module tydef_env (defs : typed_module) : Ir.command =
     | Ast.Def (Ast.TypeDef _) :: rest -> aux rest end_cmd
     | Ast.Def (Ast.TermDef (b, term)) :: rest ->
       let rest_cmd = aux rest end_cmd in
-      let t = tycheck_to_ir_term tydef_env term in
+      let t = tycheck_to_ir_term type_context.tydef_env term in
       let rest_mu = Ir.Mu (binder_to_ir_name b, rest_cmd) in
-      if term_focuses_left term tydef_env
+      if term_focuses_left term type_context.tydef_env
       then Ir.Core { focus_term = t; unfocus_term = rest_mu }
       else Ir.Core { focus_term = rest_mu; unfocus_term = t }
     | Ast.Def (Ast.Term term) :: rest ->
       let rest_cmd = aux rest end_cmd in
-      let t = tycheck_to_ir_term tydef_env term in
+      let t = tycheck_to_ir_term type_context.tydef_env term in
       let rest_mu = Ir.Mu (Wildcard, rest_cmd) in
-      if term_focuses_left term tydef_env
+      if term_focuses_left term type_context.tydef_env
       then Ir.Core { focus_term = t; unfocus_term = rest_mu }
       else Ir.Core { focus_term = rest_mu; unfocus_term = t }
   in

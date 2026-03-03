@@ -56,9 +56,13 @@ end
 
 module State = struct
   let current_history : string History.t option ref = ref None
-  let current_ty_env : Syntax.Type.tydef_env ref = ref Syntax.Type.Top
+
+  let current_ty_module_context : Typechecker.Bidir.module_type_context ref =
+    ref Typechecker.Bidir.empty_type_context
+  ;;
+
   let set_history t = current_history := Some t
-  let set_ty_env env = current_ty_env := env
+  let set_ty_module_context ctx = current_ty_module_context := ctx
 
   let get_history () =
     match !current_history with
@@ -66,7 +70,7 @@ module State = struct
     | Some e -> e
   ;;
 
-  let get_ty_env () = !current_ty_env
+  let get_ty_module_context () = !current_ty_module_context
 end
 
 let print_ast ?(ann_show = fun _ s -> s) ast =
@@ -210,7 +214,6 @@ let init_repl () =
   LNoise.set_multiline true;
   let max_length = 1000 in
   State.set_history (History.init 1000 "");
-  State.set_ty_env Syntax.Type.Top;
   match LNoise.history_set ~max_length with
   | Error s -> raise (Failure s)
   | Ok () ->
@@ -244,10 +247,10 @@ let rec repl_loop (kont : (Error.kont * (Ast.core_ann Ast.module_ -> 'a) * strin
     let full_input =
       if String.trim previous_input = "" then input else previous_input ^ "\n" ^ input
     in
-    let ty_env = State.get_ty_env () in
+    let ty_module_context = State.get_ty_module_context () in
     try
-      let out_ty_env = f (parse_to_core_ast ?k input) ty_env in
-      State.set_ty_env out_ty_env
+      let out_ty_module_context = f (parse_to_core_ast ?k input) ty_module_context in
+      State.set_ty_module_context out_ty_module_context
     with
     | Error.Early_eof k -> repl_loop (Some (k, f, full_input))
     | e ->
@@ -274,7 +277,7 @@ let rec repl_loop (kont : (Error.kont * (Ast.core_ann Ast.module_ -> 'a) * strin
        Command.show_help ();
        repl_loop kont
      | _, Command.Clear ->
-       State.set_ty_env Syntax.Type.Top;
+       State.set_ty_module_context Typechecker.Bidir.empty_type_context;
        print_endline "Cleared REPL environment.";
        repl_loop None
      | None, Command.Step expr ->

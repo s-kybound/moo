@@ -1,4 +1,15 @@
 open Syntax
+open Converter
+
+type module_bindings
+
+type module_type_context =
+  { hole_env : tycheck_hole_environment_frame
+  ; top_level_bindings : module_bindings
+  ; tydef_env : Type.tydef_env
+  }
+
+val empty_type_context : module_type_context
 
 (**
  * Given a program and an initial type definition environment, return a typechecked program
@@ -6,5 +17,5 @@ open Syntax
  *)
 val tycheck_program
   :  Ast.core_ann Ast.module_
-  -> Type.tydef_env
-  -> Ty_ast.typed_module * Type.tydef_env
+  -> module_type_context
+  -> Ty_ast.typed_module * module_type_context

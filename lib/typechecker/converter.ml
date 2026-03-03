@@ -120,24 +120,31 @@ let add_usage_to_hole
   | Namespaced _ -> failwith "TODO: namespaced variables not supported for holes"
 ;;
 
+let get_usages_of_hole_str (frame : tycheck_hole_environment_frame) str : int list =
+  let rec aux frame =
+    match frame with
+    | Top -> raise Not_found
+    | Frame f -> if f.hole_var = str then f.usages else aux f.parent
+  in
+  aux frame
+;;
+
 let get_usages_of_hole (frame : tycheck_hole_environment_frame) (var : 'a Ast.binder)
   : int list
   =
   match var with
   | Ast.Wildcard _ -> []
-  | Ast.Var (_, var) ->
-    let rec aux frame =
-      match frame with
-      | Top -> raise Not_found
-      | Frame f -> if f.hole_var = var then f.usages else aux f.parent
-    in
-    aux frame
+  | Ast.Var (_, var) -> get_usages_of_hole_str frame var
 ;;
 
 (* perform a co-debrujin conversion on a module *)
-let tycheck_module_of_ast (modu : Ast.core_ann Ast.module_) : typed_module =
+let tycheck_module_of_ast
+      (modu : Ast.core_ann Ast.module_)
+      (env : tycheck_hole_environment_frame)
+  : typed_module * tycheck_hole_environment_frame
+  =
   let tycheck_module_of_ast_aux (top_level_defs : Ast.core_ann Ast.module_) env
-    : typed_module
+    : typed_module * tycheck_hole_environment_frame
     =
     let rec tycheck_mod_tli_of_ast (def : Ast.core_ann Ast.mod_tli) env
       : typed_mod_tli * tycheck_hole_environment_frame
@@ -314,7 +321,7 @@ let tycheck_module_of_ast (modu : Ast.core_ann Ast.module_) : typed_module =
         let tdef, new_env = tycheck_mod_tli_of_ast d env in
         Ast.Def tdef, new_env
     in
-    let unannotated_mod_tlis, _new_env, env_checkpoints =
+    let unannotated_mod_tlis, new_env, env_checkpoints =
       List.fold_left
         (fun (defs_acc, env_acc, env_checkpoints) def ->
            let def, new_env = tycheck_top_level_item_of_ast def env_acc in
@@ -336,7 +343,7 @@ let tycheck_module_of_ast (modu : Ast.core_ann Ast.module_) : typed_module =
         unannotated_mod_tlis
         env_checkpoints
     in
-    top_level_items
+    top_level_items, new_env
   in
-  tycheck_module_of_ast_aux modu Top
+  tycheck_module_of_ast_aux modu env
 ;;

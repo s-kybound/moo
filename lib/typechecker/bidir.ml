@@ -735,11 +735,16 @@ and typecheck_command
     mk_command ann (Ast.Fork (cmd1, cmd2)), ctx2
 ;;
 
+module SMap = Map.Make (String)
+
+type module_bindings = Ast.ty_use SMap.t
+
 let rec tycheck_mod_tli
-          (knowledge : context)
           (def : typed_mod_tli)
+          (knowledge : context)
+          (module_bindings : module_bindings)
           (tydef_env : tydef_env)
-  : typed_mod_tli * context * tydef_env
+  : typed_mod_tli * module_bindings * context * tydef_env
   =
   match def with
   | Ast.TermDef (tbinder, tterm) ->
@@ -750,7 +755,12 @@ let rec tycheck_mod_tli
         synth_knowledge
         (binder_ids_of_binder tbinder)
     in
-    Ast.TermDef (tbinder, tterm), new_knowledge, tydef_env
+    let new_module_bindings =
+      match tbinder with
+      | Ast.Wildcard _ -> module_bindings
+      | Ast.Var (_, name) -> SMap.add name inferred_ty module_bindings
+    in
+    Ast.TermDef (tbinder, tterm), new_module_bindings, new_knowledge, tydef_env
   | Ast.TypeDef (tbinder, ty) ->
     (* for now, we reject duplicate type definitions - it is a lot easier to reason about :) *)
     let ty_name, _ = tbinder in
@@ -760,7 +770,7 @@ let rec tycheck_mod_tli
       try
         Type.validate_tydef tbinder ty tydef_env;
         let new_tydef_env = TyFrame { parent = tydef_env; var = tbinder; ty } in
-        Ast.TypeDef (tbinder, ty), knowledge, new_tydef_env
+        Ast.TypeDef (tbinder, ty), module_bindings, knowledge, new_tydef_env
       with
       | Type.TypeNotFound n ->
         type_error (Printf.sprintf "type %s is not found" (Syntax.Pretty.show_name n))
@@ -785,40 +795,47 @@ let rec tycheck_mod_tli
     then (
       let unit_tyu = Ast.Polarised (Plus, Ast.Raw (By_value, Data, Product [])) in
       let tterm, check_knowledge = check synth_knowledge tterm unit_tyu tydef_env in
-      Ast.Term tterm, check_knowledge, tydef_env)
-    else Ast.Term tterm, synth_knowledge, tydef_env
+      Ast.Term tterm, module_bindings, check_knowledge, tydef_env)
+    else Ast.Term tterm, module_bindings, synth_knowledge, tydef_env
 
 and tycheck_module
       (knowledge : context)
       (top_level_items : typed_module)
       (tydef_env : tydef_env)
-  : typed_module * context * tydef_env
+  : typed_module * module_bindings * tydef_env
   =
   let rec process_top_level_items
             (defs : typed_mod_tli Ast.top_level_item list)
             (defs_acc : typed_mod_tli Ast.top_level_item list)
+            (bindings_acc : module_bindings)
             (knowledge_acc : context)
             (tydef_env_acc : tydef_env)
-    : typed_mod_tli Ast.top_level_item list * context * tydef_env
+    : typed_mod_tli Ast.top_level_item list * context * module_bindings * tydef_env
     =
     match defs with
-    | [] -> List.rev defs_acc, knowledge_acc, tydef_env_acc
+    | [] -> List.rev defs_acc, knowledge_acc, bindings_acc, tydef_env_acc
     | Ast.Def def :: rest ->
-      let newdef, new_knowledge, new_tydef_env =
-        tycheck_mod_tli knowledge_acc def tydef_env_acc
+      let newdef, new_module_bindings, new_knowledge, new_tydef_env =
+        tycheck_mod_tli def knowledge_acc bindings_acc tydef_env_acc
       in
       process_top_level_items
         rest
         (Ast.Def newdef :: defs_acc)
+        new_module_bindings
         new_knowledge
         new_tydef_env
     | Ast.Open o :: rest ->
-      process_top_level_items rest (Ast.Open o :: defs_acc) knowledge_acc tydef_env_acc
+      process_top_level_items
+        rest
+        (Ast.Open o :: defs_acc)
+        bindings_acc
+        knowledge_acc
+        tydef_env_acc
   in
-  let new_top_level_items, after_defs_knowledge, after_defs_tydef_env =
-    process_top_level_items top_level_items [] knowledge tydef_env
+  let new_top_level_items, _, new_module_bindings, after_defs_tydef_env =
+    process_top_level_items top_level_items [] SMap.empty knowledge tydef_env
   in
-  new_top_level_items, after_defs_knowledge, after_defs_tydef_env
+  new_top_level_items, new_module_bindings, after_defs_tydef_env
 ;;
 
 (* do a second pass over the typechecked module to ensure that all types, even the inferred types,
@@ -878,10 +895,34 @@ let verify_well_typed (modu : typed_module) : unit =
   List.iter verify_top_level_item modu
 ;;
 
-let tycheck_program (modu : Ast.core_ann Ast.module_) tydef_env : typed_module * tydef_env
+type module_type_context =
+  { hole_env : tycheck_hole_environment_frame
+  ; top_level_bindings : module_bindings
+  ; tydef_env : tydef_env
+  }
+
+let empty_type_context =
+  { hole_env = Top; top_level_bindings = SMap.empty; tydef_env = Top }
+;;
+
+(* given the updated hole environment, add to context all the 
+ * top level bindings of the previous module.
+ *)
+let make_context hole_env (top_level_bindings : module_bindings) : context =
+  SMap.fold
+    (fun name ty acc ->
+       let usages = Converter.get_usages_of_hole_str hole_env name in
+       List.fold_left (fun acc id -> IMap.add id ty acc) acc usages)
+    top_level_bindings
+    IMap.empty
+;;
+
+let tycheck_program (modu : Ast.core_ann Ast.module_) (ctx : module_type_context)
+  : typed_module * module_type_context
   =
-  let modu = tycheck_module_of_ast modu in
-  let out, _, env = tycheck_module IMap.empty modu tydef_env in
+  let modu, hole_env = tycheck_module_of_ast modu ctx.hole_env in
+  let context = make_context hole_env ctx.top_level_bindings in
+  let out, top_level_bindings, tydef_env = tycheck_module context modu ctx.tydef_env in
   verify_well_typed out;
-  out, env
+  out, { hole_env; top_level_bindings; tydef_env }
 ;;
