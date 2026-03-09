@@ -216,7 +216,7 @@ let rec show_mod_tli ~ann_show def =
 
 and show_open (mo : Surface.module_open) =
   match mo with
-  | Open name -> Printf.sprintf "open %s" (show_name name)
+  (* | Open name -> Printf.sprintf "open %s" (show_name name) *)
   | Use { mod_name; use_name } ->
     Printf.sprintf "use %s as %s" (show_name mod_name) use_name
 

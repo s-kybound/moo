@@ -138,7 +138,7 @@ and arith_command =
       }
 
 type module_open =
-  | Open of name
+  (* | Open of name *)
   | Use of
       { mod_name : name
       ; use_name : string

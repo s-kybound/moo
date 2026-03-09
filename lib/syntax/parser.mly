@@ -37,7 +37,8 @@
 %token EQUALS
 %token SEMICOLON
 
-%token OPEN USE AS
+// %token OPEN
+%token USE AS
 // %token MODULE
 
 (* definitions *)
@@ -141,7 +142,7 @@ top_level_item(definition):
   | definition                                          { Def $1 }
 
 open_statement:
-  | OPEN n=namespaced(any_ident)      { Open n }
+  // | OPEN n=namespaced(any_ident)      { Open n }
   | USE mod_name=namespaced(any_ident) AS use_name=any_ident
       { Use { mod_name; use_name } }
 
