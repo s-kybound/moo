@@ -8,6 +8,9 @@ exception TypeInstantiationFailure of name * int * int
 (* name -> abstracts * type *)
 type tydef_env = (string, string list * ty) Env.t
 
+(* name -> type_use *)
+type ty_env = (string, Ast.ty_use) Env.t
+
 let rec negate_tyu (ty_use : ty_use) : ty_use =
   match ty_use with
   | Polarised (Plus, mty) -> Polarised (Minus, mty)

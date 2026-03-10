@@ -288,7 +288,9 @@ let rec repl_loop (kont : (Error.kont * (Ast.core_ann Ast.module_ -> 'a) * strin
        repl_loop kont
      | _, Command.Clear ->
        State.set_module_context
-         { ty_env = Typechecker.Bidir.empty_type_context; term_env = Syntax.Env.empty_env () };
+         { ty_env = Typechecker.Bidir.empty_type_context
+         ; term_env = Syntax.Env.empty_env ()
+         };
        print_endline "Cleared REPL environment.";
        repl_loop None
      | None, Command.Step expr ->

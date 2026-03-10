@@ -168,17 +168,24 @@ let annotate (term : typed_term) (tyu : Ast.ty_use) : typed_term = set_term_ty t
 (* Workflow - synthesize takes in a set of invariants, and determines the type of an expression.
  *            it returns the demands in order to have that expression have that type 
  *            it also returns the annotated terms themselves *)
-let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_env)
+let rec synthesize
+          (knowledge : context)
+          (expr : typed_term)
+          (tydef_env : tydef_env)
+          (ty_env : ty_env)
   : typed_term * Syntax.Ast.ty_use * context
   =
   let annotate_with = annotate expr in
   let ann, node = expr in
   match node with
-  | Ast.Variable (Namespaced _) ->
-    (* for now, we only allow synthesis of variables with namespaced names, as they can only be introduced by pattern matching, and pattern matching always synthesizes *)
-    type_error
-      ?loc:ann.loc
-      "TODO: synthesize: cannot synthesize variable with namespaced name"
+  | Ast.Variable (Namespaced _ as n) -> begin
+    match Env.lookup_env n ty_env with
+    | None ->
+      type_error
+        ?loc:ann.loc
+        (Printf.sprintf "Namespaced variable %s not found" (Pretty.show_name n))
+    | Some tyu -> annotate_with tyu, tyu, knowledge
+  end
   | Ast.Variable (Base _) ->
     (match ann.unique_id with
      | None -> assert false (* impossible case *)
@@ -202,7 +209,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
     let terms, typs, new_knowledge =
       List.fold_left
         (fun (terms_acc, tys_acc, ctx_acc) term ->
-           let term, ty_use, term_ctx = synthesize ctx_acc term tydef_env in
+           let term, ty_use, term_ctx = synthesize ctx_acc term tydef_env ty_env in
            term :: terms_acc, ty_use :: tys_acc, merge_contexts ctx_acc term_ctx tydef_env)
         ([], [], knowledge)
         terms
@@ -217,13 +224,13 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
         ?loc:ann.loc
         (Printf.sprintf "synthesize: annotation has invalid type: %s" msg)
     | Ok _ ->
-      let checked_term, demands = check knowledge tterm ty_use tydef_env in
+      let checked_term, demands = check knowledge tterm ty_use tydef_env ty_env in
       (* we can remove the annotations here *)
       checked_term, ty_use, demands
   end
   | Ast.Rec (Ast.Wildcard _, _) -> assert false (* impossible case, rejected by syntax *)
   | Ast.Rec ((Ast.Var (_, name) as tbinder), tterm) ->
-    let inner_expr, inferred_tyu, demands = synthesize knowledge tterm tydef_env in
+    let inner_expr, inferred_tyu, demands = synthesize knowledge tterm tydef_env ty_env in
     let relevant_ids = binder_ids_of_binder tbinder in
     let binder_tyu =
       match type_of_usages relevant_ids demands tydef_env with
@@ -262,7 +269,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
         let expr = ann, Ast.Rec (tbinder, inner_expr) in
         annotate expr tyu, tyu, demands))
   | Ast.Mu (tbinder, tcommand) ->
-    let tcommand, new_knowledge = typecheck_command knowledge tcommand tydef_env in
+    let tcommand, new_knowledge = typecheck_command knowledge tcommand tydef_env ty_env in
     let relevant_ids = binder_ids_of_binder tbinder in
     (match type_of_usages relevant_ids new_knowledge tydef_env with
      | Error msg -> type_error ?loc:ann.loc msg
@@ -281,11 +288,15 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
            let new_command, tyu_of_pattern_opt, new_knowledge =
              match pattern with
              | Ast.Numeral _ ->
-               let cmd, command_knowledge = typecheck_command demands command tydef_env in
+               let cmd, command_knowledge =
+                 typecheck_command demands command tydef_env ty_env
+               in
                cmd, Some (WeakTyu.new_constructor_tyu Raw64), command_knowledge
              | Ast.Binder binder ->
                let unique_ids = binder_ids_of_binder binder in
-               let cmd, command_knowledge = typecheck_command demands command tydef_env in
+               let cmd, command_knowledge =
+                 typecheck_command demands command tydef_env ty_env
+               in
                begin match type_of_usages unique_ids command_knowledge tydef_env with
                | Error msg -> type_error ?loc:ann.loc msg
                | Ok None -> cmd, Some (WeakTyu.new_unknown_tyu ()), command_knowledge
@@ -295,7 +306,9 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
                  else cmd, Some result, command_knowledge
                end
              | Ast.Tup subpats ->
-               let cmd, command_knowledge = typecheck_command demands command tydef_env in
+               let cmd, command_knowledge =
+                 typecheck_command demands command tydef_env ty_env
+               in
                let unique_ids = List.map binder_ids_of_binder subpats in
                let types_of_binders =
                  List.map
@@ -365,7 +378,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
                      arg_with_tys
                  in
                  let cmd, command_knowledge =
-                   typecheck_command new_knowledge command tydef_env
+                   typecheck_command new_knowledge command tydef_env ty_env
                  in
                  let acquired_tyu = Ast.Polarised (polarity, ty_with_holes) in
                  cmd, Some acquired_tyu, command_knowledge)
@@ -439,7 +452,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
         let new_cons_args, new_knowledge =
           List.fold_left2
             (fun (acc, ctx) arg expected_ty ->
-               let new_arg, new_ctx = check ctx arg expected_ty tydef_env in
+               let new_arg, new_ctx = check ctx arg expected_ty tydef_env ty_env in
                new_arg :: acc, merge_contexts ctx new_ctx tydef_env)
             ([], knowledge)
             cons_args
@@ -459,7 +472,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
     let new_terms, most_specific_term, total_knowledge =
       List.fold_left
         (fun (terms_acc, ty_acc, ctx_acc) term ->
-           let t, ty_use, term_ctx = synthesize ctx_acc term tydef_env in
+           let t, ty_use, term_ctx = synthesize ctx_acc term tydef_env ty_env in
            match ty_acc with
            | None ->
              t :: terms_acc, Some ty_use, merge_contexts ctx_acc term_ctx tydef_env
@@ -492,14 +505,30 @@ and check
       (expr : typed_term)
       (expected_type : Syntax.Ast.ty_use)
       (tydef_env : tydef_env)
+      (ty_env : ty_env)
   : typed_term * context
   =
   let ann, node = expr in
   let annotate_with_tyu expr = annotate expr expected_type in
   match node with
-  | Ast.Variable (Namespaced _) ->
-    (* for now, we don't allow checking of variables with namespaced names, as they can only be introduced by pattern matching, and pattern matching always synthesizes *)
-    type_error ?loc:ann.loc "TODO: check: cannot check variable with namespaced name"
+  | Ast.Variable (Namespaced _ as n) -> begin
+    match Env.lookup_env n ty_env with
+    | None ->
+      type_error
+        ?loc:ann.loc
+        (Printf.sprintf "Namespaced variable %s not found" (Pretty.show_name n))
+    | Some tyu ->
+      if not (tyu_equal expected_type tyu tydef_env)
+      then
+        type_mismatch
+          ?loc:ann.loc
+          expected_type
+          tyu
+          "check: variable expected type mismatch"
+      else (
+        let best_tyu = Type.most_specific_tyu expected_type tyu tydef_env in
+        annotate expr best_tyu, knowledge)
+  end
   | Ast.Variable (Base _) ->
     (match ann.unique_id with
      | None -> assert false (* impossible case *)
@@ -519,12 +548,12 @@ and check
      | None ->
        annotate_with_tyu expr, add_to_context tydef_env unique_id expected_type knowledge)
   | Ast.Num _ ->
-    let _, tyu, knowledge = synthesize knowledge expr tydef_env in
+    let _, tyu, knowledge = synthesize knowledge expr tydef_env ty_env in
     if not (tyu_equal expected_type tyu tydef_env)
     then type_mismatch ?loc:ann.loc expected_type tyu "check: TNum expected type mismatch"
     else annotate_with_tyu expr, knowledge
   | Ast.Exit ->
-    let _, tyu, knowledge = synthesize knowledge expr tydef_env in
+    let _, tyu, knowledge = synthesize knowledge expr tydef_env ty_env in
     if not (tyu_equal expected_type tyu tydef_env)
     then
       type_mismatch ?loc:ann.loc expected_type tyu "check: TExit expected type mismatch"
@@ -538,7 +567,7 @@ and check
         (binder_ids_of_binder tbinder)
     in
     let updated_knowledge = merge_contexts knowledge new_demands tydef_env in
-    let cmd, knowledge = typecheck_command updated_knowledge tcommand tydef_env in
+    let cmd, knowledge = typecheck_command updated_knowledge tcommand tydef_env ty_env in
     let expr = ann, Ast.Mu (tbinder, cmd) in
     annotate expr expected_type, knowledge
   | Ast.Tuple terms ->
@@ -567,7 +596,7 @@ and check
           let new_terms, knowledge =
             List.fold_left2
               (fun (terms, ctx_acc) term expected_ty ->
-                 let t, term_demands = check ctx_acc term expected_ty tydef_env in
+                 let t, term_demands = check ctx_acc term expected_ty tydef_env ty_env in
                  t :: terms, merge_contexts ctx_acc term_demands tydef_env)
               ([], knowledge)
               terms
@@ -595,7 +624,9 @@ and check
       then type_mismatch ?loc:ann.loc expected_type ty_use "check: TAnn type mismatch"
       else (
         let most_specific_tyu = Type.most_specific_tyu expected_type ty_use tydef_env in
-        let checked_term, knowledge = check knowledge tterm most_specific_tyu tydef_env in
+        let checked_term, knowledge =
+          check knowledge tterm most_specific_tyu tydef_env ty_env
+        in
         checked_term, knowledge)
   end
   | Ast.Rec (Ast.Wildcard _, _) -> assert false (* impossible case, rejected by syntax *)
@@ -609,7 +640,7 @@ and check
         knowledge
         new_demands
     in
-    let term, knowledge = check updated_knowledge tterm expected_type tydef_env in
+    let term, knowledge = check updated_knowledge tterm expected_type tydef_env ty_env in
     let expr = ann, Ast.Rec (tbinder, term) in
     if
       recursive_name_in_unguarded_position name tterm
@@ -624,12 +655,12 @@ and check
            (Syntax.Pretty.show_ty_use expected_type))
     else annotate expr expected_type, knowledge
   | Ast.Matcher _ ->
-    let t, ty_use, discoveries = synthesize knowledge expr tydef_env in
+    let t, ty_use, discoveries = synthesize knowledge expr tydef_env ty_env in
     if not (tyu_equal expected_type ty_use tydef_env)
     then type_mismatch ?loc:ann.loc expected_type ty_use "check: TMatcher type mismatch"
     else t, discoveries
   | Ast.Construction _ ->
-    let t, ty_use, discoveries = synthesize knowledge expr tydef_env in
+    let t, ty_use, discoveries = synthesize knowledge expr tydef_env ty_env in
     if not (tyu_equal expected_type ty_use tydef_env)
     then
       type_mismatch ?loc:ann.loc expected_type ty_use "check: TConstruction type mismatch"
@@ -651,7 +682,9 @@ and check
         let new_terms, knowledge =
           List.fold_left
             (fun (terms, ctx_acc) term ->
-               let t, term_demands = check ctx_acc term expected_elem_ty tydef_env in
+               let t, term_demands =
+                 check ctx_acc term expected_elem_ty tydef_env ty_env
+               in
                t :: terms, merge_contexts ctx_acc term_demands tydef_env)
             ([], knowledge)
             terms
@@ -670,6 +703,7 @@ and typecheck_command
       (knowledge : context)
       (command : typed_command)
       (tydef_env : tydef_env)
+      (ty_env : ty_env)
   : typed_command * context
   =
   let typecheck_command_aux l_term r_term ann =
@@ -680,19 +714,19 @@ and typecheck_command
      * left term to check whether it is a destructor, before retrying if not, or
      * if unable to determine.
      *)
-    let tl_term, l_ty_use, l_knowledge = synthesize knowledge l_term tydef_env in
+    let tl_term, l_ty_use, l_knowledge = synthesize knowledge l_term tydef_env ty_env in
     match is_constructor_tyu l_ty_use tydef_env with
     | Some false ->
       (* continue as planned *)
       let r_ty_use = Type.negate_tyu l_ty_use in
-      let tr_term, final_knowledge = check l_knowledge r_term r_ty_use tydef_env in
+      let tr_term, final_knowledge = check l_knowledge r_term r_ty_use tydef_env ty_env in
       mk_command ann (Ast.Core { l_term = tl_term; r_term = tr_term }), final_knowledge
     | Some true | None ->
       (* can't tell *)
       (* TODO: do we really have to retry on none? *)
-      let tr_term, r_ty_use, r_knowledge = synthesize knowledge r_term tydef_env in
+      let tr_term, r_ty_use, r_knowledge = synthesize knowledge r_term tydef_env ty_env in
       let l_ty_use = Type.negate_tyu r_ty_use in
-      let tl_term, final_knowledge = check r_knowledge l_term l_ty_use tydef_env in
+      let tl_term, final_knowledge = check r_knowledge l_term l_ty_use tydef_env ty_env in
       mk_command ann (Ast.Core { l_term = tl_term; r_term = tr_term }), final_knowledge
   in
   let ann, node = command in
@@ -701,7 +735,9 @@ and typecheck_command
   (* for Arithmetic commands, it is simpler - the out_term is always the destructor *)
   | Ast.Arith
       (Ast.Bop { op = top; l_term = tl_term; r_term = tr_term; out_term = tout_term }) ->
-    let tout_term, out_ty_use, out_knowledge = synthesize knowledge tout_term tydef_env in
+    let tout_term, out_ty_use, out_knowledge =
+      synthesize knowledge tout_term tydef_env ty_env
+    in
     let in_ty_use = Type.negate_tyu out_ty_use in
     let expected_in_ty = WeakTyu.new_constructor_tyu Raw64 in
     if not (tyu_equal out_ty_use (Type.negate_tyu expected_in_ty) tydef_env)
@@ -712,8 +748,12 @@ and typecheck_command
         out_ty_use
         "typecheck_command: arithmetic binary operation expected raw64 output"
     else (
-      let tl_term, left_knowledge = check out_knowledge tl_term in_ty_use tydef_env in
-      let tr_term, right_knowledge = check left_knowledge tr_term in_ty_use tydef_env in
+      let tl_term, left_knowledge =
+        check out_knowledge tl_term in_ty_use tydef_env ty_env
+      in
+      let tr_term, right_knowledge =
+        check left_knowledge tr_term in_ty_use tydef_env ty_env
+      in
       ( mk_command
           ann
           (Ast.Arith
@@ -721,7 +761,9 @@ and typecheck_command
                 { op = top; l_term = tl_term; r_term = tr_term; out_term = tout_term }))
       , right_knowledge ))
   | Ast.Arith (Ast.Unop { op = top; in_term = tin_term; out_term = tout_term }) ->
-    let tout_term, out_ty_use, out_knowledge = synthesize knowledge tout_term tydef_env in
+    let tout_term, out_ty_use, out_knowledge =
+      synthesize knowledge tout_term tydef_env ty_env
+    in
     let in_ty_use = Type.negate_tyu out_ty_use in
     let expected_in_ty = WeakTyu.new_constructor_tyu Raw64 in
     if not (tyu_equal out_ty_use (Type.negate_tyu expected_in_ty) tydef_env)
@@ -732,43 +774,43 @@ and typecheck_command
         out_ty_use
         "typecheck_command: arithmetic unary operation expected raw64 output"
     else (
-      let tin_term, in_knowledge = check out_knowledge tin_term in_ty_use tydef_env in
+      let tin_term, in_knowledge =
+        check out_knowledge tin_term in_ty_use tydef_env ty_env
+      in
       ( mk_command
           ann
           (Ast.Arith (Ast.Unop { op = top; in_term = tin_term; out_term = tout_term }))
       , in_knowledge ))
   | Ast.Fork (cmd1, cmd2) ->
-    let cmd1, ctx1 = typecheck_command knowledge cmd1 tydef_env in
-    let cmd2, ctx2 = typecheck_command ctx1 cmd2 tydef_env in
+    let cmd1, ctx1 = typecheck_command knowledge cmd1 tydef_env ty_env in
+    let cmd2, ctx2 = typecheck_command ctx1 cmd2 tydef_env ty_env in
     mk_command ann (Ast.Fork (cmd1, cmd2)), ctx2
 ;;
-
-module SMap = Map.Make (String)
-
-type module_bindings = Ast.ty_use SMap.t
 
 let rec tycheck_mod_tli
           (def : typed_mod_tli)
           (knowledge : context)
-          (module_bindings : module_bindings)
+          (ty_env : ty_env)
           (tydef_env : tydef_env)
-  : typed_mod_tli * module_bindings * context * tydef_env
+  : typed_mod_tli * ty_env * context * tydef_env
   =
   match def with
   | Ast.TermDef (tbinder, tterm) ->
-    let tterm, inferred_ty, synth_knowledge = synthesize knowledge tterm tydef_env in
+    let tterm, inferred_ty, synth_knowledge =
+      synthesize knowledge tterm tydef_env ty_env
+    in
     let new_knowledge =
       List.fold_left
         (fun acc id -> add_to_context tydef_env id inferred_ty acc)
         synth_knowledge
         (binder_ids_of_binder tbinder)
     in
-    let new_module_bindings =
+    let new_ty_env =
       match tbinder with
-      | Ast.Wildcard _ -> module_bindings
-      | Ast.Var (_, name) -> SMap.add name inferred_ty module_bindings
+      | Ast.Wildcard _ -> ty_env
+      | Ast.Var (_, name) -> Env.extend_env name inferred_ty ty_env
     in
-    Ast.TermDef (tbinder, tterm), new_module_bindings, new_knowledge, tydef_env
+    Ast.TermDef (tbinder, tterm), new_ty_env, new_knowledge, tydef_env
   | Ast.TypeDef (name, abstracts, ty) ->
     (* for now, we reject duplicate type definitions - it is a lot easier to reason about :) *)
     if Env.exists (Base name) tydef_env
@@ -777,7 +819,7 @@ let rec tycheck_mod_tli
       try
         Type.validate_tydef (name, abstracts) ty tydef_env;
         let new_tydef_env = Env.extend_env name (abstracts, ty) tydef_env in
-        Ast.TypeDef (name, abstracts, ty), module_bindings, knowledge, new_tydef_env
+        Ast.TypeDef (name, abstracts, ty), ty_env, knowledge, new_tydef_env
       with
       | Type.TypeNotFound n ->
         type_error (Printf.sprintf "type %s is not found" (Syntax.Pretty.show_name n))
@@ -792,7 +834,7 @@ let rec tycheck_mod_tli
         type_error
           (Printf.sprintf "type %s is malformed: %s" (Syntax.Pretty.show_name name) msg))
   | Ast.Term term ->
-    let tterm, _, synth_knowledge = synthesize knowledge term tydef_env in
+    let tterm, _, synth_knowledge = synthesize knowledge term tydef_env ty_env in
     (* if the top level term returns an unknown type, it is most likely of form
      * { _ -> ... } where the hole is never used. In this case,
      * we can assign it the data unit type.
@@ -801,48 +843,51 @@ let rec tycheck_mod_tli
     if WeakTyu.is_unknown (Option.get ann.ty)
     then (
       let unit_tyu = Ast.Polarised (Plus, Ast.Raw (By_value, Data, Product [])) in
-      let tterm, check_knowledge = check synth_knowledge tterm unit_tyu tydef_env in
-      Ast.Term tterm, module_bindings, check_knowledge, tydef_env)
-    else Ast.Term tterm, module_bindings, synth_knowledge, tydef_env
+      let tterm, check_knowledge =
+        check synth_knowledge tterm unit_tyu tydef_env ty_env
+      in
+      Ast.Term tterm, ty_env, check_knowledge, tydef_env)
+    else Ast.Term tterm, ty_env, synth_knowledge, tydef_env
 
 and tycheck_module
       (knowledge : context)
       (top_level_items : typed_module)
       (tydef_env : tydef_env)
-  : typed_module * module_bindings * tydef_env
+      (ty_env : ty_env)
+  : typed_module * ty_env * tydef_env
   =
   let rec process_top_level_items
             (defs : typed_mod_tli Ast.top_level_item list)
             (defs_acc : typed_mod_tli Ast.top_level_item list)
-            (bindings_acc : module_bindings)
+            (ty_env : ty_env)
             (knowledge_acc : context)
             (tydef_env_acc : tydef_env)
-    : typed_mod_tli Ast.top_level_item list * context * module_bindings * tydef_env
+    : typed_mod_tli Ast.top_level_item list * context * ty_env * tydef_env
     =
     match defs with
-    | [] -> List.rev defs_acc, knowledge_acc, bindings_acc, tydef_env_acc
+    | [] -> List.rev defs_acc, knowledge_acc, ty_env, tydef_env_acc
     | Ast.Def def :: rest ->
-      let newdef, new_module_bindings, new_knowledge, new_tydef_env =
-        tycheck_mod_tli def knowledge_acc bindings_acc tydef_env_acc
+      let newdef, new_ty_env, new_knowledge, new_tydef_env =
+        tycheck_mod_tli def knowledge_acc ty_env tydef_env_acc
       in
       process_top_level_items
         rest
         (Ast.Def newdef :: defs_acc)
-        new_module_bindings
+        new_ty_env
         new_knowledge
         new_tydef_env
     | Ast.Open o :: rest ->
       process_top_level_items
         rest
         (Ast.Open o :: defs_acc)
-        bindings_acc
+        ty_env
         knowledge_acc
         tydef_env_acc
   in
-  let new_top_level_items, _, new_module_bindings, after_defs_tydef_env =
-    process_top_level_items top_level_items [] SMap.empty knowledge tydef_env
+  let new_top_level_items, _, new_ty_env, after_defs_tydef_env =
+    process_top_level_items top_level_items [] ty_env knowledge tydef_env
   in
-  new_top_level_items, new_module_bindings, after_defs_tydef_env
+  new_top_level_items, new_ty_env, after_defs_tydef_env
 ;;
 
 (* do a second pass over the typechecked module to ensure that all types, even the inferred types,
@@ -904,23 +949,28 @@ let verify_well_typed (modu : typed_module) : unit =
 
 type module_type_context =
   { hole_env : tycheck_hole_environment_frame
-  ; top_level_bindings : module_bindings
+  ; ty_env : ty_env
   ; tydef_env : tydef_env
   }
 
 let empty_type_context =
-  { hole_env = Top; top_level_bindings = SMap.empty; tydef_env = Top, Hashtbl.create 10 }
+  { hole_env = Top; ty_env = Env.empty_env (); tydef_env = Env.empty_env () }
 ;;
 
 (* given the updated hole environment, add to context all the 
  * top level bindings of the previous module.
  *)
-let make_context hole_env (top_level_bindings : module_bindings) : context =
-  SMap.fold
+let make_context hole_env (ty_env : ty_env) : context =
+  let seen = Hashtbl.create 10 in
+  Env.fold_env
     (fun name ty acc ->
-       let usages = Converter.get_usages_of_hole_str hole_env name in
-       List.fold_left (fun acc id -> IMap.add id ty acc) acc usages)
-    top_level_bindings
+       if Hashtbl.mem seen name
+       then acc
+       else (
+         Hashtbl.add seen name ();
+         let usages = Converter.get_usages_of_hole_str hole_env name in
+         List.fold_left (fun acc id -> IMap.add id ty acc) acc usages))
+    ty_env
     IMap.empty
 ;;
 
@@ -928,8 +978,8 @@ let tycheck_program (modu : Ast.core_ann Ast.module_) (ctx : module_type_context
   : typed_module * module_type_context
   =
   let modu, hole_env = tycheck_module_of_ast modu ctx.hole_env in
-  let context = make_context hole_env ctx.top_level_bindings in
-  let out, top_level_bindings, tydef_env = tycheck_module context modu ctx.tydef_env in
+  let context = make_context hole_env ctx.ty_env in
+  let out, ty_env, tydef_env = tycheck_module context modu ctx.tydef_env ctx.ty_env in
   verify_well_typed out;
-  out, { hole_env; top_level_bindings; tydef_env }
+  out, { hole_env; ty_env; tydef_env }
 ;;

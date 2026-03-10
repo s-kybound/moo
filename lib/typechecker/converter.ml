@@ -117,7 +117,8 @@ let add_usage_to_hole
         if f.hole_var = var then f.usages <- usage_id :: f.usages else aux f.parent
     in
     aux frame
-  | Namespaced _ -> failwith "TODO: namespaced variables not supported for holes"
+  | Namespaced _ ->
+    () (* do nothing, the hole calculation does not need to track external names *)
 ;;
 
 let get_usages_of_hole_str (frame : tycheck_hole_environment_frame) str : int list =

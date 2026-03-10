@@ -116,3 +116,12 @@ let modularize_env ?(default = Top) (path : string list) (env : ('binding, 'obj)
 ;;
 
 let empty_env () : ('binding, 'obj) t = Top, Hashtbl.create 16
+
+let fold_env f env acc =
+  let rec fold_env_local env acc =
+    match env with
+    | Top -> acc
+    | Frame { parent; binding; obj } -> fold_env_local parent (f binding obj acc)
+  in
+  fold_env_local (fst env) acc
+;;

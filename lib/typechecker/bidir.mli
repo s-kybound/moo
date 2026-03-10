@@ -1,11 +1,9 @@
 open Syntax
 open Converter
 
-type module_bindings
-
 type module_type_context =
   { hole_env : tycheck_hole_environment_frame
-  ; top_level_bindings : module_bindings
+  ; ty_env : Type.ty_env
   ; tydef_env : Type.tydef_env
   }
 
