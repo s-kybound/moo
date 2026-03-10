@@ -5,39 +5,8 @@ exception MalformedType of name * string
 exception TypeNotFound of name
 exception TypeInstantiationFailure of name * int * int
 
-type tydef_env =
-  | Top
-  | TyFrame of
-      { parent : tydef_env
-      ; var : kind_binder
-      ; ty : ty
-      }
-
-let lookup_opt (name : name) (tydef_env : tydef_env) : (ty * string list) option =
-  match name with
-  | Base n ->
-    let rec aux env =
-      match env with
-      | Top -> None
-      | TyFrame { parent; var = ty_name, abstracts; ty } ->
-        if ty_name = n then Some (ty, abstracts) else aux parent
-    in
-    aux tydef_env
-  | Namespaced _ -> failwith "lookup_opt: namespaced types not supported"
-;;
-
-let has_type_name (type_name : string) (tydef_env : tydef_env) : bool =
-  let rec aux env =
-    match env with
-    | Top -> false
-    | TyFrame { parent; var = bound_name, _; _ } -> bound_name = type_name || aux parent
-  in
-  aux tydef_env
-;;
-
-let has_binding ((type_name, _abstracts) : kind_binder) (tydef_env : tydef_env) : bool =
-  has_type_name type_name tydef_env
-;;
+(* name -> abstracts * type *)
+type tydef_env = (string, string list * ty) Env.t
 
 let rec negate_tyu (ty_use : ty_use) : ty_use =
   match ty_use with
@@ -150,9 +119,9 @@ module Substitute = struct
     match ty with
     | Raw _ -> ty
     | Named (name, ty_uses) ->
-    match lookup_opt name tydef_env with
+    match Env.lookup_env name tydef_env with
     | None -> raise (TypeNotFound name)
-    | Some (found_ty, abstracts) ->
+    | Some (abstracts, found_ty) ->
       if List.length abstracts <> List.length ty_uses
       then
         raise
@@ -512,31 +481,31 @@ and unify_constraints
 ;;
 
 (* Given a constructor's name and arity, look up the first matching type 
- * Invariant - the constructor's namespacing has been resolved
  * Note - this returns the polarity of the constructor term
  *)
 let type_of_raw_constructor
       (constr_name : string)
+      (namespace_path : string list)
       (constr_arity : int)
       (tydef_env : tydef_env)
-  : (kind_binder * ty * polarity) option
+  : (string * string list * ty * polarity) option
   =
-  let rec aux (env : tydef_env) =
-    match env with
-    | Top -> None
-    | TyFrame { parent; var; ty = Raw (_mode, shape, Variant variants) as ty } ->
-      let is_matching_variant (v : variant) =
-        v.constr_name = constr_name && List.length v.constr_args = constr_arity
-      in
-      (match List.find_opt is_matching_variant variants with
-       | None -> aux parent
-       | Some _ ->
-       match shape with
-       | Data -> Some (var, ty, Plus)
-       | Codata -> Some (var, ty, Minus))
-    | TyFrame { parent; _ } -> aux parent
+  let property (_, ty) : bool =
+    match ty with
+    | Raw (_, _, Variant variants) ->
+      List.exists
+        (fun (v : variant) ->
+           v.constr_name = constr_name && List.length v.constr_args = constr_arity)
+        variants
+    | _ -> false
   in
-  aux tydef_env
+  let format_result (name, (abstracts, ty)) =
+    match ty with
+    | Raw (_, Data, _) -> name, abstracts, ty, Plus
+    | Raw (_, Codata, _) -> name, abstracts, ty, Minus
+    | _ -> assert false (* should have been checked by the property function *)
+  in
+  Option.map format_result (Env.lookup_env_by_property namespace_path property tydef_env)
 ;;
 
 (* given a constructor and a type, 
@@ -568,18 +537,14 @@ let type_of_namespaced_constructor
       (tydef_env : tydef_env)
   =
   match constr_name with
-  | Base name -> type_of_raw_constructor name constr_arity tydef_env
-  | Namespaced _ ->
-    failwith
-      "TODO: namespacing resolution - namespace semantics have not been figured out"
+  | Base name -> type_of_raw_constructor name [] constr_arity tydef_env
+  | Namespaced (path, name) -> type_of_raw_constructor name path constr_arity tydef_env
 ;;
 
 let args_of_namespaced_variant (constr : name) (ty : ty) : ty_use list =
   match constr with
   | Base name -> args_of_raw_variant name ty
-  | Namespaced _ ->
-    failwith
-      "TODO: namespacing resolution - namespace semantics have not been figured out"
+  | Namespaced (_, name) -> args_of_raw_variant name ty
 ;;
 
 (* TODO: the granularity of this tyu upgrading system can be improved 
@@ -605,7 +570,7 @@ let most_specific_tyu (tyu1 : ty_use) (tyu2 : ty_use) (tydef_env : tydef_env) : 
     | Weak _, tyu -> tyu)
 ;;
 
-let validate_tydef ((name, abstracts) : kind_binder) ty tydef_env =
+let validate_tydef (name, abstracts) ty (tydef_env : tydef_env) =
   let rec validate_tydef_ty abs_vars (ty : ty) : unit =
     match ty with
     | Raw (_, _, raw_ty) -> validate_tydef_raw_ty abs_vars raw_ty
@@ -619,11 +584,11 @@ let validate_tydef ((name, abstracts) : kind_binder) ty tydef_env =
       else ()
     | Named (n, ty_uses) ->
       List.iter (validate_tydef_tyu abs_vars) ty_uses;
-      (match lookup_opt n tydef_env with
+      (match Env.lookup_env n tydef_env with
        | None -> raise (TypeNotFound n)
        (* invariant - any type in the tydef environment is already 
         * well formed *)
-       | Some (_, found_abstracts) ->
+       | Some (found_abstracts, _) ->
          if not (List.length ty_uses = List.length found_abstracts)
          then
            raise

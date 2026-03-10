@@ -174,7 +174,12 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
   let annotate_with = annotate expr in
   let ann, node = expr in
   match node with
-  | Ast.Variable _ ->
+  | Ast.Variable (Namespaced _) ->
+    (* for now, we only allow synthesis of variables with namespaced names, as they can only be introduced by pattern matching, and pattern matching always synthesizes *)
+    type_error
+      ?loc:ann.loc
+      "TODO: synthesize: cannot synthesize variable with namespaced name"
+  | Ast.Variable (Base _) ->
     (match ann.unique_id with
      | None -> assert false (* impossible case *)
      | Some unique_id ->
@@ -316,7 +321,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
                    (List.length pat_args)
                in
                type_error ?loc:ann.loc msg
-             | Some ((ty_name, abs_tys), ty, polarity) ->
+             | Some (ty_name, abs_tys, ty, polarity) ->
                (* Idea:
                 * - inject holes for any abstract types
                 * - get the expected type for each variant argument
@@ -411,7 +416,7 @@ let rec synthesize (knowledge : context) (expr : typed_term) (tydef_env : tydef_
           (List.length cons_args)
       in
       type_error ?loc:ann.loc msg
-    | Some ((ty_name, abs_tys), ty, polarity) ->
+    | Some (ty_name, abs_tys, ty, polarity) ->
       (* replace all the abstract types with holes *)
       let bindings = List.map (fun abs -> abs, WeakTyu.new_unknown_tyu ()) abs_tys in
       let variant_tys =
@@ -492,7 +497,10 @@ and check
   let ann, node = expr in
   let annotate_with_tyu expr = annotate expr expected_type in
   match node with
-  | Ast.Variable _ ->
+  | Ast.Variable (Namespaced _) ->
+    (* for now, we don't allow checking of variables with namespaced names, as they can only be introduced by pattern matching, and pattern matching always synthesizes *)
+    type_error ?loc:ann.loc "TODO: check: cannot check variable with namespaced name"
+  | Ast.Variable (Base _) ->
     (match ann.unique_id with
      | None -> assert false (* impossible case *)
      | Some unique_id ->
@@ -761,16 +769,15 @@ let rec tycheck_mod_tli
       | Ast.Var (_, name) -> SMap.add name inferred_ty module_bindings
     in
     Ast.TermDef (tbinder, tterm), new_module_bindings, new_knowledge, tydef_env
-  | Ast.TypeDef (tbinder, ty) ->
+  | Ast.TypeDef (name, abstracts, ty) ->
     (* for now, we reject duplicate type definitions - it is a lot easier to reason about :) *)
-    let ty_name, _ = tbinder in
-    if Type.has_binding tbinder tydef_env
-    then type_error (Printf.sprintf "type %s is already defined in this module" ty_name)
+    if Env.exists (Base name) tydef_env
+    then type_error (Printf.sprintf "type %s is already defined in this module" name)
     else (
       try
-        Type.validate_tydef tbinder ty tydef_env;
-        let new_tydef_env = TyFrame { parent = tydef_env; var = tbinder; ty } in
-        Ast.TypeDef (tbinder, ty), module_bindings, knowledge, new_tydef_env
+        Type.validate_tydef (name, abstracts) ty tydef_env;
+        let new_tydef_env = Env.extend_env name (abstracts, ty) tydef_env in
+        Ast.TypeDef (name, abstracts, ty), module_bindings, knowledge, new_tydef_env
       with
       | Type.TypeNotFound n ->
         type_error (Printf.sprintf "type %s is not found" (Syntax.Pretty.show_name n))
@@ -902,7 +909,7 @@ type module_type_context =
   }
 
 let empty_type_context =
-  { hole_env = Top; top_level_bindings = SMap.empty; tydef_env = Top }
+  { hole_env = Top; top_level_bindings = SMap.empty; tydef_env = Top, Hashtbl.create 10 }
 ;;
 
 (* given the updated hole environment, add to context all the 
