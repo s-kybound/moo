@@ -156,7 +156,7 @@ let tycheck_module_of_ast
         let tterm = tycheck_term_of_ast term new_env in
         let tbinder = binder_with_ids binder None in
         Ast.TermDef (tbinder, tterm), new_env
-      | Ast.TypeDef (kind_binder, ty) -> Ast.TypeDef (kind_binder, ty), env
+      | Ast.TypeDef (name, abstracts, ty) -> Ast.TypeDef (name, abstracts, ty), env
       | Ast.Term term ->
         let tterm = tycheck_term_of_ast term env in
         Ast.Term tterm, env

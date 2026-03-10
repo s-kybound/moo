@@ -402,7 +402,8 @@ let rec surface_mod_tli_to_ast_mod_tli (def : Surface.mod_tli) : Ast.core_ann As
     in
     let term = ann_of_surface_loc term.loc, term_node in
     Ast.TermDef (surface_binder_name_to_ast_binder name, term)
-  | Surface.TypeDef (kind_binder, ty) -> Ast.TypeDef (kind_binder, surface_ty_to_ast_ty ty)
+  | Surface.TypeDef (name, abstracts, ty) ->
+    Ast.TypeDef (name, abstracts, surface_ty_to_ast_ty ty)
   | Surface.Term term -> Ast.Term (surface_term_to_ast_term term)
 
 and surface_module_to_ast_module (m : Surface.module_) : Ast.core_ann Ast.module_ =
@@ -411,8 +412,8 @@ and surface_module_to_ast_module (m : Surface.module_) : Ast.core_ann Ast.module
 
 let rec surface_sig_tli_to_ast_sig_tli (sig_def : Surface.sig_tli) : Ast.sig_tli =
   match sig_def with
-  | Surface.TypeSigDef (kind_binder, shape, ty_opt) ->
-    Ast.TypeSigDef (kind_binder, shape, Option.map surface_ty_to_ast_ty ty_opt)
+  | Surface.TypeSigDef (name, abstracts, shape, ty_opt) ->
+    Ast.TypeSigDef (name, abstracts, shape, Option.map surface_ty_to_ast_ty ty_opt)
   | Surface.TermSigDef ({ name; typ = _ }, ty_use) ->
     (* typ will always be empty *)
     Ast.TermSigDef

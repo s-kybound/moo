@@ -118,8 +118,8 @@ any_ident:
 
 namespaced(name):
   | name                                                { Base $1 }
-  | namespace=NAMESPACE_IDENT
-    inner=namespaced(name)                              { Namespaced {namespace; inner} }
+  | namespaces=nonempty_list(NAMESPACE_IDENT)
+    inner=name                                          { Namespaced (namespaces, inner) }
 
 (* -- PROGRAM STRUCTURE -- *)
 parse_program: program EOF                              { $1 }
@@ -166,9 +166,12 @@ term_definition:
   | proc_definition                                     { $1 }
 
 type_definition:
-  | s=shape m=mode n=kind_binder EQUALS t=full_raw_type { TypeDef (n, Raw (m, s, t)) }
-  | s=shape n=kind_binder EQUALS t=full_raw_type        { TypeDef (n, Raw (infer_mode s, s, t)) }
-  | TYPE n=kind_binder EQUALS t=type_expr               { TypeDef (n, t) }
+  | s=shape m=mode n=kind_binder EQUALS t=full_raw_type { let n, abstracts = n in
+                                                          TypeDef (n, abstracts, Raw (m, s, t)) }
+  | s=shape n=kind_binder EQUALS t=full_raw_type        { let n, abstracts = n in
+                                                          TypeDef (n, abstracts, Raw (infer_mode s, s, t)) }
+  | TYPE n=kind_binder EQUALS t=type_expr               { let n, abstracts = n in
+                                                          TypeDef (n, abstracts, t) }
 
 // module_signature:
 //   | MODULE name=any_ident LBRACE interface=interface RBRACE
@@ -178,9 +181,11 @@ term_signature:
   | LET b=untyped_binder_strict EQUALS t=type_use       { TermSigDef (b, t) }
 
 type_signature:
-  | s=shape m=mode n=kind_binder EQUALS t=full_raw_type { TypeSigDef (n, s, Some (Raw (m, s, t))) }
-  | s=shape n=kind_binder EQUALS t=full_raw_type        { TypeSigDef (n, s, Some (Raw (infer_mode s, s, t))) }
-  // | s=shape n=kind_binder                               { TypeSigDef (n, s, None) }
+  | s=shape m=mode n=kind_binder EQUALS t=full_raw_type { let n, abstracts = n in
+                                                          TypeSigDef (n, abstracts, s, Some (Raw (m, s, t))) }
+  | s=shape n=kind_binder EQUALS t=full_raw_type        { let n, abstracts = n in
+                                                          TypeSigDef (n, abstracts, s, Some (Raw (infer_mode s, s, t))) }
+  // | s=shape n=kind_binder                               { TypeSigDef (n, abstracts, s, None) }
 
 let_definition:
   | LET b=typed_binder EQUALS t=def_term                { TermDef (b, t) }

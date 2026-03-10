@@ -111,7 +111,7 @@ and 'ann arith_command =
 
 type 'ann mod_tli =
   | TermDef of 'ann binder * 'ann term
-  | TypeDef of kind_binder * ty
+  | TypeDef of string * string list * ty
   (* | ModuleDef of 'ann module_def *)
   | Term of 'ann term
 
@@ -124,7 +124,7 @@ and 'ann module_ = 'ann mod_tli top_level_item list
 type sig_module = sig_tli top_level_item list
 
 and sig_tli =
-  | TypeSigDef of kind_binder * shape * ty option
+  | TypeSigDef of string * string list * shape * ty option
   | TermSigDef of core_ann binder * ty_use
 (* | ModuleSigDef of module_sig_def *)
 

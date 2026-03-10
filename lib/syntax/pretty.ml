@@ -1,8 +1,9 @@
 open Ast
 
-let rec show_name (name : name) =
+let show_name (name : name) =
   match name with
-  | Namespaced { namespace; inner } -> Printf.sprintf "%s::%s" namespace (show_name inner)
+  | Namespaced (namespaces, inner) ->
+    Printf.sprintf "%s::%s" (String.concat "::" namespaces) inner
   | Base s -> s
 ;;
 
@@ -111,14 +112,6 @@ and show_variant { constr_name; constr_args } =
     Printf.sprintf "%s(%s)" constr_name params_str
 ;;
 
-let show_kind_binder (name, params) =
-  match params with
-  | [] -> name
-  | _ ->
-    let params_str = String.concat ", " params in
-    Printf.sprintf "%s<%s>" name params_str
-;;
-
 let show_binder ?(ann_show = fun _ s -> s) binder =
   match binder with
   | Wildcard ann -> ann_show ann "_"
@@ -210,9 +203,16 @@ let rec show_mod_tli ~ann_show def =
   match def with
   | TermDef (binder, term) ->
     Printf.sprintf "let %s = %s" (show_binder ~ann_show binder) (show_term ~ann_show term)
-  | TypeDef (kind_binder, ty) ->
-    Printf.sprintf "type %s = %s" (show_kind_binder kind_binder) (show_ty ty)
+  | TypeDef (name, abstracts, ty) ->
+    Printf.sprintf "type %s%s = %s" name (show_abstracts abstracts) (show_ty ty)
   | Term term -> show_term ~ann_show term
+
+and show_abstracts abstracts =
+  match abstracts with
+  | [] -> ""
+  | _ ->
+    let abstracts_str = String.concat ", " abstracts in
+    Printf.sprintf "<%s>" abstracts_str
 
 and show_open (mo : Surface.module_open) =
   match mo with
