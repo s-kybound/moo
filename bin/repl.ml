@@ -63,7 +63,10 @@ module State = struct
   let current_history : string History.t option ref = ref None
 
   let current_module_context : module_context ref =
-    ref { ty_env = Typechecker.Bidir.empty_type_context; term_env = Top }
+    ref
+      { ty_env = Typechecker.Bidir.empty_type_context
+      ; term_env = Syntax.Env.empty_env ()
+      }
   ;;
 
   let set_history t = current_history := Some t
@@ -160,18 +163,13 @@ let eval_module input context =
 ;;
 
 let step_module input context =
-  let show_state (control, stash, env) =
+  let show_state (control, stash, _) =
     Printf.printf "Control Stack:\n";
     List.iter
       (fun ci -> Printf.printf "  %s\n" (Core.Pretty.show_control_item ci))
       control;
     Printf.printf "Stash:\n";
     List.iter (fun v -> Printf.printf "  %s\n" (Core.Pretty.show_value v)) stash;
-    let bindings = Core.Pretty.env_to_bindings env in
-    Printf.printf "Environment:\n";
-    List.iter
-      (fun binding -> Printf.printf "  %s\n" (Core.Pretty.show_binding binding))
-      bindings;
     Printf.printf "\n%!"
   in
   let step_loop (c, s, e) =
@@ -290,7 +288,7 @@ let rec repl_loop (kont : (Error.kont * (Ast.core_ann Ast.module_ -> 'a) * strin
        repl_loop kont
      | _, Command.Clear ->
        State.set_module_context
-         { ty_env = Typechecker.Bidir.empty_type_context; term_env = Top };
+         { ty_env = Typechecker.Bidir.empty_type_context; term_env = Syntax.Env.empty_env () };
        print_endline "Cleared REPL environment.";
        repl_loop None
      | None, Command.Step expr ->

@@ -34,7 +34,7 @@ type term =
      * instruct the runtime to force evaluation of
      * the specified term *)
   | Mu of name * command
-  | Variable of string
+  | Variable of Syntax.Ast.name
   | Construction of
       { cons_name : string
       ; cons_args : term list
@@ -91,14 +91,8 @@ and control_item =
 
 and control = control_item list
 and stash = value list
-
-and environment_frame =
-  | Top
-  | Frame of
-      { parent : environment_frame
-      ; binding : string
-      ; mutable value : value
-      }
+and cell = value ref
+and environment_frame = (string, cell) Syntax.Env.t
 
 and value =
   | VMu of name * control * stash * environment_frame
@@ -111,6 +105,6 @@ and value =
   | VHole
 (* placeholder value for recursive terms that will be updated to the correct value once done *)
 
-let empty_environment : environment_frame = Top
+let empty_environment : environment_frame = Syntax.Env.empty_env ()
 
 type state = control * stash * environment_frame

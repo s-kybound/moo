@@ -18,6 +18,13 @@ let extend_env binding obj env =
   Frame { parent = local_env; binding; obj }, module_env
 ;;
 
+let exit_env (env : ('binding, 'obj) t) : ('binding, 'obj) t option =
+  let local_env, module_env = env in
+  match local_env with
+  | Top -> None
+  | Frame { parent; _ } -> Some (parent, module_env)
+;;
+
 let lookup_env_local name env =
   let rec aux env =
     match env with
@@ -107,3 +114,5 @@ let modularize_env ?(default = Top) (path : string list) (env : ('binding, 'obj)
     Hashtbl.add module_env path new_env_module;
     default, module_env)
 ;;
+
+let empty_env () : ('binding, 'obj) t = Top, Hashtbl.create 16

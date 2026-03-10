@@ -17,20 +17,10 @@ let extend_env (env : environment_frame) (new_bindings : (name * value) list)
   List.fold_left
     (fun parent (binding, value) ->
        match binding with
-       | Var name -> Frame { parent; binding = name; value }
+       | Var name -> Syntax.Env.extend_env name (ref value) parent
        | Wildcard -> parent)
     env
     new_bindings
-;;
-
-let lookup (env : environment_frame) (name : string) : value option =
-  let rec aux current_env =
-    match current_env with
-    | Top -> None
-    | Frame { parent; binding; value } ->
-      if binding = name then Some value else aux parent
-  in
-  aux env
 ;;
 
 let form_matches_value (form : form) (v : value) : bool =
@@ -87,21 +77,18 @@ type program_step =
 
 (* updates an environment frame with a value for a term.
  * ONLY used for recursive values. *)
-let update_env (env : environment_frame) (name : string) (new_value : value) : unit =
-  let rec aux current_env =
-    match current_env with
-    | Top -> raise (AssertionError ("unbound variable: " ^ name))
-    | Frame ({ parent; binding; value } as f) ->
-      if binding = name
-      then (
-        match value with
-        | VHole -> f.value <- new_value
-        | _ ->
-          raise
-            (AssertionError ("attempt to update non-hole value for variable: " ^ name)))
-      else aux parent
-  in
-  aux env
+let update_env (env : environment_frame) name (new_value : value) : unit =
+  match Syntax.Env.lookup_env name env with
+  | Some cell ->
+    let value = !cell in
+    if value = VHole
+    then cell := new_value
+    else
+      raise
+        (AssertionError
+           ("attempt to update non-hole value for variable: "
+            ^ Syntax.Pretty.show_name name))
+  | None -> raise (AssertionError ("unbound variable: " ^ Syntax.Pretty.show_name name))
 ;;
 
 let eval_state (state : state) : program_step =
@@ -116,9 +103,10 @@ let eval_state (state : state) : program_step =
     | NeedsForce t -> Step (force_term t @ c', s, e)
     | Mu (name, cmd) -> Step (c', VMu (name, [ C cmd ], [], e) :: s, e)
     | Variable name -> begin
-      match lookup e name with
-      | Some v -> Step (c', v :: s, e)
-      | None -> raise (AssertionError ("unbound variable: " ^ name))
+      match Syntax.Env.lookup_env name e with
+      | Some v -> Step (c', !v :: s, e)
+      | None ->
+        raise (AssertionError ("unbound variable: " ^ Syntax.Pretty.show_name name))
     end
     | Construction { cons_name; cons_args } ->
       let arg_eval_sequcence =
@@ -157,12 +145,13 @@ let eval_state (state : state) : program_step =
   (* instructions *)
   | I Force :: c', VMu (name, mu_c, mu_s, mu_e) :: s', e ->
     let k_name = genvar "k" in
+    let k_name' = Syntax.Ast.Base k_name in
     (* the captured mu has everything required, except it needs to resume with the 
      * value of the rest of the continuation. 
      * hence it captures the current continuation, and leaves a stack with the variable
      * at the top of the stack. 
      *)
-    let captured_mu = VMu (Var k_name, T (Variable k_name) :: c', s', e) in
+    let captured_mu = VMu (Var k_name, T (Variable k_name') :: c', s', e) in
     let new_e = extend_env mu_e [ name, captured_mu ] in
     Step (mu_c, mu_s, new_e)
   | I Force :: c', v :: s', e ->
@@ -271,13 +260,15 @@ let eval_state (state : state) : program_step =
     let args = List.rev (List.take arity s) in
     let s' = List.drop arity s in
     Step (c', VArr (Array.of_list args) :: s', e)
-  | I Exit_env :: c', s, Frame { parent; _ } -> Step (c', s, parent)
+  | I Exit_env :: c', s, e -> begin
+    match Syntax.Env.exit_env e with
+    | None -> raise (AssertionError "attempted to exit top-level environment")
+    | Some new_env -> Step (c', s, new_env)
+  end
   | I (Set_instr name) :: c', v :: s', e ->
-    update_env e name v;
+    update_env e (Syntax.Ast.Base name) v;
     Step (c', v :: s', e)
   (* invalid instruction states *)
-  | I Exit_env :: _, _, Top ->
-    raise (AssertionError "cannot exit environment from top-level")
   | I (Set_instr _) :: _, _, _ -> raise (AssertionError "stack underflow on set")
   | I Force :: _, [], _ -> raise (AssertionError "stack underflow on force")
   | I Cut :: _, _, _ -> raise (AssertionError "stack underflow on cut")

@@ -21,10 +21,10 @@ let tycheck_to_ir_bop (op : Ast.bop) : Ir.bop =
   | Ast.Shr -> Ir.Shr
 ;;
 
-let ast_name_to_ir_name (n : Ast.name) : string =
+let strip_namespacing (n : Ast.name) : string =
   match n with
   | Base n -> n
-  | Namespaced _ -> failwith "TODO: namespacing in typechecked AST to IR conversion"
+  | Namespaced (_, n) -> n
 ;;
 
 let binder_to_ir_name (b : typed_binder) : Ir.name =
@@ -40,7 +40,7 @@ let tycheck_to_ir_form (f : typed_pattern) : Ir.form =
   | Ast.Tup names -> Ir.Tuple (List.map binder_to_ir_name names)
   | Ast.Constr { pat_name; pat_args } ->
     Ir.Constr
-      { form_name = ast_name_to_ir_name pat_name
+      { form_name = strip_namespacing pat_name
       ; form_args = List.map binder_to_ir_name pat_args
       }
 ;;
@@ -127,10 +127,10 @@ and tycheck_to_ir_term tydef_env (t : typed_term) : Ir.term =
     match node with
     | Ast.Mu (name, command) ->
       Ir.Mu (binder_to_ir_name name, tycheck_to_ir_command tydef_env command)
-    | Ast.Variable name -> Ir.Variable (ast_name_to_ir_name name)
+    | Ast.Variable name -> Ir.Variable name
     | Ast.Construction { cons_name; cons_args } ->
       Ir.Construction
-        { cons_name = ast_name_to_ir_name cons_name
+        { cons_name = strip_namespacing cons_name
         ; cons_args = List.map (tycheck_to_ir_term tydef_env) cons_args
         }
     | Ast.Tuple terms -> Ir.Tuple (List.map (tycheck_to_ir_term tydef_env) terms)

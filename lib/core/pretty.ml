@@ -40,7 +40,7 @@ let rec show_term term =
   match term with
   | NeedsForce t -> Printf.sprintf "force(%s)" (show_term t)
   | Mu (name, cmd) -> Printf.sprintf "mu{ %s. %s }" (show_name name) (show_command cmd)
-  | Variable name -> name
+  | Variable name -> Syntax.Pretty.show_name name
   | Construction { cons_name; cons_args } ->
     Printf.sprintf "%s(%s)" cons_name (String.concat ", " (List.map show_term cons_args))
   | Tuple [ term ] -> Printf.sprintf "(%s,)" (show_term term)
@@ -119,15 +119,4 @@ and show_value v =
   | VNum n -> Int64.to_string n
   | VExit -> "exit"
   | VHole -> "<hole>"
-;;
-
-let show_binding (binding, value) = Printf.sprintf "%s = %s" binding (show_value value)
-
-let env_to_bindings env =
-  let rec aux env acc =
-    match env with
-    | Top -> acc
-    | Frame { binding; value; parent } -> aux parent ((binding, value) :: acc)
-  in
-  aux env []
 ;;
