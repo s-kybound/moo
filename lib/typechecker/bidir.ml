@@ -184,7 +184,9 @@ let rec synthesize
       type_error
         ?loc:ann.loc
         (Printf.sprintf "Namespaced variable %s not found" (Pretty.show_name n))
-    | Some tyu -> annotate_with tyu, tyu, knowledge
+    | Some { origin_path; obj = tyu } ->
+      let tyu = Type.qualify_tyu origin_path tyu in
+      annotate_with tyu, tyu, knowledge
   end
   | Ast.Variable (Base _) ->
     (match ann.unique_id with
@@ -361,10 +363,7 @@ let rec synthesize
                  in
                  type_error ?loc:ann.loc msg)
                else (
-                 (* TODO: namespace preservation using the pattern constructor namespace *)
-                 let ty_with_holes =
-                   Ast.Named (Base ty_name, List.map snd new_bindings)
-                 in
+                 let ty_with_holes = Ast.Named (ty_name, List.map snd new_bindings) in
                  let arg_with_tys = List.combine pat_args variant_tys in
                  let new_knowledge =
                    List.fold_left
@@ -458,8 +457,7 @@ let rec synthesize
             cons_args
             variant_tys
         in
-        (* TODO: namespace preservation using the namespaced constructor *)
-        let ty_with_holes = Ast.Named (Base ty_name, List.map snd bindings) in
+        let ty_with_holes = Ast.Named (ty_name, List.map snd bindings) in
         let tyu = Ast.Polarised (polarity, ty_with_holes) in
         let expr =
           ann, Ast.Construction { cons_name; cons_args = List.rev new_cons_args }
@@ -517,7 +515,8 @@ and check
       type_error
         ?loc:ann.loc
         (Printf.sprintf "Namespaced variable %s not found" (Pretty.show_name n))
-    | Some tyu ->
+    | Some { origin_path; obj = tyu } ->
+      let tyu = Type.qualify_tyu origin_path tyu in
       if not (tyu_equal expected_type tyu tydef_env)
       then
         type_mismatch

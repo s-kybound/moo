@@ -79,7 +79,7 @@ type program_step =
  * ONLY used for recursive values. *)
 let update_env (env : environment_frame) name (new_value : value) : unit =
   match Syntax.Env.lookup_env name env with
-  | Some cell ->
+  | Some { obj = cell; _ } ->
     let value = !cell in
     if value = VHole
     then cell := new_value
@@ -104,7 +104,9 @@ let eval_state (state : state) : program_step =
     | Mu (name, cmd) -> Step (c', VMu (name, [ C cmd ], [], e) :: s, e)
     | Variable name -> begin
       match Syntax.Env.lookup_env name e with
-      | Some v -> Step (c', !v :: s, e)
+      | Some { obj = cell; _ } ->
+        let v = !cell in
+        Step (c', v :: s, e)
       | None ->
         raise (AssertionError ("unbound variable: " ^ Syntax.Pretty.show_name name))
     end

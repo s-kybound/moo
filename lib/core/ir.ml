@@ -92,7 +92,7 @@ and control_item =
 and control = control_item list
 and stash = value list
 and cell = value ref
-and environment_frame = (string, cell) Syntax.Env.t
+and environment_frame = cell Syntax.Env.t
 
 and value =
   | VMu of name * control * stash * environment_frame

@@ -6,10 +6,42 @@ exception TypeNotFound of name
 exception TypeInstantiationFailure of name * int * int
 
 (* name -> abstracts * type *)
-type tydef_env = (string, string list * ty) Env.t
+type tydef_env = (string list * ty) Env.t
 
 (* name -> type_use *)
-type ty_env = (string, Ast.ty_use) Env.t
+type ty_env = Ast.ty_use Env.t
+
+let qualify_name (origin_path : string list) (name : name) : name =
+  match origin_path, name with
+  | [], _ | _, Namespaced _ -> name
+  | _, Base base_name -> Namespaced (origin_path, base_name)
+;;
+
+let rec qualify_tyu (origin_path : string list) (ty_use : ty_use) : ty_use =
+  match ty_use with
+  | Polarised (polarity, ty) -> Polarised (polarity, qualify_ty origin_path ty)
+  | AbstractIntroducer (abstract, tyu) ->
+    AbstractIntroducer (abstract, qualify_tyu origin_path tyu)
+  | Abstract _ | Weak _ -> ty_use
+
+and qualify_ty (origin_path : string list) (ty : ty) : ty =
+  match ty with
+  | Named (name, ty_uses) ->
+    Named (qualify_name origin_path name, List.map (qualify_tyu origin_path) ty_uses)
+  | Raw (mode, shape, raw_ty) -> Raw (mode, shape, qualify_raw_ty origin_path raw_ty)
+
+and qualify_raw_ty (origin_path : string list) (raw_ty : raw_ty) : raw_ty =
+  match raw_ty with
+  | Raw64 -> Raw64
+  | Product ty_uses -> Product (List.map (qualify_tyu origin_path) ty_uses)
+  | Array ty_use -> Array (qualify_tyu origin_path ty_use)
+  | Variant variants ->
+    Variant
+      (List.map
+         (fun { constr_name; constr_args } ->
+            { constr_name; constr_args = List.map (qualify_tyu origin_path) constr_args })
+         variants)
+;;
 
 let rec negate_tyu (ty_use : ty_use) : ty_use =
   match ty_use with
@@ -124,7 +156,8 @@ module Substitute = struct
     | Named (name, ty_uses) ->
     match Env.lookup_env name tydef_env with
     | None -> raise (TypeNotFound name)
-    | Some (abstracts, found_ty) ->
+    | Some { origin_path; obj = abstracts, found_ty } ->
+      let found_ty = qualify_ty origin_path found_ty in
       if List.length abstracts <> List.length ty_uses
       then
         raise
@@ -491,7 +524,7 @@ let type_of_raw_constructor
       (namespace_path : string list)
       (constr_arity : int)
       (tydef_env : tydef_env)
-  : (string * string list * ty * polarity) option
+  : (name * string list * ty * polarity) option
   =
   let property (_, ty) : bool =
     match ty with
@@ -502,10 +535,12 @@ let type_of_raw_constructor
         variants
     | _ -> false
   in
-  let format_result (name, (abstracts, ty)) =
+  let format_result (name, { Env.origin_path; obj = abstracts, ty }) =
+    let ty_name = qualify_name origin_path (Base name) in
+    let ty = qualify_ty origin_path ty in
     match ty with
-    | Raw (_, Data, _) -> name, abstracts, ty, Plus
-    | Raw (_, Codata, _) -> name, abstracts, ty, Minus
+    | Raw (_, Data, _) -> ty_name, abstracts, ty, Plus
+    | Raw (_, Codata, _) -> ty_name, abstracts, ty, Minus
     | _ -> assert false (* should have been checked by the property function *)
   in
   Option.map format_result (Env.lookup_env_by_property namespace_path property tydef_env)
@@ -591,7 +626,7 @@ let validate_tydef (name, abstracts) ty (tydef_env : tydef_env) =
        | None -> raise (TypeNotFound n)
        (* invariant - any type in the tydef environment is already 
         * well formed *)
-       | Some (found_abstracts, _) ->
+       | Some { obj = found_abstracts, _; _ } ->
          if not (List.length ty_uses = List.length found_abstracts)
          then
            raise
