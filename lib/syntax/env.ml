@@ -13,8 +13,16 @@ type 'obj env_local =
       ; obj : 'obj
       }
 
-type 'obj env_module = (string, 'obj) Hashtbl.t
-type 'obj t = 'obj env_local * (string list, 'obj env_module) Hashtbl.t
+module SMap = Map.Make (String)
+
+module SListMap = Map.Make (struct
+    type t = string list
+
+    let compare = compare
+  end)
+
+type 'obj env_module = 'obj SMap.t
+type 'obj t = 'obj env_local * 'obj env_module SListMap.t
 
 let extend_env binding obj env =
   let local_env, module_env = env in
@@ -44,10 +52,10 @@ let lookup_env name (env : 'obj t) =
   match name with
   | Base n -> lookup_env_local n (fst env)
   | Namespaced (path, n) ->
-  match Hashtbl.find_opt (snd env) path with
+  match SListMap.find_opt path (snd env) with
   | None -> None
   | Some mod_env ->
-  match Hashtbl.find_opt mod_env n with
+  match SMap.find_opt n mod_env with
   | None -> None
   | Some obj -> Some (resolved ~origin_path:path obj)
 ;;
@@ -72,11 +80,11 @@ let lookup_env_by_property (path : string list) (prop : 'obj -> bool) (env : 'ob
   match path with
   | [] -> lookup_env_local_by_property prop (fst env)
   | _ ->
-  match Hashtbl.find_opt (snd env) path with
+  match SListMap.find_opt path (snd env) with
   | None -> None
   | Some (mod_env : 'obj env_module) ->
     (* search through the values in the hashtable to find a match *)
-    Hashtbl.fold
+    SMap.fold
       (fun binding obj acc ->
          match acc with
          | Some _ -> acc
@@ -92,29 +100,26 @@ let module_env_of_local_env (local_env : 'obj env_local) : 'obj env_module =
     | Top -> acc
     | Frame { parent; binding; obj } ->
       (* keep only the latest values *)
-      if Hashtbl.mem acc binding
+      if SMap.mem binding acc
       then acc
       else (
-        let new_acc =
-          Hashtbl.add acc binding obj;
-          acc
-        in
+        let new_acc = SMap.add binding obj acc in
         aux parent new_acc)
   in
-  aux local_env (Hashtbl.create 16)
+  aux local_env SMap.empty
 ;;
 
 let modularize_env (path : string list) (env : 'obj t) : 'obj t =
-  if Hashtbl.mem (snd env) path
+  if SListMap.mem path (snd env)
   then assert false (* make sure all paths are unique *)
   else (
     let local_env, module_env = env in
     let new_env_module = module_env_of_local_env local_env in
-    Hashtbl.add module_env path new_env_module;
-    Top, module_env)
+    let new_module_env = SListMap.add path new_env_module module_env in
+    Top, new_module_env)
 ;;
 
-let empty_env () : 'obj t = Top, Hashtbl.create 16
+let empty_env () : 'obj t = Top, SListMap.empty
 
 let fold_env f env acc =
   let rec fold_env_local env acc =
