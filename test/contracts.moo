@@ -10,7 +10,7 @@ proc not_0(x : i64, k : -bool) {
 }
 
 // ensure tests the term
-proc ensure(tested : A, p : predicate<A>, k : ~A) {
+proc ensure[A : <-](tested : A, p : predicate<A>, k : ~A) {
   p . (tested, { result ->
     match result {
     | True -> tested . k
@@ -20,15 +20,15 @@ proc ensure(tested : A, p : predicate<A>, k : ~A) {
 }
 
 // expect tests what the term is cut with
-proc expect[A](tester : ~A, p : predicate<A>, k : A) {
- k . { tested -> 
+proc expect[A : <-](tester : ~A, p : predicate<A>, k : A) {
+ { tested -> 
    p . (tested, { result ->
      match result {
      | True -> tested . tester
      | False -> exit . 1
      }
    })
- }
+ } . k
 }
 
 ensure . (0, not_0, { x -> x })
