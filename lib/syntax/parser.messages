@@ -529,8 +529,8 @@ parse_program: PROC USE
 ##
 ## Ends in an error in state: 89.
 ##
-## proc_aux -> PROC . untyped_binder_strict abstract_intro_list proc_binders proc_body [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
-## proc_aux -> PROC . REC untyped_binder_strict abstract_intro_list proc_binders proc_body [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
+## proc_aux(typed_binder) -> PROC . untyped_binder_strict abstract_intro_list proc_binders(typed_binder) proc_body [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
+## proc_aux(typed_binder) -> PROC . REC untyped_binder_strict abstract_intro_list proc_binders(typed_binder) proc_body [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
 ## The known suffix of the stack is as follows:
 ## PROC
@@ -542,7 +542,7 @@ parse_program: PROC REC USE
 ##
 ## Ends in an error in state: 90.
 ##
-## proc_aux -> PROC REC . untyped_binder_strict abstract_intro_list proc_binders proc_body [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
+## proc_aux(typed_binder) -> PROC REC . untyped_binder_strict abstract_intro_list proc_binders(typed_binder) proc_body [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
 ## The known suffix of the stack is as follows:
 ## PROC REC
@@ -554,7 +554,7 @@ parse_program: PROC REC IDENT USE
 ##
 ## Ends in an error in state: 92.
 ##
-## proc_aux -> PROC REC untyped_binder_strict . abstract_intro_list proc_binders proc_body [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
+## proc_aux(typed_binder) -> PROC REC untyped_binder_strict . abstract_intro_list proc_binders(typed_binder) proc_body [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
 ## The known suffix of the stack is as follows:
 ## PROC REC untyped_binder_strict
@@ -578,7 +578,7 @@ parse_program: PROC REC IDENT LBRACK CONSTRUCTOR_IDENT RBRACK USE
 ##
 ## Ends in an error in state: 96.
 ##
-## proc_aux -> PROC REC untyped_binder_strict abstract_intro_list . proc_binders proc_body [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
+## proc_aux(typed_binder) -> PROC REC untyped_binder_strict abstract_intro_list . proc_binders(typed_binder) proc_body [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
 ## The known suffix of the stack is as follows:
 ## PROC REC untyped_binder_strict abstract_intro_list
@@ -590,7 +590,7 @@ parse_program: PROC IDENT LPAREN USE
 ##
 ## Ends in an error in state: 97.
 ##
-## proc_binders -> LPAREN . loption(separated_nonempty_list(COMMA,typed_binder)) RPAREN [ LBRACE ]
+## proc_binders(typed_binder) -> LPAREN . loption(separated_nonempty_list(COMMA,typed_binder)) RPAREN [ LBRACE ]
 ##
 ## The known suffix of the stack is as follows:
 ## LPAREN
@@ -675,10 +675,10 @@ parse_program: PROC REC IDENT LPAREN RPAREN USE
 ##
 ## Ends in an error in state: 113.
 ##
-## proc_aux -> PROC REC untyped_binder_strict abstract_intro_list proc_binders . proc_body [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
+## proc_aux(typed_binder) -> PROC REC untyped_binder_strict abstract_intro_list proc_binders(typed_binder) . proc_body [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
 ## The known suffix of the stack is as follows:
-## PROC REC untyped_binder_strict abstract_intro_list proc_binders
+## PROC REC untyped_binder_strict abstract_intro_list proc_binders(typed_binder)
 ##
 
 <YOUR SYNTAX ERROR MESSAGE HERE>
@@ -1919,7 +1919,7 @@ parse_program: DO LET USE
 ##
 ## cutlet -> LET . binder RTLARROW term IN statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ## cutlet -> LET . REC binder RTLARROW term IN statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
-## cutlet -> LET . proc_aux IN statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
+## cutlet -> LET . proc_aux(binder) IN statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
 ## The known suffix of the stack is as follows:
 ## LET
@@ -2199,33 +2199,162 @@ parse_program: LBRACK CONSTRUCTOR_IDENT RPAREN
 
 <YOUR SYNTAX ERROR MESSAGE HERE>
 
-parse_program: DO LET PROC IDENT LPAREN RPAREN LBRACE CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT RBRACE USE
+parse_program: DO LET PROC USE
 ##
 ## Ends in an error in state: 264.
 ##
-## cutlet -> LET proc_aux . IN statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
+## proc_aux(binder) -> PROC . untyped_binder_strict abstract_intro_list proc_binders(binder) proc_body [ IN ]
+## proc_aux(binder) -> PROC . REC untyped_binder_strict abstract_intro_list proc_binders(binder) proc_body [ IN ]
 ##
 ## The known suffix of the stack is as follows:
-## LET proc_aux
+## PROC
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+parse_program: DO LET PROC REC USE
+##
+## Ends in an error in state: 265.
+##
+## proc_aux(binder) -> PROC REC . untyped_binder_strict abstract_intro_list proc_binders(binder) proc_body [ IN ]
+##
+## The known suffix of the stack is as follows:
+## PROC REC
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+parse_program: DO LET PROC REC IDENT USE
+##
+## Ends in an error in state: 266.
+##
+## proc_aux(binder) -> PROC REC untyped_binder_strict . abstract_intro_list proc_binders(binder) proc_body [ IN ]
+##
+## The known suffix of the stack is as follows:
+## PROC REC untyped_binder_strict
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+parse_program: DO LET PROC REC IDENT LBRACK CONSTRUCTOR_IDENT RBRACK USE
+##
+## Ends in an error in state: 267.
+##
+## proc_aux(binder) -> PROC REC untyped_binder_strict abstract_intro_list . proc_binders(binder) proc_body [ IN ]
+##
+## The known suffix of the stack is as follows:
+## PROC REC untyped_binder_strict abstract_intro_list
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+parse_program: DO LET PROC IDENT LPAREN USE
+##
+## Ends in an error in state: 268.
+##
+## proc_binders(binder) -> LPAREN . loption(separated_nonempty_list(COMMA,binder)) RPAREN [ LBRACE ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+parse_program: DO LET PROC IDENT LPAREN IDENT LTRARROW
+##
+## Ends in an error in state: 270.
+##
+## proc_binders(binder) -> LPAREN loption(separated_nonempty_list(COMMA,binder)) . RPAREN [ LBRACE ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN loption(separated_nonempty_list(COMMA,binder))
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 127, spurious reduction of production binder -> untyped_binder
+## In state 135, spurious reduction of production separated_nonempty_list(COMMA,binder) -> binder
+## In state 269, spurious reduction of production loption(separated_nonempty_list(COMMA,binder)) -> separated_nonempty_list(COMMA,binder)
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+parse_program: DO LET PROC REC IDENT LPAREN RPAREN USE
+##
+## Ends in an error in state: 272.
+##
+## proc_aux(binder) -> PROC REC untyped_binder_strict abstract_intro_list proc_binders(binder) . proc_body [ IN ]
+##
+## The known suffix of the stack is as follows:
+## PROC REC untyped_binder_strict abstract_intro_list proc_binders(binder)
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+parse_program: DO LET PROC IDENT USE
+##
+## Ends in an error in state: 274.
+##
+## proc_aux(binder) -> PROC untyped_binder_strict . abstract_intro_list proc_binders(binder) proc_body [ IN ]
+##
+## The known suffix of the stack is as follows:
+## PROC untyped_binder_strict
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+parse_program: DO LET PROC IDENT LBRACK CONSTRUCTOR_IDENT RBRACK USE
+##
+## Ends in an error in state: 275.
+##
+## proc_aux(binder) -> PROC untyped_binder_strict abstract_intro_list . proc_binders(binder) proc_body [ IN ]
+##
+## The known suffix of the stack is as follows:
+## PROC untyped_binder_strict abstract_intro_list
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+parse_program: DO LET PROC IDENT LPAREN RPAREN USE
+##
+## Ends in an error in state: 276.
+##
+## proc_aux(binder) -> PROC untyped_binder_strict abstract_intro_list proc_binders(binder) . proc_body [ IN ]
+##
+## The known suffix of the stack is as follows:
+## PROC untyped_binder_strict abstract_intro_list proc_binders(binder)
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+parse_program: DO LET PROC IDENT LPAREN RPAREN LBRACE CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT RBRACE USE
+##
+## Ends in an error in state: 278.
+##
+## cutlet -> LET proc_aux(binder) . IN statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
+##
+## The known suffix of the stack is as follows:
+## LET proc_aux(binder)
 ##
 
 <YOUR SYNTAX ERROR MESSAGE HERE>
 
 parse_program: DO LET PROC IDENT LPAREN RPAREN LBRACE CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT RBRACE IN USE
 ##
-## Ends in an error in state: 265.
+## Ends in an error in state: 279.
 ##
-## cutlet -> LET proc_aux IN . statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
+## cutlet -> LET proc_aux(binder) IN . statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
 ## The known suffix of the stack is as follows:
-## LET proc_aux IN
+## LET proc_aux(binder) IN
 ##
 
 <YOUR SYNTAX ERROR MESSAGE HERE>
 
 parse_program: DO LET IDENT RPAREN
 ##
-## Ends in an error in state: 267.
+## Ends in an error in state: 281.
 ##
 ## cutlet -> LET binder . RTLARROW term IN statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2243,7 +2372,7 @@ parse_program: DO LET IDENT RPAREN
 
 parse_program: DO LET IDENT RTLARROW USE
 ##
-## Ends in an error in state: 268.
+## Ends in an error in state: 282.
 ##
 ## cutlet -> LET binder RTLARROW . term IN statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2255,7 +2384,7 @@ parse_program: DO LET IDENT RTLARROW USE
 
 parse_program: DO LET IDENT RTLARROW CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 269.
+## Ends in an error in state: 283.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS IN ]
 ## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS IN ]
@@ -2278,7 +2407,7 @@ parse_program: DO LET IDENT RTLARROW CONSTRUCTOR_IDENT USE
 
 parse_program: DO LET IDENT RTLARROW CONSTRUCTOR_IDENT IN USE
 ##
-## Ends in an error in state: 270.
+## Ends in an error in state: 284.
 ##
 ## cutlet -> LET binder RTLARROW term IN . statement [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2290,7 +2419,7 @@ parse_program: DO LET IDENT RTLARROW CONSTRUCTOR_IDENT IN USE
 
 parse_program: DO LPAREN CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 272.
+## Ends in an error in state: 286.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH SEMICOLON RPAREN PLUS PERCENT MINUS DOT COMMA ]
 ## active_number_term -> term . MINUS term [ STAR SLASH SEMICOLON RPAREN PLUS PERCENT MINUS DOT COMMA ]
@@ -2317,7 +2446,7 @@ parse_program: DO LPAREN CONSTRUCTOR_IDENT USE
 
 parse_program: DO LPAREN CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 273.
+## Ends in an error in state: 287.
 ##
 ## non_fork_statement -> LPAREN statement . RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2338,7 +2467,7 @@ parse_program: DO LPAREN CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT USE
 
 parse_program: CONSTRUCTOR_LPAREN LBRACE IDENT LTRARROW CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 275.
+## Ends in an error in state: 289.
 ##
 ## naked_mu_term -> LBRACE binder LTRARROW statement . RBRACE [ USE UNDERSCORE TYPE STAR SLASH SEMICOLON RPAREN RBRACK RBRACE PROC PLUS PERCENT NUMBER NAMESPACE_IDENT MINUS MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DOT DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COMMA CODATA BAR ]
 ##
@@ -2359,7 +2488,7 @@ parse_program: CONSTRUCTOR_LPAREN LBRACE IDENT LTRARROW CONSTRUCTOR_IDENT DOT CO
 
 parse_program: LPAREN CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 277.
+## Ends in an error in state: 291.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA ]
 ## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS COMMA ]
@@ -2384,7 +2513,7 @@ parse_program: LPAREN CONSTRUCTOR_IDENT USE
 
 parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 278.
+## Ends in an error in state: 292.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
 ## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
@@ -2407,7 +2536,7 @@ parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT USE
 
 parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT COMMA USE
 ##
-## Ends in an error in state: 279.
+## Ends in an error in state: 293.
 ##
 ## arith_command -> SLASH LPAREN term COMMA . term BAR term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2419,7 +2548,7 @@ parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT COMMA USE
 
 parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 280.
+## Ends in an error in state: 294.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS BAR ]
 ## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS BAR ]
@@ -2442,7 +2571,7 @@ parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT USE
 
 parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR USE
 ##
-## Ends in an error in state: 281.
+## Ends in an error in state: 295.
 ##
 ## arith_command -> SLASH LPAREN term COMMA term BAR . term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2454,7 +2583,7 @@ parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR USE
 
 parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 282.
+## Ends in an error in state: 296.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
 ## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
@@ -2477,7 +2606,7 @@ parse_program: DO SLASH LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR CON
 
 parse_program: MATCH LBRACE NAMESPACE_IDENT IDENT
 ##
-## Ends in an error in state: 285.
+## Ends in an error in state: 299.
 ##
 ## namespaced(CONSTRUCTOR_IDENT) -> nonempty_list(NAMESPACE_IDENT) . CONSTRUCTOR_IDENT [ LTRARROW ]
 ## namespaced(CONSTRUCTOR_LPAREN) -> nonempty_list(NAMESPACE_IDENT) . CONSTRUCTOR_LPAREN [ UNDERSCORE LPAREN IDENT ]
@@ -2496,7 +2625,7 @@ parse_program: MATCH LBRACE NAMESPACE_IDENT IDENT
 
 parse_program: MATCH LBRACE CONSTRUCTOR_LPAREN USE
 ##
-## Ends in an error in state: 286.
+## Ends in an error in state: 300.
 ##
 ## pattern -> namespaced(CONSTRUCTOR_LPAREN) . separated_nonempty_list(COMMA,binder) RPAREN [ LTRARROW ]
 ##
@@ -2508,7 +2637,7 @@ parse_program: MATCH LBRACE CONSTRUCTOR_LPAREN USE
 
 parse_program: MATCH LBRACE CONSTRUCTOR_LPAREN IDENT LTRARROW
 ##
-## Ends in an error in state: 287.
+## Ends in an error in state: 301.
 ##
 ## pattern -> namespaced(CONSTRUCTOR_LPAREN) separated_nonempty_list(COMMA,binder) . RPAREN [ LTRARROW ]
 ##
@@ -2527,7 +2656,7 @@ parse_program: MATCH LBRACE CONSTRUCTOR_LPAREN IDENT LTRARROW
 
 parse_program: MATCH LBRACE IDENT LTRARROW CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 290.
+## Ends in an error in state: 304.
 ##
 ## separated_nonempty_list(option(BAR),match_case) -> match_case . [ RBRACE ]
 ## separated_nonempty_list(option(BAR),match_case) -> match_case . option(BAR) separated_nonempty_list(option(BAR),match_case) [ RBRACE ]
@@ -2543,14 +2672,14 @@ parse_program: MATCH LBRACE IDENT LTRARROW CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDE
 ## In state 249, spurious reduction of production command -> term DOT term
 ## In state 254, spurious reduction of production non_fork_statement -> command
 ## In state 251, spurious reduction of production statement -> non_fork_statement
-## In state 284, spurious reduction of production match_case -> pattern LTRARROW statement
+## In state 298, spurious reduction of production match_case -> pattern LTRARROW statement
 ##
 
 <YOUR SYNTAX ERROR MESSAGE HERE>
 
 parse_program: MATCH LBRACE IDENT LTRARROW CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT BAR USE
 ##
-## Ends in an error in state: 291.
+## Ends in an error in state: 305.
 ##
 ## separated_nonempty_list(option(BAR),match_case) -> match_case option(BAR) . separated_nonempty_list(option(BAR),match_case) [ RBRACE ]
 ##
@@ -2562,7 +2691,7 @@ parse_program: MATCH LBRACE IDENT LTRARROW CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDE
 
 parse_program: MATCH LBRACE IDENT RTLARROW
 ##
-## Ends in an error in state: 293.
+## Ends in an error in state: 307.
 ##
 ## pattern -> binder . [ LTRARROW ]
 ## tuple_pattern -> binder . COMMA separated_nonempty_list(COMMA,binder) [ LTRARROW ]
@@ -2581,7 +2710,7 @@ parse_program: MATCH LBRACE IDENT RTLARROW
 
 parse_program: MATCH LBRACE IDENT COMMA USE
 ##
-## Ends in an error in state: 294.
+## Ends in an error in state: 308.
 ##
 ## tuple_pattern -> binder COMMA . separated_nonempty_list(COMMA,binder) [ LTRARROW ]
 ##
@@ -2593,7 +2722,7 @@ parse_program: MATCH LBRACE IDENT COMMA USE
 
 parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 296.
+## Ends in an error in state: 310.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
 ## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS COMMA ]
@@ -2616,7 +2745,7 @@ parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT USE
 
 parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT COMMA USE
 ##
-## Ends in an error in state: 297.
+## Ends in an error in state: 311.
 ##
 ## arith_command -> STAR LPAREN term COMMA . term BAR term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2628,7 +2757,7 @@ parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT COMMA USE
 
 parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 298.
+## Ends in an error in state: 312.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH PLUS PERCENT MINUS BAR ]
 ## active_number_term -> term . MINUS term [ STAR SLASH PLUS PERCENT MINUS BAR ]
@@ -2651,7 +2780,7 @@ parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT USE
 
 parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR USE
 ##
-## Ends in an error in state: 299.
+## Ends in an error in state: 313.
 ##
 ## arith_command -> STAR LPAREN term COMMA term BAR . term RPAREN [ USE UNDERSCORE TYPE RPAREN RBRACK RBRACE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2663,7 +2792,7 @@ parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR USE
 
 parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 300.
+## Ends in an error in state: 314.
 ##
 ## active_number_term -> term . PLUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
 ## active_number_term -> term . MINUS term [ STAR SLASH RPAREN PLUS PERCENT MINUS ]
@@ -2686,7 +2815,7 @@ parse_program: DO STAR LPAREN CONSTRUCTOR_IDENT COMMA CONSTRUCTOR_IDENT BAR CONS
 
 parse_program: PROC IDENT LPAREN RPAREN LBRACE CONSTRUCTOR_IDENT DOT CONSTRUCTOR_IDENT USE
 ##
-## Ends in an error in state: 302.
+## Ends in an error in state: 316.
 ##
 ## proc_body -> LBRACE statement . RBRACE [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2707,9 +2836,9 @@ parse_program: PROC IDENT LPAREN RPAREN LBRACE CONSTRUCTOR_IDENT DOT CONSTRUCTOR
 
 parse_program: PROC IDENT USE
 ##
-## Ends in an error in state: 305.
+## Ends in an error in state: 319.
 ##
-## proc_aux -> PROC untyped_binder_strict . abstract_intro_list proc_binders proc_body [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
+## proc_aux(typed_binder) -> PROC untyped_binder_strict . abstract_intro_list proc_binders(typed_binder) proc_body [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
 ## The known suffix of the stack is as follows:
 ## PROC untyped_binder_strict
@@ -2719,9 +2848,9 @@ parse_program: PROC IDENT USE
 
 parse_program: PROC IDENT LBRACK CONSTRUCTOR_IDENT RBRACK USE
 ##
-## Ends in an error in state: 306.
+## Ends in an error in state: 320.
 ##
-## proc_aux -> PROC untyped_binder_strict abstract_intro_list . proc_binders proc_body [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
+## proc_aux(typed_binder) -> PROC untyped_binder_strict abstract_intro_list . proc_binders(typed_binder) proc_body [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
 ## The known suffix of the stack is as follows:
 ## PROC untyped_binder_strict abstract_intro_list
@@ -2731,19 +2860,19 @@ parse_program: PROC IDENT LBRACK CONSTRUCTOR_IDENT RBRACK USE
 
 parse_program: PROC IDENT LPAREN RPAREN USE
 ##
-## Ends in an error in state: 307.
+## Ends in an error in state: 321.
 ##
-## proc_aux -> PROC untyped_binder_strict abstract_intro_list proc_binders . proc_body [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IN IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
+## proc_aux(typed_binder) -> PROC untyped_binder_strict abstract_intro_list proc_binders(typed_binder) . proc_body [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
 ## The known suffix of the stack is as follows:
-## PROC untyped_binder_strict abstract_intro_list proc_binders
+## PROC untyped_binder_strict abstract_intro_list proc_binders(typed_binder)
 ##
 
 <YOUR SYNTAX ERROR MESSAGE HERE>
 
 parse_program: LET USE
 ##
-## Ends in an error in state: 309.
+## Ends in an error in state: 323.
 ##
 ## let_definition -> LET . typed_binder EQUALS def_term [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ## let_definition -> LET . REC typed_binder EQUALS def_term [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
@@ -2756,7 +2885,7 @@ parse_program: LET USE
 
 parse_program: LET REC USE
 ##
-## Ends in an error in state: 310.
+## Ends in an error in state: 324.
 ##
 ## let_definition -> LET REC . typed_binder EQUALS def_term [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2768,7 +2897,7 @@ parse_program: LET REC USE
 
 parse_program: LET REC IDENT COLON CONSTRUCTOR_IDENT UNIT
 ##
-## Ends in an error in state: 311.
+## Ends in an error in state: 325.
 ##
 ## let_definition -> LET REC typed_binder . EQUALS def_term [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2780,7 +2909,7 @@ parse_program: LET REC IDENT COLON CONSTRUCTOR_IDENT UNIT
 
 parse_program: LET REC IDENT COLON CONSTRUCTOR_IDENT EQUALS USE
 ##
-## Ends in an error in state: 312.
+## Ends in an error in state: 326.
 ##
 ## let_definition -> LET REC typed_binder EQUALS . def_term [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2792,7 +2921,7 @@ parse_program: LET REC IDENT COLON CONSTRUCTOR_IDENT EQUALS USE
 
 parse_program: LET IDENT COLON CONSTRUCTOR_IDENT EQUALS CONSTRUCTOR_IDENT UNIT
 ##
-## Ends in an error in state: 314.
+## Ends in an error in state: 328.
 ##
 ## def_term -> indirect_term . [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ## indirect_term -> indirect_term . COLON type_use [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COLON CODATA ]
@@ -2805,7 +2934,7 @@ parse_program: LET IDENT COLON CONSTRUCTOR_IDENT EQUALS CONSTRUCTOR_IDENT UNIT
 
 parse_program: LET IDENT COLON CONSTRUCTOR_IDENT UNIT
 ##
-## Ends in an error in state: 316.
+## Ends in an error in state: 330.
 ##
 ## let_definition -> LET typed_binder . EQUALS def_term [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2817,7 +2946,7 @@ parse_program: LET IDENT COLON CONSTRUCTOR_IDENT UNIT
 
 parse_program: LET IDENT COLON CONSTRUCTOR_IDENT EQUALS USE
 ##
-## Ends in an error in state: 317.
+## Ends in an error in state: 331.
 ##
 ## let_definition -> LET typed_binder EQUALS . def_term [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2829,7 +2958,7 @@ parse_program: LET IDENT COLON CONSTRUCTOR_IDENT EQUALS USE
 
 parse_program: DO USE
 ##
-## Ends in an error in state: 319.
+## Ends in an error in state: 333.
 ##
 ## do_term -> DO . LBRACE untyped_binder RBRACE statement [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ## do_term -> DO . statement [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
@@ -2842,7 +2971,7 @@ parse_program: DO USE
 
 parse_program: DO LBRACE USE
 ##
-## Ends in an error in state: 320.
+## Ends in an error in state: 334.
 ##
 ## do_term -> DO LBRACE . untyped_binder RBRACE statement [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ## naked_mu_term -> LBRACE . binder LTRARROW statement RBRACE [ STAR SLASH SEMICOLON PLUS PERCENT MINUS DOT ]
@@ -2855,7 +2984,7 @@ parse_program: DO LBRACE USE
 
 parse_program: DO LBRACE IDENT USE
 ##
-## Ends in an error in state: 321.
+## Ends in an error in state: 335.
 ##
 ## binder -> untyped_binder . [ LTRARROW ]
 ## do_term -> DO LBRACE untyped_binder . RBRACE statement [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
@@ -2869,7 +2998,7 @@ parse_program: DO LBRACE IDENT USE
 
 parse_program: DO LBRACE IDENT RBRACE USE
 ##
-## Ends in an error in state: 322.
+## Ends in an error in state: 336.
 ##
 ## do_term -> DO LBRACE untyped_binder RBRACE . statement [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2881,7 +3010,7 @@ parse_program: DO LBRACE IDENT RBRACE USE
 
 parse_program: CODATA IDENT EQUALS UNIT UNIT
 ##
-## Ends in an error in state: 327.
+## Ends in an error in state: 341.
 ##
 ## maybe_delimited(top_level_item(mod_item)) -> top_level_item(mod_item) . option(DELIMITER) [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2893,7 +3022,7 @@ parse_program: CODATA IDENT EQUALS UNIT UNIT
 
 parse_program: CODATA USE
 ##
-## Ends in an error in state: 331.
+## Ends in an error in state: 345.
 ##
 ## type_definition -> shape . mode kind_binder EQUALS full_raw_type [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ## type_definition -> shape . kind_binder EQUALS full_raw_type [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
@@ -2906,7 +3035,7 @@ parse_program: CODATA USE
 
 parse_program: CODATA LBRACK USE
 ##
-## Ends in an error in state: 332.
+## Ends in an error in state: 346.
 ##
 ## mode -> LBRACK . CBV RBRACK [ IDENT ]
 ## mode -> LBRACK . CBN RBRACK [ IDENT ]
@@ -2919,7 +3048,7 @@ parse_program: CODATA LBRACK USE
 
 parse_program: CODATA LBRACK CBN RBRACK USE
 ##
-## Ends in an error in state: 333.
+## Ends in an error in state: 347.
 ##
 ## type_definition -> shape mode . kind_binder EQUALS full_raw_type [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2931,7 +3060,7 @@ parse_program: CODATA LBRACK CBN RBRACK USE
 
 parse_program: CODATA LBRACK CBN RBRACK IDENT LANGLE RANGLE USE
 ##
-## Ends in an error in state: 334.
+## Ends in an error in state: 348.
 ##
 ## type_definition -> shape mode kind_binder . EQUALS full_raw_type [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2943,7 +3072,7 @@ parse_program: CODATA LBRACK CBN RBRACK IDENT LANGLE RANGLE USE
 
 parse_program: CODATA LBRACK CBN RBRACK IDENT EQUALS USE
 ##
-## Ends in an error in state: 335.
+## Ends in an error in state: 349.
 ##
 ## type_definition -> shape mode kind_binder EQUALS . full_raw_type [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2955,7 +3084,7 @@ parse_program: CODATA LBRACK CBN RBRACK IDENT EQUALS USE
 
 parse_program: CODATA IDENT EQUALS BAR USE
 ##
-## Ends in an error in state: 338.
+## Ends in an error in state: 352.
 ##
 ## variant_raw_type -> option(BAR) . separated_nonempty_list(BAR,variant) [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -2967,7 +3096,7 @@ parse_program: CODATA IDENT EQUALS BAR USE
 
 parse_program: CODATA IDENT EQUALS CONSTRUCTOR_LPAREN USE
 ##
-## Ends in an error in state: 339.
+## Ends in an error in state: 353.
 ##
 ## variant -> CONSTRUCTOR_LPAREN . separated_nonempty_list(COMMA,type_use) RPAREN [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2979,7 +3108,7 @@ parse_program: CODATA IDENT EQUALS CONSTRUCTOR_LPAREN USE
 
 parse_program: CODATA IDENT EQUALS CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT RANGLE
 ##
-## Ends in an error in state: 340.
+## Ends in an error in state: 354.
 ##
 ## variant -> CONSTRUCTOR_LPAREN separated_nonempty_list(COMMA,type_use) . RPAREN [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA BAR ]
 ##
@@ -2997,7 +3126,7 @@ parse_program: CODATA IDENT EQUALS CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT RANGLE
 
 parse_program: CODATA IDENT EQUALS CONSTRUCTOR_IDENT UNIT
 ##
-## Ends in an error in state: 343.
+## Ends in an error in state: 357.
 ##
 ## separated_nonempty_list(BAR,variant) -> variant . [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ## separated_nonempty_list(BAR,variant) -> variant . BAR separated_nonempty_list(BAR,variant) [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
@@ -3010,7 +3139,7 @@ parse_program: CODATA IDENT EQUALS CONSTRUCTOR_IDENT UNIT
 
 parse_program: CODATA IDENT EQUALS CONSTRUCTOR_IDENT BAR USE
 ##
-## Ends in an error in state: 344.
+## Ends in an error in state: 358.
 ##
 ## separated_nonempty_list(BAR,variant) -> variant BAR . separated_nonempty_list(BAR,variant) [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -3022,7 +3151,7 @@ parse_program: CODATA IDENT EQUALS CONSTRUCTOR_IDENT BAR USE
 
 parse_program: CODATA IDENT LANGLE RANGLE USE
 ##
-## Ends in an error in state: 348.
+## Ends in an error in state: 362.
 ##
 ## type_definition -> shape kind_binder . EQUALS full_raw_type [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -3034,7 +3163,7 @@ parse_program: CODATA IDENT LANGLE RANGLE USE
 
 parse_program: CODATA IDENT EQUALS USE
 ##
-## Ends in an error in state: 349.
+## Ends in an error in state: 363.
 ##
 ## type_definition -> shape kind_binder EQUALS . full_raw_type [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
 ##
@@ -3046,7 +3175,7 @@ parse_program: CODATA IDENT EQUALS USE
 
 parse_program: CONSTRUCTOR_IDENT DELIMITER UNIT
 ##
-## Ends in an error in state: 358.
+## Ends in an error in state: 372.
 ##
 ## list(maybe_delimited(top_level_item(mod_item))) -> maybe_delimited(top_level_item(mod_item)) . list(maybe_delimited(top_level_item(mod_item))) [ EOF ]
 ##
@@ -3058,7 +3187,7 @@ parse_program: CONSTRUCTOR_IDENT DELIMITER UNIT
 
 parse_program: CONSTRUCTOR_IDENT UNIT
 ##
-## Ends in an error in state: 361.
+## Ends in an error in state: 375.
 ##
 ## indirect_term -> indirect_term . COLON type_use [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT COLON CODATA ]
 ## top_level_term -> indirect_term . [ USE TYPE PROC NUMBER NAMESPACE_IDENT MATCH LPAREN LET LBRACK IDENT EXIT EOF DO DELIMITER DATA CONSTRUCTOR_LPAREN CONSTRUCTOR_IDENT CODATA ]
@@ -3071,7 +3200,7 @@ parse_program: CONSTRUCTOR_IDENT UNIT
 
 parse_signature: UNIT
 ##
-## Ends in an error in state: 364.
+## Ends in an error in state: 378.
 ##
 ## parse_signature' -> . parse_signature [ # ]
 ##
@@ -3083,7 +3212,7 @@ parse_signature: UNIT
 
 parse_signature: LET USE
 ##
-## Ends in an error in state: 365.
+## Ends in an error in state: 379.
 ##
 ## term_signature -> LET . untyped_binder_strict EQUALS type_use [ USE LET EOF DELIMITER DATA CODATA ]
 ##
@@ -3095,7 +3224,7 @@ parse_signature: LET USE
 
 parse_signature: LET IDENT USE
 ##
-## Ends in an error in state: 366.
+## Ends in an error in state: 380.
 ##
 ## term_signature -> LET untyped_binder_strict . EQUALS type_use [ USE LET EOF DELIMITER DATA CODATA ]
 ##
@@ -3107,7 +3236,7 @@ parse_signature: LET IDENT USE
 
 parse_signature: LET IDENT EQUALS USE
 ##
-## Ends in an error in state: 367.
+## Ends in an error in state: 381.
 ##
 ## term_signature -> LET untyped_binder_strict EQUALS . type_use [ USE LET EOF DELIMITER DATA CODATA ]
 ##
@@ -3119,7 +3248,7 @@ parse_signature: LET IDENT EQUALS USE
 
 parse_signature: USE CONSTRUCTOR_IDENT AS CONSTRUCTOR_IDENT UNIT
 ##
-## Ends in an error in state: 370.
+## Ends in an error in state: 384.
 ##
 ## maybe_delimited(top_level_item(sig_item)) -> top_level_item(sig_item) . option(DELIMITER) [ USE LET EOF DATA CODATA ]
 ##
@@ -3131,7 +3260,7 @@ parse_signature: USE CONSTRUCTOR_IDENT AS CONSTRUCTOR_IDENT UNIT
 
 parse_signature: CODATA USE
 ##
-## Ends in an error in state: 374.
+## Ends in an error in state: 388.
 ##
 ## type_signature -> shape . mode kind_binder EQUALS full_raw_type [ USE LET EOF DELIMITER DATA CODATA ]
 ## type_signature -> shape . kind_binder EQUALS full_raw_type [ USE LET EOF DELIMITER DATA CODATA ]
@@ -3144,7 +3273,7 @@ parse_signature: CODATA USE
 
 parse_signature: CODATA LBRACK CBN RBRACK USE
 ##
-## Ends in an error in state: 375.
+## Ends in an error in state: 389.
 ##
 ## type_signature -> shape mode . kind_binder EQUALS full_raw_type [ USE LET EOF DELIMITER DATA CODATA ]
 ##
@@ -3156,7 +3285,7 @@ parse_signature: CODATA LBRACK CBN RBRACK USE
 
 parse_signature: CODATA LBRACK CBN RBRACK IDENT LANGLE RANGLE USE
 ##
-## Ends in an error in state: 376.
+## Ends in an error in state: 390.
 ##
 ## type_signature -> shape mode kind_binder . EQUALS full_raw_type [ USE LET EOF DELIMITER DATA CODATA ]
 ##
@@ -3168,7 +3297,7 @@ parse_signature: CODATA LBRACK CBN RBRACK IDENT LANGLE RANGLE USE
 
 parse_signature: CODATA LBRACK CBN RBRACK IDENT EQUALS USE
 ##
-## Ends in an error in state: 377.
+## Ends in an error in state: 391.
 ##
 ## type_signature -> shape mode kind_binder EQUALS . full_raw_type [ USE LET EOF DELIMITER DATA CODATA ]
 ##
@@ -3180,7 +3309,7 @@ parse_signature: CODATA LBRACK CBN RBRACK IDENT EQUALS USE
 
 parse_signature: CODATA IDENT LANGLE RANGLE USE
 ##
-## Ends in an error in state: 379.
+## Ends in an error in state: 393.
 ##
 ## type_signature -> shape kind_binder . EQUALS full_raw_type [ USE LET EOF DELIMITER DATA CODATA ]
 ##
@@ -3192,7 +3321,7 @@ parse_signature: CODATA IDENT LANGLE RANGLE USE
 
 parse_signature: CODATA IDENT EQUALS USE
 ##
-## Ends in an error in state: 380.
+## Ends in an error in state: 394.
 ##
 ## type_signature -> shape kind_binder EQUALS . full_raw_type [ USE LET EOF DELIMITER DATA CODATA ]
 ##
@@ -3204,7 +3333,7 @@ parse_signature: CODATA IDENT EQUALS USE
 
 parse_signature: USE CONSTRUCTOR_IDENT AS CONSTRUCTOR_IDENT DELIMITER UNIT
 ##
-## Ends in an error in state: 384.
+## Ends in an error in state: 398.
 ##
 ## list(maybe_delimited(top_level_item(sig_item))) -> maybe_delimited(top_level_item(sig_item)) . list(maybe_delimited(top_level_item(sig_item))) [ EOF ]
 ##

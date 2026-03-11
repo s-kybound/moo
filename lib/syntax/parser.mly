@@ -200,24 +200,24 @@ abstract_intro_list:
  * they are useful enough to be granted
  * native representation *)
 proc_definition:
-  | proc_body=proc_aux                                  { 
+  | proc_body=proc_aux(typed_binder)                    { 
                                                           let (b, body) = proc_body in
                                                           TermDef (b, body) 
                                                         }
 
 (* returns a tuple of the binder and the body. 
  * so that we can use this in either definitions or matchlet definitions *)
-proc_aux:
-  | PROC b=untyped_binder_strict ts=abstract_intro_list params=proc_binders body=proc_body
+proc_aux(binder):
+  | PROC b=untyped_binder_strict ts=abstract_intro_list params=proc_binders(binder) body=proc_body
       { (b, mk_term $startpos $endpos (Proc (ts, params, body))) }
-  | PROC REC b=untyped_binder_strict ts=abstract_intro_list params=proc_binders body=proc_body
+  | PROC REC b=untyped_binder_strict ts=abstract_intro_list params=proc_binders(binder) body=proc_body
       {
         let proc = mk_recursive b (mk_term $startpos $endpos (Proc (ts, params, body))) in
         (b, proc)
       }
 
-proc_binders:
-  | LPAREN separated_list(COMMA, typed_binder) RPAREN   { $2 }
+proc_binders(binder):
+  | LPAREN separated_list(COMMA, binder) RPAREN   { $2 }
 
 proc_body:
   | LBRACE statement RBRACE                             { $2 }
@@ -257,7 +257,7 @@ cutlet:
         mk_command $startpos $endpos (Cutlet (b, t, s))
       }
   (* proclet *)
-  | LET proc_aux=proc_aux IN s=statement
+  | LET proc_aux=proc_aux(binder) IN s=statement
       {
         let (b, t) = proc_aux in
         mk_command $startpos $endpos (Cutlet (b, t, s))
