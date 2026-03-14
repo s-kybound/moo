@@ -6,6 +6,8 @@
 open Syntax.Ast
 open Resolver
 
+exception CyclicDependency of string list list
+
 module StringList = struct
   type t = string list
 
@@ -97,7 +99,61 @@ let rec dependencies_of_module_aux (set : DependencySet.t) (m : 'ann module_)
   | Term term -> dependencies_of_module_aux (dependencies_of_term set term) rest
 ;;
 
-let dependencies_of_module (resolved : 'ann resolved) : DependencySet.t * 'ann module_ =
+let dependencies_of_resolved (resolved : 'ann resolved) : DependencySet.t * 'ann module_ =
   let (Resolved m_) = resolved in
   dependencies_of_module_aux DependencySet.empty m_, m_
+;;
+
+type 'ann dependency_graph = (string list, DependencySet.t * 'ann module_) Hashtbl.t
+
+let dependency_graph_of_resolved (resolveds : (string list * 'ann resolved) list)
+  : 'ann dependency_graph
+  =
+  let graph = Hashtbl.create (List.length resolveds) in
+  List.iter
+    (fun (mod_name, resolved) ->
+       let deps, m = dependencies_of_resolved resolved in
+       Hashtbl.add graph mod_name (deps, m))
+    resolveds;
+  graph
+;;
+
+type traversal_state =
+  | Visiting
+  | Visited
+
+let dfs_toposort (resolveds : (string list * 'ann resolved) list)
+  : (string list * 'ann module_) list
+  =
+  let graph = dependency_graph_of_resolved resolveds in
+  let (visited : (string list, traversal_state) Hashtbl.t) =
+    Hashtbl.create (Hashtbl.length graph)
+  in
+  let result = ref [] in
+  let rec visit (curr_path : string list list) (mod_name : string list) =
+    match Hashtbl.find_opt visited mod_name with
+    | Some Visited -> () (* Already processed this module, skip *)
+    | None ->
+      Hashtbl.add visited mod_name Visiting;
+      let deps, m = Hashtbl.find graph mod_name in
+      DependencySet.iter (visit (mod_name :: curr_path)) deps;
+      Hashtbl.replace visited mod_name Visited;
+      result := (mod_name, m) :: !result
+    | Some Visiting ->
+    match curr_path with
+    | [] ->
+      assert false
+      (* This should't happen, we are in a path where we see 
+       * the module name again, so there must be at least one module *)
+    | cyclic :: _ ->
+      curr_path
+      |> List.rev
+      |> List.drop_while (fun name -> name <> cyclic)
+        (* this trims the path to only include the cycle *)
+      |> fun cycle -> raise (CyclicDependency cycle)
+  in
+  Hashtbl.iter
+    (fun mod_name _ -> if not (Hashtbl.mem visited mod_name) then visit [] mod_name)
+    graph;
+  List.rev !result
 ;;
