@@ -2,4 +2,4 @@
  (name moo)
  (public_name moo)
  (modules reader)
- (libraries moo.syntax moo.core moo.utils))
+ (libraries moo.syntax moo.core moo.utils moo.module_))
