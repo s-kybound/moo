@@ -6,10 +6,15 @@ type 'obj resolved =
   ; obj : 'obj
   }
 
+type 'obj env_local
+type 'obj env_module_mapping
+
 (**
  * Environment type. A stack of frames and a module environment mapping
  *)
-type 'obj t
+type 'obj t = 'obj env_local * 'obj env_module_mapping
+
+val empty_env_local : unit -> 'obj env_local
 
 (** 
  * Extend the environment with a new binding. The new binding is added to the top frame.
@@ -52,3 +57,8 @@ val empty_env : unit -> 'obj t
  * Fold over the local environment.
  *)
 val fold_env : (string -> 'obj -> 'acc -> 'acc) -> 'obj t -> 'acc -> 'acc
+
+(**
+ * Get the list of names in the module environment.
+ *)
+val modules_of_env : 'obj t -> string list list

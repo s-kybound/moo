@@ -36,3 +36,14 @@ let of_file filename =
   let ic = open_in filename in
   Fun.protect ~finally:(fun () -> close_in_noerr ic) (fun () -> of_channel ~filename ic)
 ;;
+
+let name_of_file filename =
+  let filename_front = Filename.chop_extension filename in
+  let paths = String.split_on_char (String.get Filename.dir_sep 0) filename_front in
+  match List.rev paths with
+  | [] -> failwith "Unexpected empty filename"
+  | [ base ] -> Syntax.Ast.Base base
+  | base :: rest ->
+    let module_path = List.rev rest in
+    Syntax.Ast.Namespaced (module_path, base)
+;;

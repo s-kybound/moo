@@ -22,7 +22,10 @@ module SListMap = Map.Make (struct
   end)
 
 type 'obj env_module = 'obj SMap.t
-type 'obj t = 'obj env_local * 'obj env_module SListMap.t
+type 'obj env_module_mapping = 'obj env_module SListMap.t
+type 'obj t = 'obj env_local * 'obj env_module_mapping
+
+let empty_env_local () = Top
 
 let extend_env binding obj env =
   let local_env, module_env = env in
@@ -129,3 +132,5 @@ let fold_env f env acc =
   in
   fold_env_local (fst env) acc
 ;;
+
+let modules_of_env env = SListMap.fold (fun path _ acc -> path :: acc) (snd env) []

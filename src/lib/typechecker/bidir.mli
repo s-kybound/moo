@@ -17,3 +17,9 @@ val tycheck_program
   :  Ast.core_ann Ast.module_
   -> module_type_context
   -> Ty_ast.typed_module * module_type_context
+
+val modularize_env
+  :  ?local:tycheck_hole_environment_frame
+  -> string list
+  -> module_type_context
+  -> module_type_context

@@ -982,3 +982,13 @@ let tycheck_program (modu : Ast.core_ann Ast.module_) (ctx : module_type_context
   verify_well_typed out;
   out, { hole_env; ty_env; tydef_env }
 ;;
+
+let modularize_env ?local (name : string list) (ty_ctx : module_type_context)
+  : module_type_context
+  =
+  let open Env in
+  { hole_env = Option.value ~default:Top local
+  ; ty_env = modularize_env name ty_ctx.ty_env
+  ; tydef_env = modularize_env name ty_ctx.tydef_env
+  }
+;;

@@ -106,7 +106,7 @@ let rec replace_module_aux (rep_map : replacement_map) (m : 'ann module_) : 'ann
       | Namespaced (path, n) -> path @ [ n ]
     in
     Hashtbl.add rep_map [ use_name ] mod_path;
-    replace_module_aux rep_map rest
+    Open (Use { mod_name; use_name }) :: replace_module_aux rep_map rest
   | Def tli :: rest ->
     let new_tli =
       match tli with
