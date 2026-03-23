@@ -8,13 +8,26 @@ type replacement_map = (string list, string list) Hashtbl.t
 type 'ann resolved = Resolved of 'ann module_
 
 let rec replace_module_aux (rep_map : replacement_map) (m : 'ann module_) : 'ann module_ =
+  let replace_path_prefix rep_map (path : string list) : string list =
+    let rec find_replacement prefix_len =
+      if prefix_len <= 0
+      then None
+      else (
+        let prefix = List.take prefix_len path in
+        match Hashtbl.find_opt rep_map prefix with
+        | Some replacement -> Some (replacement @ List.drop prefix_len path)
+        | None -> find_replacement (prefix_len - 1))
+    in
+    match find_replacement (List.length path) with
+    | Some replaced -> replaced
+    | None -> path
+  in
   let rec replace_name rep_map name =
     match name with
     | Base n -> Base n
     | Namespaced (path, n) ->
-    match Hashtbl.find_opt rep_map path with
-    | Some new_path -> Namespaced (new_path, n)
-    | None -> Namespaced (path, n)
+      let new_path = replace_path_prefix rep_map path in
+      Namespaced (new_path, n)
   and replace_term rep_map (ann, term_node) =
     let new_term_node =
       match term_node with

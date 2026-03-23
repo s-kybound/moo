@@ -105,6 +105,8 @@ let parse_to_core_ast ?k input =
   input
   |> Reader.of_string ?k ~filename:"REPL"
   |> Surface_to_ast.surface_module_to_ast_module
+  |> Module_.Resolver.replace_module
+  |> fun (Module_.Resolver.Resolved m) -> m
 ;;
 
 module Command = struct
