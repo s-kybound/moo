@@ -60,7 +60,7 @@ let rec dependencies_of_module_aux (set : DependencySet.t) (m : 'ann module_)
     | Weak _ -> set
   and dependencies_of_raw_ty set (raw_ty : raw_ty) : DependencySet.t =
     match raw_ty with
-    | Raw64 -> set
+    | Int -> set
     | Product tys -> List.fold_left dependencies_of_tyu set tys
     | Array ty -> dependencies_of_tyu set ty
     | Variant variants ->

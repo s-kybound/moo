@@ -59,7 +59,7 @@
 %token ABSTRACT
 
 (* base datatypes, along with tuples and the rest *)
-%token RAW64 UNIT
+%token INT UNIT
 %token <int64> NUMBER
 
 %token DOT
@@ -461,7 +461,7 @@ named_type:
       { Named (n, ts) }
 
 simple_raw_type:
-  | RAW64                                               { Raw64 }
+  | INT                                               { Int }
   | tuple_type                                          { $1 }
   | array_type                                          { $1 }
 

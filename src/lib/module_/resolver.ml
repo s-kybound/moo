@@ -52,7 +52,7 @@ let rec replace_module_aux (rep_map : replacement_map) (m : 'ann module_) : 'ann
     | Weak _ -> tyu
   and replace_raw_ty rep_map raw_ty =
     match raw_ty with
-    | Raw64 -> Raw64
+    | Int -> Int
     | Product tys -> Product (List.map (replace_tyu rep_map) tys)
     | Array ty -> Array (replace_tyu rep_map ty)
     | Variant variants ->

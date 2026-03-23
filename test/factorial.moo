@@ -1,4 +1,4 @@
-data i64 = raw64
+data i64 = int
 
 /* non-tail recursive version of factorial, written in
  * traditional style. 

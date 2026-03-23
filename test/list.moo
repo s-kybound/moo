@@ -1,4 +1,4 @@
-data i64 = raw64
+data i64 = int
 
 data peano = Z | S(peano)
 

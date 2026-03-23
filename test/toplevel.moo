@@ -11,13 +11,13 @@ use Syntax.Ast as A
 // the top level is either declarations or expressions.
 
 // data declarations
-data i64 = raw64
+data i64 = int
 
-type lazy_i64 = data[cbn] raw64
+type lazy_i64 = data[cbn] int
 
-codata co64 = raw64
+codata co64 = int
 
-codata[cbv] co_lazy_i64 = raw64
+codata[cbv] co_lazy_i64 = int
 
 
 

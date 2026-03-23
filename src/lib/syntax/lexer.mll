@@ -27,7 +27,7 @@
       ("cbn",       CBN);   
       ("type",      TYPE);
       ("unit",      UNIT);
-      ("raw64",     RAW64);
+      ("int",     INT);
       (* ("open",      OPEN); *)
       (* ("module",    MODULE); *)
       ("use",       USE);

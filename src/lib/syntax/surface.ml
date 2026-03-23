@@ -48,7 +48,7 @@ and ty =
   | Raw of mode * shape * raw_ty
 
 and raw_ty =
-  | Raw64
+  | Int
   | Product of ty_use list
   | Array of ty_use
   | Variant of variant list (* ADT *)

@@ -199,10 +199,10 @@ let rec synthesize
        let knowledge = add_to_context tydef_env unique_id tyu knowledge in
        annotate_with tyu, tyu, knowledge)
   | Ast.Num _ ->
-    let tyu = WeakTyu.new_constructor_tyu Raw64 in
+    let tyu = WeakTyu.new_constructor_tyu Int in
     annotate_with tyu, tyu, knowledge
   | Ast.Exit ->
-    let tyu = WeakTyu.new_destructor_tyu Raw64 in
+    let tyu = WeakTyu.new_destructor_tyu Int in
     annotate_with tyu, tyu, knowledge
   | Ast.Tuple [] ->
     let tyu = WeakTyu.new_constructor_tyu (Product []) in
@@ -293,7 +293,7 @@ let rec synthesize
                let cmd, command_knowledge =
                  typecheck_command demands command tydef_env ty_env
                in
-               cmd, Some (WeakTyu.new_constructor_tyu Raw64), command_knowledge
+               cmd, Some (WeakTyu.new_constructor_tyu Int), command_knowledge
              | Ast.Binder binder ->
                let unique_ids = binder_ids_of_binder binder in
                let cmd, command_knowledge =
@@ -738,14 +738,14 @@ and typecheck_command
       synthesize knowledge tout_term tydef_env ty_env
     in
     let in_ty_use = Type.negate_tyu out_ty_use in
-    let expected_in_ty = WeakTyu.new_constructor_tyu Raw64 in
+    let expected_in_ty = WeakTyu.new_constructor_tyu Int in
     if not (tyu_equal out_ty_use (Type.negate_tyu expected_in_ty) tydef_env)
     then
       type_mismatch
         ?loc:ann.loc
         (Type.negate_tyu expected_in_ty)
         out_ty_use
-        "typecheck_command: arithmetic binary operation expected raw64 output"
+        "typecheck_command: arithmetic binary operation expected int output"
     else (
       let tl_term, left_knowledge =
         check out_knowledge tl_term in_ty_use tydef_env ty_env
@@ -764,14 +764,14 @@ and typecheck_command
       synthesize knowledge tout_term tydef_env ty_env
     in
     let in_ty_use = Type.negate_tyu out_ty_use in
-    let expected_in_ty = WeakTyu.new_constructor_tyu Raw64 in
+    let expected_in_ty = WeakTyu.new_constructor_tyu Int in
     if not (tyu_equal out_ty_use (Type.negate_tyu expected_in_ty) tydef_env)
     then
       type_mismatch
         ?loc:ann.loc
         (Type.negate_tyu expected_in_ty)
         out_ty_use
-        "typecheck_command: arithmetic unary operation expected raw64 output"
+        "typecheck_command: arithmetic unary operation expected int output"
     else (
       let tin_term, in_knowledge =
         check out_knowledge tin_term in_ty_use tydef_env ty_env

@@ -106,7 +106,7 @@ and surface_ty_to_ast_ty (ty : Surface.ty) : Ast.ty =
 
 and surface_raw_ty_to_ast_raw_ty (raw_ty : Surface.raw_ty) : Ast.raw_ty =
   match raw_ty with
-  | Surface.Raw64 -> Ast.Raw64
+  | Surface.Int -> Ast.Int
   | Surface.Product tyu_list ->
     Ast.Product (List.map surface_ty_use_to_ast_ty_use tyu_list)
   | Surface.Array tyu -> Ast.Array (surface_ty_use_to_ast_ty_use tyu)

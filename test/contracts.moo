@@ -1,5 +1,5 @@
 data bool = True | False
-data i64 = raw64
+data i64 = int
 codata predicate<A> = A, -bool
 
 proc not_0(x : i64, k : -bool) {

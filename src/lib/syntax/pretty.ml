@@ -94,7 +94,7 @@ and show_ty ty =
 
 and show_raw_ty raw =
   match raw with
-  | Raw64 -> "raw64"
+  | Int -> "int"
   | Product [] -> "unit"
   | Product tys ->
     let tys_str = tys |> List.map show_ty_use |> String.concat ", " in

@@ -342,16 +342,16 @@ let eval_program (cmd : command) (initial_env : environment_frame) : environment
 
 (*
 notes: 
-let x : data[cbn] raw64 = (1 + 2) ;; do 
+let x : data[cbn] int = (1 + 2) ;; do 
 x . match {
   | x -> exit . x  
 }
 
 works
 
-let x : data[cbn] raw64 = (1 + 2) ;; do 
+let x : data[cbn] int = (1 + 2) ;; do 
 +(x, 3 | exit)
 
 
-let rec x : data[cbn] raw64 = (1 + x) ;;
+let rec x : data[cbn] int = (1 + x) ;;
 *)

@@ -1,4 +1,4 @@
-data i64 = raw64
+data i64 = int
 
 // loops in moo can be implemented using recursion, much like
 // in functional languages.
