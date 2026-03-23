@@ -114,10 +114,12 @@ module Command = struct
     | Help
     | Step of string
     | Show of string
+    | Load of string list
     | Not_a_command
 
   let completions =
     [ [ "!q"; "!quit"; "!exit" ], [], "Exit REPL"
+    ; [ "!load" ], [ "filenames" ], "Load and evaluate a set of moo files"
     ; [ "!clear" ], [], "Clear REPL environment"
     ; [ "!help" ], [], "Show help"
     ; [ "!step" ], [ "prog" ], "Step through program"
@@ -151,6 +153,16 @@ module Command = struct
     then Step (String.sub line 6 (String.length line - 6))
     else if String.starts_with ~prefix:"!show " line
     then Show (String.sub line 6 (String.length line - 6))
+    else if String.starts_with ~prefix:"!load " line
+    then (
+      let filenames_str = String.sub line 6 (String.length line - 6) in
+      let filenames =
+        filenames_str
+        |> String.split_on_char ' '
+        |> List.map String.trim
+        |> List.filter (fun s -> s <> "")
+      in
+      if filenames = [] then Not_a_command else Load filenames)
     else Not_a_command
   ;;
 end
@@ -267,6 +279,16 @@ let rec repl_loop (kont : (Error.kont * (Ast.core_ann Ast.module_ -> 'a) * strin
       print_exception_with_context full_input e;
       repl_loop None
   in
+  let attempt_load filenames =
+    let { ty_env; term_env } = State.get_module_context () in
+    let out_ty_env, out_term_env =
+      try Moo.Runner.run ~in_ty_env:ty_env ~in_term_env:term_env filenames with
+      | e ->
+        print_error (Printexc.to_string e);
+        ty_env, term_env
+    in
+    State.set_module_context { ty_env = out_ty_env; term_env = out_term_env }
+  in
   let prompt =
     match kont with
     | Some _ -> "... "
@@ -302,6 +324,9 @@ let rec repl_loop (kont : (Error.kont * (Ast.core_ann Ast.module_ -> 'a) * strin
      | Some (k, f, previous_input), _ ->
        (* we need to consider the newlines here for correctness *)
        attempt_eval ~previous_input ~k line f;
+       repl_loop None
+     | None, Command.Load filenames ->
+       attempt_load filenames;
        repl_loop None
      | None, Command.Not_a_command when String.trim line = "" -> repl_loop kont
      | None, Command.Not_a_command ->
