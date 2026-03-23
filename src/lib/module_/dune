@@ -1,0 +1,4 @@
+(library
+ (name module_)
+ (public_name moo.module_)
+ (libraries moo.syntax moo.core moo.utils moo.typechecker))
