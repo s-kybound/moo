@@ -27,6 +27,7 @@ type form =
       ; form_args : name list
       }
   | Numeral of int64
+  | Boolean of bool
 
 type term =
   | NeedsForce of term
@@ -42,6 +43,7 @@ type term =
   | Tuple of term list
   | Matcher of (form * command) list
   | Num of int64
+  | Bool of bool
   | Rec of string * term
   | Arr of term list
   | Val of value
@@ -101,6 +103,7 @@ and value =
   | VArr of value array
   | VMatcher of (form * command) list * environment_frame
   | VNum of int64
+  | VBool of bool
   | VExit
   | VHole
 (* placeholder value for recursive terms that will be updated to the correct value once done *)

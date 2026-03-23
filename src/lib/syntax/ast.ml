@@ -47,6 +47,7 @@ and ty =
 
 and raw_ty =
   | Int
+  | Bool
   | Product of ty_use list
   | Array of ty_use
   | Variant of variant list (* ADT *)
@@ -68,6 +69,7 @@ type 'ann pattern =
       ; pat_args : 'ann binder list
       }
   | Numeral of int64
+  | Boolean of bool
 
 type 'ann term = 'ann * 'ann term_node
 
@@ -81,6 +83,7 @@ and 'ann term_node =
   | Tuple of 'ann term list
   | Matcher of ('ann pattern * 'ann command) list (* match and dispatch *)
   | Num of int64
+  | Bool of bool
   | Rec of 'ann binder * 'ann term (* fixpoint term *)
   | Arr of 'ann term list
   | Ann of 'ann term * ty_use

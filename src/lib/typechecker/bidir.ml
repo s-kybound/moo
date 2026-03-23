@@ -86,6 +86,7 @@ let recursive_name_in_unguarded_position (name : string) (term : typed_term) : b
     | Ast.Tuple terms -> List.exists aux_term terms
     | Ast.Matcher _ -> false
     | Ast.Num _ -> false
+    | Ast.Bool _ -> false
     | Ast.Rec (tbinder, tterm) -> begin
       match tbinder with
       | Ast.Var (_, name') -> if name = name' then false else aux_term tterm
@@ -201,6 +202,9 @@ let rec synthesize
   | Ast.Num _ ->
     let tyu = WeakTyu.new_constructor_tyu Int in
     annotate_with tyu, tyu, knowledge
+  | Ast.Bool _ ->
+    let tyu = WeakTyu.new_constructor_tyu Bool in
+    annotate_with tyu, tyu, knowledge
   | Ast.Exit ->
     let tyu = WeakTyu.new_destructor_tyu Int in
     annotate_with tyu, tyu, knowledge
@@ -294,6 +298,11 @@ let rec synthesize
                  typecheck_command demands command tydef_env ty_env
                in
                cmd, Some (WeakTyu.new_constructor_tyu Int), command_knowledge
+             | Ast.Boolean _ ->
+               let cmd, command_knowledge =
+                 typecheck_command demands command tydef_env ty_env
+               in
+               cmd, Some (WeakTyu.new_constructor_tyu Bool), command_knowledge
              | Ast.Binder binder ->
                let unique_ids = binder_ids_of_binder binder in
                let cmd, command_knowledge =
@@ -550,6 +559,12 @@ and check
     let _, tyu, knowledge = synthesize knowledge expr tydef_env ty_env in
     if not (tyu_equal expected_type tyu tydef_env)
     then type_mismatch ?loc:ann.loc expected_type tyu "check: TNum expected type mismatch"
+    else annotate_with_tyu expr, knowledge
+  | Ast.Bool _ ->
+    let _, tyu, knowledge = synthesize knowledge expr tydef_env ty_env in
+    if not (tyu_equal expected_type tyu tydef_env)
+    then
+      type_mismatch ?loc:ann.loc expected_type tyu "check: TBool expected type mismatch"
     else annotate_with_tyu expr, knowledge
   | Ast.Exit ->
     let _, tyu, knowledge = synthesize knowledge expr tydef_env ty_env in
@@ -924,7 +939,7 @@ let verify_well_typed (modu : typed_module) : unit =
   and verify_term (term : typed_term) : unit =
     let ann, node = term in
     begin match node with
-    | Ast.Variable _ | Ast.Num _ | Ast.Exit -> ()
+    | Ast.Variable _ | Ast.Num _ | Ast.Exit | Ast.Bool _ -> ()
     | Ast.Tuple terms -> verify_terms terms
     | Ast.Ann (tterm, _) -> verify_term tterm
     | Ast.Rec (_, tterm) -> verify_term tterm

@@ -30,6 +30,7 @@ let form_matches_value (form : form) (v : value) : bool =
   | Constr { form_name; form_args }, VConstruction (cons_name, cons_args) ->
     form_name = cons_name && List.length form_args = List.length cons_args
   | Numeral n, VNum m -> n = m
+  | Boolean b, VBool b' -> b = b'
   | _, _ -> false
 ;;
 
@@ -46,6 +47,7 @@ let pattern_match (forms : (form * 'a) list) (value : value)
         match form with
         | Binder name -> Some ([ name, value ], cmd)
         | Numeral _ -> Some ([], cmd)
+        | Boolean _ -> Some ([], cmd)
         | Tuple names -> begin
           match value with
           | VTuple v_list ->
@@ -123,6 +125,7 @@ let eval_state (state : state) : program_step =
       Step (term_eval_sequence @ c', s, e)
     | Matcher patterns_cmds -> Step (c', VMatcher (patterns_cmds, e) :: s, e)
     | Num n -> Step (c', VNum n :: s, e)
+    | Bool b -> Step (c', VBool b :: s, e)
     | Rec (name, t) ->
       (* Idea - 
        * 1. extend the environment with a placeholder value for
@@ -178,6 +181,7 @@ let eval_state (state : state) : program_step =
      | VConstruction _, VConstruction _ ->
        raise (AssertionError "cannot cut two construction values")
      | VNum _, VNum _ -> raise (AssertionError "cannot cut two numeric values")
+     | VBool _, VBool _ -> raise (AssertionError "cannot cut two boolean values")
      | VMatcher _, VMatcher _ -> raise (AssertionError "cannot cut two matcher values")
      (* exit semantics *)
      | VExit, VNum n | VNum n, VExit -> exit (Int64.to_int n)
@@ -202,7 +206,8 @@ let eval_state (state : state) : program_step =
      | VTuple _, _ -> raise (AssertionError "attempt to cut tuple value with value")
      | VConstruction _, _ ->
        raise (AssertionError "attempt to cut construction value with value")
-     | VNum _, _ -> raise (AssertionError "attempt to cut numeric value with value"))
+     | VNum _, _ -> raise (AssertionError "attempt to cut numeric value with value")
+     | VBool _, _ -> raise (AssertionError "attempt to cut boolean value with value"))
   | I (Spawn cmd2) :: c', s', e' ->
     (* TODO: check whether this is the correct formulation - should s' be preserved in one or the other or etc? *)
     let state1 = c', s', e' in

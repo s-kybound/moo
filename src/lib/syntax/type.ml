@@ -33,6 +33,7 @@ and qualify_ty (origin_path : string list) (ty : ty) : ty =
 and qualify_raw_ty (origin_path : string list) (raw_ty : raw_ty) : raw_ty =
   match raw_ty with
   | Int -> Int
+  | Bool -> Bool
   | Product ty_uses -> Product (List.map (qualify_tyu origin_path) ty_uses)
   | Array ty_use -> Array (qualify_tyu origin_path ty_use)
   | Variant variants ->
@@ -140,6 +141,7 @@ module Substitute = struct
   and raw_ty_replace (bindings : (string * ty_use) list) (target : raw_ty) : raw_ty =
     match target with
     | Int -> Int
+    | Bool -> Bool
     | Product ty_uses -> Product (List.map (tyu_replace bindings) ty_uses)
     | Array ty_use -> Array (tyu_replace bindings ty_use)
     | Variant variants ->
@@ -212,6 +214,7 @@ and ty_is_resolved (ty : ty) : bool =
 and raw_ty_is_resolved (raw_ty : raw_ty) : bool =
   match raw_ty with
   | Int -> true
+  | Bool -> true
   | Product ty_uses -> List.for_all tyu_is_resolved ty_uses
   | Array ty_use -> tyu_is_resolved ty_use
   | Variant variants ->
@@ -433,6 +436,8 @@ and variant_equal (ty1 : ty) (ty2 : ty) tydef_env : bool =
 and raw_ty_equal (rty1 : raw_ty) (rty2 : raw_ty) (tydef_env : tydef_env) : bool =
   match rty1, rty2 with
   | Int, Int -> true
+  | Bool, Bool -> true
+  | Bool, _ | _, Bool -> false
   | Int, _ | _, Int -> false
   | Product tys1, Product tys2 ->
     List.length tys1 = List.length tys2
@@ -636,6 +641,7 @@ let validate_tydef (name, abstracts) ty (tydef_env : tydef_env) =
   and validate_tydef_raw_ty abs_vars (raw_ty : raw_ty) : unit =
     match raw_ty with
     | Int -> ()
+    | Bool -> ()
     | Product ty_uses -> List.iter (validate_tydef_tyu abs_vars) ty_uses
     | Array ty_use -> validate_tydef_tyu abs_vars ty_use
     | Variant vs ->

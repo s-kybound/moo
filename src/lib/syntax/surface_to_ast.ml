@@ -79,6 +79,7 @@ let rec recursive_definition_is_guarded rec_binder body : bool =
   | _, Ast.Tuple _ -> true
   | _, Ast.Matcher _ -> true
   | _, Ast.Num _ -> true
+  | _, Ast.Bool _ -> true
   | _, Ast.Arr _ -> true
   | _, Ast.Exit -> true
   (* invariant - the inner recursive term has already been checked to be guarded *)
@@ -107,6 +108,7 @@ and surface_ty_to_ast_ty (ty : Surface.ty) : Ast.ty =
 and surface_raw_ty_to_ast_raw_ty (raw_ty : Surface.raw_ty) : Ast.raw_ty =
   match raw_ty with
   | Surface.Int -> Ast.Int
+  | Surface.Bool -> Ast.Bool
   | Surface.Product tyu_list ->
     Ast.Product (List.map surface_ty_use_to_ast_ty_use tyu_list)
   | Surface.Array tyu -> Ast.Array (surface_ty_use_to_ast_ty_use tyu)
@@ -171,6 +173,7 @@ let surface_pattern_to_ast_pattern (pat : Surface.pattern)
     let pat_args, binder_ty_uses = List.rev pat_args, List.rev binder_ty_uses in
     Ast.Constr { pat_name; pat_args }, binder_ty_uses
   | Surface.Numeral n -> Ast.Numeral n, []
+  | Surface.Boolean b -> Ast.Boolean b, []
 ;;
 
 let rec surface_term_to_ast_term (t : Surface.term) : Ast.core_ann Ast.term =
@@ -181,6 +184,7 @@ and surface_term_to_ast_term_node (t : Surface.term) : Ast.core_ann Ast.term_nod
   let ann = ann_of_surface_loc t.loc in
   match t.it with
   | Surface.Num n -> Ast.Num n
+  | Surface.Bool b -> Ast.Bool b
   | Surface.Variable name -> Ast.Variable name
   | Surface.Arr terms -> Ast.Arr (List.map surface_term_to_ast_term terms)
   | Surface.Ann (term, ty_use) ->

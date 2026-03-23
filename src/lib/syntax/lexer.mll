@@ -27,7 +27,10 @@
       ("cbn",       CBN);   
       ("type",      TYPE);
       ("unit",      UNIT);
-      ("int",     INT);
+      ("int",       INT);
+      ("true",      TRUE);
+      ("false",     FALSE);
+      ("bool",      BOOL);
       (* ("open",      OPEN); *)
       (* ("module",    MODULE); *)
       ("use",       USE);

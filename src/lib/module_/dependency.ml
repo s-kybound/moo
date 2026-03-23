@@ -48,6 +48,7 @@ let rec dependencies_of_module_aux (set : DependencySet.t) (m : 'ann module_)
         set
         branches
     | Num _ -> set
+    | Bool _ -> set
     | Rec (_, term) -> dependencies_of_term set term
     | Arr terms -> List.fold_left dependencies_of_term set terms
     | Ann (term, ty) ->
@@ -69,6 +70,7 @@ let rec dependencies_of_module_aux (set : DependencySet.t) (m : 'ann module_)
   and dependencies_of_raw_ty set (raw_ty : raw_ty) : DependencySet.t =
     match raw_ty with
     | Int -> set
+    | Bool -> set
     | Product tys -> List.fold_left dependencies_of_tyu set tys
     | Array ty -> dependencies_of_tyu set ty
     | Variant variants ->
@@ -94,7 +96,7 @@ let rec dependencies_of_module_aux (set : DependencySet.t) (m : 'ann module_)
   and dependencies_of_pattern set (pat : 'ann pattern) : DependencySet.t =
     match pat with
     | Constr { pat_name; _ } -> dependencies_of_name set pat_name
-    | Binder _ | Tup _ | Numeral _ -> set
+    | Binder _ | Tup _ | Numeral _ | Boolean _ -> set
   in
   match m with
   | [] -> set

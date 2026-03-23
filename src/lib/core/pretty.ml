@@ -34,6 +34,7 @@ let show_form form =
   | Constr { form_name; form_args } ->
     Printf.sprintf "%s(%s)" form_name (String.concat ", " (List.map show_name form_args))
   | Numeral n -> Int64.to_string n
+  | Boolean b -> string_of_bool b
 ;;
 
 let rec show_term term =
@@ -54,6 +55,7 @@ let rec show_term term =
     in
     "match { " ^ String.concat " " branch_strs ^ " }"
   | Num n -> Int64.to_string n
+  | Bool b -> string_of_bool b
   | Rec (name, t) -> Printf.sprintf "[rec %s] %s" name (show_term t)
   | Arr terms -> Printf.sprintf "[%s]" (String.concat ", " (List.map show_term terms))
   | Val v -> show_value v
@@ -117,6 +119,7 @@ and show_value v =
     Printf.sprintf "[%s]" args_str
   | VMatcher _ -> "<match>"
   | VNum n -> Int64.to_string n
+  | VBool b -> string_of_bool b
   | VExit -> "exit"
   | VHole -> "<hole>"
 ;;

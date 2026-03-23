@@ -61,6 +61,7 @@ let set_binder_ids (b : typed_binder) (ids : int list) : typed_binder =
 let pattern_with_empty_ids (pat : Ast.core_ann Ast.pattern) : typed_pattern =
   match pat with
   | Ast.Numeral n -> Ast.Numeral n
+  | Ast.Boolean b -> Ast.Boolean b
   | Ast.Binder binder -> Ast.Binder (binder_with_ids binder None)
   | Ast.Tup binders -> Ast.Tup (List.map (fun b -> binder_with_ids b None) binders)
   | Ast.Constr { pat_name; pat_args } ->
@@ -100,6 +101,7 @@ let extend_pattern_frame (parent : tycheck_hole_environment_frame) (pat : 'a Ast
       parent
       pat_args
   | Ast.Numeral _ -> parent
+  | Ast.Boolean _ -> parent
 ;;
 
 let add_usage_to_hole
@@ -224,6 +226,7 @@ let tycheck_module_of_ast
         in
         mk_term ann (Ast.Matcher tbranches)
       | Ast.Num n -> mk_term ann (Ast.Num n)
+      | Ast.Bool b -> mk_term ann (Ast.Bool b)
       | Ast.Rec (binder, term) ->
         let temp_binder = binder_with_ids binder None in
         let new_env = extend_hole_frame env temp_binder in
@@ -287,6 +290,7 @@ let tycheck_module_of_ast
     and tycheck_pattern_of_ast (pat : Ast.core_ann Ast.pattern) env : typed_pattern =
       match pat with
       | Ast.Numeral n -> Ast.Numeral n
+      | Ast.Boolean b -> Ast.Boolean b
       | Ast.Binder binder ->
         let temp_binder = binder_with_ids binder None in
         let unique_ids = get_usages_of_hole env temp_binder in

@@ -59,7 +59,8 @@
 %token ABSTRACT
 
 (* base datatypes, along with tuples and the rest *)
-%token INT UNIT
+%token INT UNIT BOOL
+%token TRUE FALSE
 %token <int64> NUMBER
 
 %token DOT
@@ -306,6 +307,7 @@ indirect_term:
   | product_term                                        { $1 }
   | cons_term                                           { $1 }
   | simple_number_term                                  { $1 }
+  | boolean_term                                        { $1 }
   | array_term                                          { $1 }
   | EXIT                                                { mk_term $startpos $endpos Exit }
   | t=indirect_term COLON ty=type_use                   { mk_term $startpos $endpos (Ann (t, ty)) }
@@ -338,6 +340,11 @@ product_term:
 (* direct numbers *)
 simple_number_term:
   | NUMBER                                              { mk_term $startpos $endpos (Num $1) }
+
+(* direct booleans *)
+boolean_term:
+  | TRUE                                                { mk_term $startpos $endpos (Bool true) }
+  | FALSE                                               { mk_term $startpos $endpos (Bool false) }
 
 (* computations of numbers. these are syntactic sugar for
  * commands of numbers. For example,
@@ -382,6 +389,10 @@ pattern:
       { Constr { pat_name; pat_args } }
   | NUMBER
       { Numeral $1 }
+  | TRUE
+      { Boolean true }
+  | FALSE
+      { Boolean false }
 
 tuple_pattern:
   | LPAREN RPAREN
@@ -461,7 +472,8 @@ named_type:
       { Named (n, ts) }
 
 simple_raw_type:
-  | INT                                               { Int }
+  | INT                                                 { Int }
+  | BOOL                                                { Bool }
   | tuple_type                                          { $1 }
   | array_type                                          { $1 }
 

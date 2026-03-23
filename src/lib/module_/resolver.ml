@@ -32,6 +32,7 @@ let rec replace_module_aux (rep_map : replacement_map) (m : 'ann module_) : 'ann
              (fun (pat, cmd) -> replace_pattern rep_map pat, replace_command rep_map cmd)
              branches)
       | Num n -> Num n
+      | Bool b -> Bool b
       | Rec (binder, term) -> Rec (binder, replace_term rep_map term)
       | Arr terms -> Arr (List.map (replace_term rep_map) terms)
       | Ann (term, ty) -> Ann (replace_term rep_map term, replace_tyu rep_map ty)
@@ -53,6 +54,7 @@ let rec replace_module_aux (rep_map : replacement_map) (m : 'ann module_) : 'ann
   and replace_raw_ty rep_map raw_ty =
     match raw_ty with
     | Int -> Int
+    | Bool -> Bool
     | Product tys -> Product (List.map (replace_tyu rep_map) tys)
     | Array ty -> Array (replace_tyu rep_map ty)
     | Variant variants ->
@@ -96,6 +98,7 @@ let rec replace_module_aux (rep_map : replacement_map) (m : 'ann module_) : 'ann
     | Constr { pat_name; pat_args } ->
       Constr { pat_name = replace_name rep_map pat_name; pat_args }
     | Numeral n -> Numeral n
+    | Boolean b -> Boolean b
   in
   match m with
   | [] -> m

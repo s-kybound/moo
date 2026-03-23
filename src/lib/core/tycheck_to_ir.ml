@@ -36,6 +36,7 @@ let binder_to_ir_name (b : typed_binder) : Ir.name =
 let tycheck_to_ir_form (f : typed_pattern) : Ir.form =
   match f with
   | Ast.Numeral n -> Ir.Numeral n
+  | Ast.Boolean b -> Ir.Boolean b
   | Ast.Binder pb -> Ir.Binder (binder_to_ir_name pb)
   | Ast.Tup names -> Ir.Tuple (List.map binder_to_ir_name names)
   | Ast.Constr { pat_name; pat_args } ->
@@ -145,6 +146,7 @@ and tycheck_to_ir_term tydef_env (t : typed_term) : Ir.term =
       in
       Ir.Matcher ir_branches
     | Ast.Num n -> Ir.Num n
+    | Ast.Bool b -> Ir.Bool b
     | Ast.Rec (Ast.Wildcard _, _) ->
       assert false (* wildcard binders are not allowed in rec terms *)
     | Ast.Rec (Ast.Var (_, name), term) -> Ir.Rec (name, tycheck_to_ir_term tydef_env term)

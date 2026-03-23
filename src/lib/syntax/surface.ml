@@ -49,6 +49,7 @@ and ty =
 
 and raw_ty =
   | Int
+  | Bool
   | Product of ty_use list
   | Array of ty_use
   | Variant of variant list (* ADT *)
@@ -82,6 +83,7 @@ type pattern =
       ; pat_args : binder list
       }
   | Numeral of int64
+  | Boolean of bool
 
 type term = term_node Loc.located
 
@@ -95,6 +97,7 @@ and term_node =
   | Tuple of term list
   | Matcher of (pattern * command) list (* match and dispatch *)
   | Num of int64
+  | Bool of bool
   | Rec of binder * term (* fixpoint term *)
   | Arr of term list
   | Ann of term * ty_use

@@ -103,6 +103,7 @@ and show_raw_ty raw =
   | Variant variants ->
     let variants_str = variants |> List.map show_variant |> String.concat " | " in
     Printf.sprintf "variant { %s }" variants_str
+  | Bool -> "bool"
 
 and show_variant { constr_name; constr_args } =
   match constr_args with
@@ -128,6 +129,7 @@ let show_pattern ~ann_show pat =
     let pats_str = pats |> List.map (show_binder ~ann_show) |> String.concat ", " in
     Printf.sprintf "(%s)" pats_str
   | Numeral n -> Int64.to_string n
+  | Boolean b -> string_of_bool b
 ;;
 
 let rec show_term ~ann_show (ann, term) =
@@ -154,6 +156,7 @@ let rec show_term ~ann_show (ann, term) =
       in
       Printf.sprintf "match { %s }" (arms |> List.map show_arm |> String.concat "|")
     | Num n -> Int64.to_string n
+    | Bool b -> string_of_bool b
     | Rec (binder, body) ->
       Printf.sprintf
         "rec |%s| %s"
