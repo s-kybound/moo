@@ -1,17 +1,14 @@
 open Error
 module I = Parser.MenhirInterpreter
 
-let get_parse_error env =
-  match I.stack env with
-  | (lazy Nil) -> "Invalid syntax"
-  | (lazy (Cons (I.Element (state, _, _, _), _))) ->
-  try ParserMessages.message (I.number state) with
-  | Not_found -> "invalid syntax (no specific message for this error)"
+let expected_tokens_of_checkpoint k =
+  let foo = Token.tokens in
+  List.filter (fun x -> I.acceptable k x Lexing.dummy_pos) foo
 ;;
 
 let rec parse_module_aux
           lexbuf
-          (previous : (Parser.token * Surface.module_ I.checkpoint) option)
+          (previous_input_needed : (Parser.token * Surface.module_ I.checkpoint) option)
           (checkpoint : 'a I.checkpoint)
   : Surface.module_
   =
@@ -26,14 +23,31 @@ let rec parse_module_aux
     parse_module_aux lexbuf (Some (token, checkpoint)) new_checkpoint
   | I.Shifting _ | I.AboutToReduce _ ->
     let checkpoint = I.resume checkpoint in
-    parse_module_aux lexbuf previous checkpoint
-  | I.HandlingError env ->
+    parse_module_aux lexbuf previous_input_needed checkpoint
+  | I.HandlingError _ ->
     let span = Some (Loc_utils.get_lexing_span lexbuf) in
     let resume_pos = lexbuf.lex_curr_p in
-    let message = get_parse_error env in
-    (match previous with
+    (match previous_input_needed with
      | Some (Parser.EOF, k) -> raise (Early_eof (k, resume_pos))
-     | _ -> raise (SyntaxError { span; message }))
+     | Some (tok, k) ->
+       let expecteds =
+         expected_tokens_of_checkpoint k
+         |> List.map Token.string_of_token
+         |> List.sort_uniq String.compare
+       in
+       let got = Token.string_of_token tok in
+       let message =
+         match expecteds with
+         | [] -> "Syntax error"
+         | [ expected ] -> Printf.sprintf "Syntax error: expected %s, got %s" expected got
+         | _ ->
+           Printf.sprintf
+             "Syntax error: expected one of %s, got %s"
+             (String.concat ", " expecteds)
+             got
+       in
+       raise (SyntaxError { span; message })
+     | None -> raise (SyntaxError { span; message = "Syntax error" }))
 ;;
 
 let parse_module (lexbuf : Lexing.lexbuf) =

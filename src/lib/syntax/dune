@@ -9,26 +9,3 @@
 
 (ocamllex
  (modules lexer))
-
-(rule
- (deps parserMessages.check)
- (action
-  (with-stdout-to
-   parserMessages.ml
-   (run menhir %{dep:parser.mly} --compile-errors %{dep:parser.messages}))))
-
-(rule
- (with-stdout-to
-  parser.auto.messages
-  (run menhir %{dep:parser.mly} --list-errors)))
-
-(rule
- (with-stdout-to
-  parserMessages.check
-  (run
-   menhir
-   %{dep:parser.mly}
-   --compare-errors
-   %{dep:parser.auto.messages}
-   --compare-errors
-   %{dep:parser.messages})))

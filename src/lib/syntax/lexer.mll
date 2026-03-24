@@ -12,40 +12,10 @@
                 })) 
       fmt
 
-  let keywords : (string, Parser.token) Hashtbl.t =
-    let keywords : (string * Parser.token) list = [
-      ("do",        DO);
-      ("let",       LET);
-      ("in",        IN);
-      ("rec",       REC);
-      ("match",     MATCH);
-      ("data",      DATA);
-      ("codata",    CODATA);
-      ("exit",      EXIT);
-      ("proc",      PROC); 
-      ("cbv",       CBV);
-      ("cbn",       CBN);   
-      ("type",      TYPE);
-      ("unit",      UNIT);
-      ("int",       INT);
-      ("true",      TRUE);
-      ("false",     FALSE);
-      ("bool",      BOOL);
-      (* ("open",      OPEN); *)
-      (* ("module",    MODULE); *)
-      ("use",       USE);
-      ("as",        AS);
-      ("abstract",  ABSTRACT);
-      ("_",         UNDERSCORE);
-    ] in
-    keywords
-    |> List.to_seq
-    |> Hashtbl.of_seq
-
   let verify_ident _lexbuf id =
-    match Hashtbl.find_opt keywords id with
+    match Token.keyword_of_string id with
     | Some t -> t
-    | None   -> IDENT id
+    | None -> IDENT id
 }
 
 let hspace             = [' ' '\t' '\r']+
