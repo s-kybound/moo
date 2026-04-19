@@ -7,9 +7,11 @@ let table : (string, Parser.token) Hashtbl.t = Hashtbl.create 64
 let keywords =
   [ "do", DO
   ; "let", LET
+  ; "letcc", LETCC
   ; "in", IN
   ; "rec", REC
   ; "match", MATCH
+  ; "dispatch", DISPATCH
   ; "data", DATA
   ; "codata", CODATA
   ; "exit", EXIT
@@ -85,9 +87,11 @@ let tokens = symbols @ List.map snd keywords
 let string_of_token = function
   | DO -> "do"
   | LET -> "let"
+  | LETCC -> "letcc"
   | IN -> "in"
   | REC -> "rec"
   | MATCH -> "match"
+  | DISPATCH -> "dispatch"
   | DATA -> "data"
   | CODATA -> "codata"
   | EXIT -> "exit"

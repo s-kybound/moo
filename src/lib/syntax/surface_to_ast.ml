@@ -333,35 +333,35 @@ and surface_command_to_ast_command_node (cmd : Surface.command)
   : Ast.core_ann Ast.command_node
   =
   match cmd.it with
-  | Surface.Matchlet { matched_term; matcher_term } ->
-    Ast.Core
-      { l_term = surface_term_to_ast_term matched_term
-      ; r_term = surface_term_to_ast_term matcher_term
-      }
-  | Surface.Cutlet ({ name; typ }, term, command) ->
-    let l_term =
-      mk_term
-        ~loc:(ann_of_surface_loc cmd.loc)
-        (Ast.Mu
-           (surface_binder_name_to_ast_binder name, surface_command_to_ast_command command))
+  | Surface.Matchlet { matched_term; matcher_term; implied_direction } ->
+    let matched_term = surface_term_to_ast_term matched_term in
+    let matcher_term = surface_term_to_ast_term matcher_term in
+    let expression_term, continuation_term =
+      match implied_direction with
+      | Data -> matched_term, matcher_term
+      | Codata -> matcher_term, matched_term
     in
-    let r_term =
+    Ast.Core { l_term = expression_term; r_term = continuation_term }
+  | Surface.Cutlet { binder = { name; typ }; bound_term; body; implied_direction } ->
+    let binding_term =
       match typ with
-      | None -> surface_term_to_ast_term term
+      | None -> surface_term_to_ast_term bound_term
       | Some ty_use ->
-        let ann, t_node = surface_term_to_ast_term term in
+        let ann, t_node = surface_term_to_ast_term bound_term in
         mk_term ~loc:ann (Ast.Ann ((ann, t_node), surface_ty_use_to_ast_ty_use ty_use))
     in
-    Ast.Core { l_term; r_term }
-  (* | Surface.Ignore (term, rest) ->
-    let l_term =
+    let bound_term =
       mk_term
         ~loc:(ann_of_surface_loc cmd.loc)
         (Ast.Mu
-           (Ast.Wildcard (ann_of_surface_loc cmd.loc), surface_command_to_ast_command rest))
+           (surface_binder_name_to_ast_binder name, surface_command_to_ast_command body))
     in
-    let r_term = surface_term_to_ast_term term in
-    Ast.Core { l_term; r_term } *)
+    let expression_term, continuation_term =
+      match implied_direction with
+      | Data -> bound_term, binding_term
+      | Codata -> binding_term, bound_term
+    in
+    Ast.Core { l_term = expression_term; r_term = continuation_term }
   | Surface.Core { l_term; r_term } ->
     Ast.Core
       { l_term = surface_term_to_ast_term l_term

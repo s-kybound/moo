@@ -112,8 +112,14 @@ and command_node =
   | Matchlet of
       { matched_term : term
       ; matcher_term : term
+      ; implied_direction : shape
       }
-  | Cutlet of binder * term * command
+  | Cutlet of
+      { binder : binder
+      ; bound_term : term
+      ; body : command
+      ; implied_direction : shape
+      }
   (* | Ignore of term * command *)
   | Core of
       { l_term : term

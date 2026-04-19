@@ -41,13 +41,13 @@
 // %token MODULE
 
 (* definitions *)
-%token LET IN
+%token LET LETCC IN
 %token REC
 %token PROC
 %token DO
 %token DELIMITER
 
-%token MATCH
+%token MATCH DISPATCH
 
 %token TYPE
 %token COLON
@@ -244,29 +244,36 @@ fork_command:
 
 (* sugared commands *)
 cutlet:
-  | MATCH matched_term=indirect_term matcher_term=match_body
-      { mk_command $startpos $endpos (Matchlet { matched_term; matcher_term }) }
-  | LET b=binder RTLARROW t=term IN s=statement
+  | implied_direction=polarized_matchlet_binding 
+    matched_term=indirect_term 
+    matcher_term=match_body
+      { mk_command $startpos $endpos (Matchlet { matched_term; matcher_term ; implied_direction }) }
+  | implied_direction=polarized_let_binding binder=binder RTLARROW bound_term=term IN body=statement
       {
-        mk_command $startpos $endpos (Cutlet (b, t, s))
+        mk_command $startpos $endpos (Cutlet { binder; bound_term; body; implied_direction })
       }
   (* let rec... itself sugar over fixpoint terms *)
-  | LET REC b=binder RTLARROW t=term IN s=statement
+  | implied_direction=polarized_let_binding REC binder=binder RTLARROW bound_term=term IN body=statement
       {
-        let t = mk_recursive b t in
-        mk_command $startpos $endpos (Cutlet (b, t, s))
+        let bound_term = mk_recursive binder bound_term in
+        mk_command $startpos $endpos (Cutlet { binder; bound_term; body; implied_direction })
       }
   (* proclet *)
-  | LET proc_aux=proc_aux(binder) IN s=statement
+  | implied_direction=polarized_let_binding proc_aux=proc_aux(binder) IN body=statement
       {
-        let (b, t) = proc_aux in
-        mk_command $startpos $endpos (Cutlet (b, t, s))
+        let (binder, bound_term) = proc_aux in
+        mk_command $startpos $endpos (Cutlet { binder; bound_term; body; implied_direction })
       }
-  // (* ignored statement *)
-  // | ignored_term=term SEMICOLON rest=statement
-  //     {
-  //       mk_command $startpos $endpos (Ignore (ignored_term, rest)) 
-  //     }
+
+%inline polarized_let_binding:
+  | LET       { Data }
+  | LETCC     { Codata }
+
+%inline polarized_matchlet_binding:
+  | MATCH     { Data }
+  | DISPATCH  { Codata }
+  
+
 
 (* core commands and arithmetic operations *)
 command:
