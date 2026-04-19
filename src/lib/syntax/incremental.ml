@@ -38,16 +38,16 @@ let rec parse_module_aux
        let got = Token.string_of_token tok in
        let message =
          match expecteds with
-         | [] -> "Syntax error"
-         | [ expected ] -> Printf.sprintf "Syntax error: expected %s, got %s" expected got
+         | [] -> "unexpected token " ^ got
+         | [ expected ] -> Printf.sprintf "expected %s, got %s" expected got
          | _ ->
            Printf.sprintf
-             "Syntax error: expected one of %s, got %s"
+             "expected one of %s, got %s"
              (String.concat ", " expecteds)
              got
        in
        raise (SyntaxError { span; message })
-     | None -> raise (SyntaxError { span; message = "Syntax error" }))
+     | None -> raise (SyntaxError { span; message = "unknown syntax error" }))
 ;;
 
 let parse_module (lexbuf : Lexing.lexbuf) =
