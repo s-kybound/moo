@@ -353,7 +353,7 @@ and surface_command_to_ast_command_node (cmd : Surface.command)
         mk_term ~loc:ann (Ast.Ann ((ann, t_node), surface_ty_use_to_ast_ty_use ty_use))
     in
     Ast.Core { l_term; r_term }
-  | Surface.Ignore (term, rest) ->
+  (* | Surface.Ignore (term, rest) ->
     let l_term =
       mk_term
         ~loc:(ann_of_surface_loc cmd.loc)
@@ -361,7 +361,7 @@ and surface_command_to_ast_command_node (cmd : Surface.command)
            (Ast.Wildcard (ann_of_surface_loc cmd.loc), surface_command_to_ast_command rest))
     in
     let r_term = surface_term_to_ast_term term in
-    Ast.Core { l_term; r_term }
+    Ast.Core { l_term; r_term } *)
   | Surface.Core { l_term; r_term } ->
     Ast.Core
       { l_term = surface_term_to_ast_term l_term

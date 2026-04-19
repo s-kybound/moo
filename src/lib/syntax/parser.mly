@@ -35,7 +35,6 @@
 %token LBRACE RBRACE LANGLE RANGLE
 %token LTRARROW RTLARROW
 %token EQUALS
-%token SEMICOLON
 
 // %token OPEN
 %token USE AS
@@ -263,11 +262,11 @@ cutlet:
         let (b, t) = proc_aux in
         mk_command $startpos $endpos (Cutlet (b, t, s))
       }
-  (* ignored statement *)
-  | ignored_term=term SEMICOLON rest=statement
-      {
-        mk_command $startpos $endpos (Ignore (ignored_term, rest)) 
-      }
+  // (* ignored statement *)
+  // | ignored_term=term SEMICOLON rest=statement
+  //     {
+  //       mk_command $startpos $endpos (Ignore (ignored_term, rest)) 
+  //     }
 
 (* core commands and arithmetic operations *)
 command:

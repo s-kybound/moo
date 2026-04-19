@@ -114,7 +114,7 @@ and command_node =
       ; matcher_term : term
       }
   | Cutlet of binder * term * command
-  | Ignore of term * command
+  (* | Ignore of term * command *)
   | Core of
       { l_term : term
       ; r_term : term

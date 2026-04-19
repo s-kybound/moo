@@ -65,7 +65,6 @@ let symbols =
   ; LTRARROW
   ; RTLARROW
   ; EQUALS
-  ; SEMICOLON
   ; DELIMITER
   ; COLON
   ; PLUS
@@ -112,7 +111,6 @@ let string_of_token = function
   | RTLARROW -> "<-"
   | EQUALS -> "="
   | COLON -> ":"
-  | SEMICOLON -> ";"
   | DELIMITER -> ";;"
   | LBRACK -> "["
   | RBRACK -> "]"

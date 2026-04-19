@@ -46,7 +46,6 @@ rule token = parse
   | "<-"                      { RTLARROW }
   | '='                       { EQUALS }
   | ':'                       { COLON }
-  | ';'                       { SEMICOLON }
   | ";;"                      { DELIMITER }
   | '['                       { LBRACK }
   | ']'                       { RBRACK }
