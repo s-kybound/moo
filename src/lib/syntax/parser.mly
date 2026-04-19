@@ -442,8 +442,11 @@ shape:
   | CODATA                                              { Codata }
 
 type_use:
-  | polarised_type                                      { $1 }
   | abstract_type                                       { let (name, negated) = $1 in Abstract { name; negated } }
+  | non_abstract_type_use                               { $1 }
+
+non_abstract_type_use:
+  | polarised_type                                      { $1 }
   | unify_type                                          { $1 }
 
 unify_type:
@@ -453,7 +456,7 @@ unify_type:
 
 unify_type_aux:
   | LBRACK names=separated_nonempty_list(COMMA, abstract_intro) RBRACK 
-    t=type_use
+    t=non_abstract_type_use
       { AbstractIntroducer (names, t) }
 
 abstract_intro:
