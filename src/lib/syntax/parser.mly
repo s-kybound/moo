@@ -43,7 +43,6 @@
 (* definitions *)
 %token LET LETCC IN
 %token REC
-%token PROC
 %token DO
 %token DELIMITER
 
@@ -163,7 +162,6 @@ sig_item:
 
 term_definition:
   | let_definition                                      { $1 }
-  | proc_definition                                     { $1 }
 
 type_definition:
   | s=shape m=mode n=kind_binder EQUALS t=full_raw_type { let n, abstracts = n in
@@ -173,12 +171,9 @@ type_definition:
   | TYPE n=kind_binder EQUALS t=type_expr               { let n, abstracts = n in
                                                           TypeDef (n, abstracts, t) }
 
-// module_signature:
-//   | MODULE name=any_ident LBRACE interface=interface RBRACE
-//       { ModuleSigDef { name; interface  } }
-
 term_signature:
-  | LET b=untyped_binder_strict EQUALS t=type_use       { TermSigDef (b, t) }
+  | polarized_let_binder b=untyped_binder_strict EQUALS t=type_use       
+                                                        { TermSigDef (b, t) }
 
 type_signature:
   | s=shape m=mode n=kind_binder EQUALS t=full_raw_type { let n, abstracts = n in
@@ -187,40 +182,57 @@ type_signature:
                                                           TypeSigDef (n, abstracts, s, Some (Raw (infer_mode s, s, t))) }
   // | s=shape n=kind_binder                               { TypeSigDef (n, abstracts, s, None) }
 
+(* let or letcc suggest a polarity for the term being bound.
+ * let -> term is an expression
+ * letcc -> term is a continuation *)
+%inline polarized_let_binder:
+  | LET       { Plus }
+  | LETCC     { Minus }
+
+(* match or dispatch suggest a polarity for the term being inspected.
+ * match -> term is an expression
+ * dispatch -> term is an continuation *)
+%inline polarized_match:
+  | MATCH     { Plus }
+  | DISPATCH  { Minus }
+
+(* TODO: decide if letcc or let actually influences the typechecking phase *)
 let_definition:
-  | LET b=typed_binder EQUALS t=def_term                { TermDef (b, t) }
-  | LET REC b=typed_binder EQUALS t=def_term            { TermDef (b, mk_term $startpos $endpos (Rec (b, t))) }
+  | polarized_let_binder b=typed_binder EQUALS t=def_term                
+                                                        { TermDef (b, t) }
+  | polarized_let_binder REC b=typed_binder EQUALS t=def_term            
+                                                        { TermDef (b, mk_term $startpos $endpos (Rec (b, t))) }
+(* procedures are sugar over matchers,
+ * they are useful enough to be granted
+ * native representation *)
+  | pol=polarized_let_binder proc_maker=proc_aux(typed_binder)
+      { let (b, body) = proc_maker pol in
+        TermDef (b, body) 
+      }
 
 abstract_intro_list:
   | LBRACK names=separated_nonempty_list(COMMA, abstract_intro) RBRACK
       { names }
   |   { [] }
 
-(* procedures are sugar over matchers,
- * they are useful enough to be granted
- * native representation *)
-proc_definition:
-  | proc_body=proc_aux(typed_binder)                    { 
-                                                          let (b, body) = proc_body in
-                                                          TermDef (b, body) 
-                                                        }
-
 (* returns a tuple of the binder and the body. 
  * so that we can use this in either definitions or matchlet definitions *)
 proc_aux(binder):
-  | PROC b=untyped_binder_strict ts=abstract_intro_list params=proc_binders(binder) body=proc_body
-      { (b, mk_term $startpos $endpos (Proc (ts, params, body))) }
-  | PROC REC b=untyped_binder_strict ts=abstract_intro_list params=proc_binders(binder) body=proc_body
+  | b=untyped_binder_strict ts=abstract_intro_list params=proc_binders(binder) 
+      EQUALS
+    body=statement
+      { fun pol -> (b, mk_term $startpos $endpos (Proc (ts, params, body, pol))) }
+  | REC b=untyped_binder_strict ts=abstract_intro_list params=proc_binders(binder) 
+      EQUALS
+    body=statement
       {
-        let proc = mk_recursive b (mk_term $startpos $endpos (Proc (ts, params, body))) in
+        fun pol ->
+        let proc = mk_recursive b (mk_term $startpos $endpos (Proc (ts, params, body, pol))) in
         (b, proc)
       }
 
 proc_binders(binder):
   | LPAREN separated_list(COMMA, binder) RPAREN   { $2 }
-
-proc_body:
-  | LBRACE statement RBRACE                             { $2 }
 
 (* -- STATEMENTS AND TERMS -- *)
 
@@ -244,37 +256,39 @@ fork_command:
 
 (* sugared commands *)
 cutlet:
-  | implied_direction=polarized_matchlet_binding 
+  | implied_matched_term_polarity=polarized_match 
     matched_term=indirect_term 
     matcher_term=match_body
-      { mk_command $startpos $endpos (Matchlet { matched_term; matcher_term ; implied_direction }) }
-  | implied_direction=polarized_let_binding binder=binder RTLARROW bound_term=term IN body=statement
+      { mk_command $startpos $endpos (Matchlet  { matched_term
+                                                ; matcher_term 
+                                                ; implied_matched_term_polarity }) 
+      }
+  | implied_bound_term_polarity=polarized_let_binder binder=binder EQUALS bound_term=term IN body=statement
       {
-        mk_command $startpos $endpos (Cutlet { binder; bound_term; body; implied_direction })
+        mk_command $startpos $endpos (Cutlet    { binder
+                                                ; bound_term
+                                                ; body
+                                                ; implied_bound_term_polarity })
       }
   (* let rec... itself sugar over fixpoint terms *)
-  | implied_direction=polarized_let_binding REC binder=binder RTLARROW bound_term=term IN body=statement
+  | implied_bound_term_polarity=polarized_let_binder REC binder=binder EQUALS bound_term=term IN body=statement
       {
         let bound_term = mk_recursive binder bound_term in
-        mk_command $startpos $endpos (Cutlet { binder; bound_term; body; implied_direction })
+        mk_command $startpos $endpos (Cutlet    { binder
+                                                ; bound_term
+                                                ; body
+                                                ; implied_bound_term_polarity })
       }
   (* proclet *)
-  | implied_direction=polarized_let_binding proc_aux=proc_aux(binder) IN body=statement
+  | implied_bound_term_polarity=polarized_let_binder proc_maker=proc_aux(binder) IN body=statement
       {
-        let (binder, bound_term) = proc_aux in
-        mk_command $startpos $endpos (Cutlet { binder; bound_term; body; implied_direction })
+        let (binder, bound_term) = proc_maker implied_bound_term_polarity in
+        mk_command $startpos $endpos (Cutlet    { binder
+                                                ; bound_term
+                                                ; body
+                                                ; implied_bound_term_polarity })
       }
-
-%inline polarized_let_binding:
-  | LET       { Data }
-  | LETCC     { Codata }
-
-%inline polarized_matchlet_binding:
-  | MATCH     { Data }
-  | DISPATCH  { Codata }
   
-
-
 (* core commands and arithmetic operations *)
 command:
   | l_term=term DOT r_term=term

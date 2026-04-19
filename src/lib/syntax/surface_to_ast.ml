@@ -56,12 +56,18 @@ let cutlet_let
   mk_core ~loc l_term r_term
 ;;
 
-let make_proc_type (abstracts : Surface.unify_ty list) (param_types : Ast.ty_use list)
+let make_proc_type
+      (abstracts : Surface.unify_ty list)
+      (param_types : Ast.ty_use list)
+      (pol : Ast.polarity)
   : Ast.ty_use
   =
-  let base_type =
-    Ast.Polarised (Ast.Plus, Ast.Raw (Ast.By_value, Ast.Codata, Ast.Product param_types))
+  let shape, mode =
+    match pol with
+    | Plus -> Ast.Codata, Ast.By_value
+    | Minus -> Ast.Data, Ast.By_name
   in
+  let base_type = Ast.Polarised (pol, Ast.Raw (mode, shape, Ast.Product param_types)) in
   List.fold_right
     (fun abstract_name acc -> Ast.AbstractIntroducer (abstract_name, acc))
     abstracts
@@ -248,23 +254,32 @@ and surface_term_to_ast_term_node (t : Surface.term) : Ast.core_ann Ast.term_nod
                  (Ast.Rec
                     (surface_binder_name_to_ast_binder name, surface_term_to_ast_term term))
              , surface_ty_use_to_ast_ty_use ty_use )))
-  | Proc (abstracts, binders, body) ->
-    let typs =
-      List.map
-        (fun ({ typ; _ } : Surface.binder) ->
-           match typ with
-           | None ->
-             raise
-               (Error.SyntaxError
-                  { span = None; message = "Binder without type in procedure" })
-           | Some ty -> surface_ty_use_to_ast_ty_use ty)
-        binders
+  | Proc (abstracts, binders, body, pol) ->
+    (* assign a proc_type only if all binders have types. 
+     * if there is a binder with no type, do not assign one.
+     *)
+    let proc_type =
+      if List.exists (fun b -> b.Surface.typ = None) binders
+      then None
+      else (
+        let typs =
+          List.map
+            (fun ({ typ; _ } : Surface.binder) ->
+               (* safe, as we have ensured that all binders have types *)
+               surface_ty_use_to_ast_ty_use (Option.get typ))
+            binders
+        in
+        Some (make_proc_type abstracts typs pol))
     in
-    let proc_type = make_proc_type abstracts typs in
-    let untyped_proc =
-      mk_term ~loc:ann (Ast.Matcher (make_matcher_body ann [ Surface.Tup binders, body ]))
+    let untyped_proc_term =
+      Ast.Matcher (make_matcher_body ann [ Surface.Tup binders, body ])
     in
-    Ast.Ann (untyped_proc, proc_type)
+    begin match proc_type with
+    | None -> untyped_proc_term
+    | Some proc_type ->
+      let untyped_proc = mk_term ~loc:ann untyped_proc_term in
+      Ast.Ann (untyped_proc, proc_type)
+    end
   | UnopTerm (op, in_term) ->
     let out_name = genvar "unop_out" in
     let out_term = mk_var ~loc:ann (Ast.Base out_name) in
@@ -333,16 +348,17 @@ and surface_command_to_ast_command_node (cmd : Surface.command)
   : Ast.core_ann Ast.command_node
   =
   match cmd.it with
-  | Surface.Matchlet { matched_term; matcher_term; implied_direction } ->
+  | Surface.Matchlet { matched_term; matcher_term; implied_matched_term_polarity } ->
     let matched_term = surface_term_to_ast_term matched_term in
     let matcher_term = surface_term_to_ast_term matcher_term in
     let expression_term, continuation_term =
-      match implied_direction with
-      | Data -> matched_term, matcher_term
-      | Codata -> matcher_term, matched_term
+      match implied_matched_term_polarity with
+      | Plus -> matched_term, matcher_term
+      | Minus -> matcher_term, matched_term
     in
     Ast.Core { l_term = expression_term; r_term = continuation_term }
-  | Surface.Cutlet { binder = { name; typ }; bound_term; body; implied_direction } ->
+  | Surface.Cutlet
+      { binder = { name; typ }; bound_term; body; implied_bound_term_polarity } ->
     let binding_term =
       match typ with
       | None -> surface_term_to_ast_term bound_term
@@ -357,9 +373,9 @@ and surface_command_to_ast_command_node (cmd : Surface.command)
            (surface_binder_name_to_ast_binder name, surface_command_to_ast_command body))
     in
     let expression_term, continuation_term =
-      match implied_direction with
-      | Data -> bound_term, binding_term
-      | Codata -> binding_term, bound_term
+      match implied_bound_term_polarity with
+      | Plus -> bound_term, binding_term
+      | Minus -> binding_term, bound_term
     in
     Ast.Core { l_term = expression_term; r_term = continuation_term }
   | Surface.Core { l_term; r_term } ->

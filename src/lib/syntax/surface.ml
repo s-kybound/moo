@@ -103,7 +103,7 @@ and term_node =
   | Ann of term * ty_use
   | UnopTerm of unop * term
   | BopTerm of bop * term * term
-  | Proc of unify_ty list * binder list * command
+  | Proc of unify_ty list * binder list * command * polarity
   | Exit
 
 and command = command_node Loc.located
@@ -112,13 +112,13 @@ and command_node =
   | Matchlet of
       { matched_term : term
       ; matcher_term : term
-      ; implied_direction : shape
+      ; implied_matched_term_polarity : polarity
       }
   | Cutlet of
       { binder : binder
       ; bound_term : term
       ; body : command
-      ; implied_direction : shape
+      ; implied_bound_term_polarity : polarity
       }
   (* | Ignore of term * command *)
   | Core of

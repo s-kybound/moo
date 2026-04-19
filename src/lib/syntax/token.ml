@@ -15,7 +15,6 @@ let keywords =
   ; "data", DATA
   ; "codata", CODATA
   ; "exit", EXIT
-  ; "proc", PROC
   ; "cbv", CBV
   ; "cbn", CBN
   ; "type", TYPE
@@ -95,7 +94,6 @@ let string_of_token = function
   | DATA -> "data"
   | CODATA -> "codata"
   | EXIT -> "exit"
-  | PROC -> "proc"
   | CBV -> "cbv"
   | CBN -> "cbn"
   | TYPE -> "type"
