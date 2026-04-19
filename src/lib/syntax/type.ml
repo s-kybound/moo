@@ -584,33 +584,214 @@ let type_of_namespaced_constructor
   | Namespaced (path, name) -> type_of_raw_constructor name path constr_arity tydef_env
 ;;
 
+(* given an ADT type, a variant and its corresponding arguments, 
+ * get the instantiated version of the ADT where all abstract types are replaced 
+ ** invariant: type must match *)
+let tyu_of_instantiated_raw_variant
+      ((ty_name, abstracts) : name * string list)
+      (ty : ty)
+      ((constr_name, type_args) : string * ty_use list)
+      (tydef_env : tydef_env)
+  : ty_use
+  =
+  let rec add_binding name bound_ty bindings =
+    match List.assoc_opt name bindings with
+    | None -> Ok ((name, bound_ty) :: bindings)
+    | Some existing when tyu_equal existing bound_ty tydef_env -> Ok bindings
+    | Some existing ->
+      let message =
+        Printf.sprintf
+          "Inconsistent instantiation for abstract type %s in constructor %s: %s vs %s"
+          name
+          constr_name
+          (Pretty.show_ty_use existing)
+          (Pretty.show_ty_use bound_ty)
+      in
+      Error message
+  and match_tyu template actual bindings =
+    match template, actual with
+    | Abstract { negated; name }, _ ->
+      let bound_ty = if negated then negate_tyu actual else actual in
+      add_binding name bound_ty bindings
+    | Polarised (pol1, ty1), Polarised (pol2, ty2) when pol1 = pol2 ->
+      match_ty ty1 ty2 bindings
+    | AbstractIntroducer (_, inner), _ -> match_tyu inner actual bindings
+    | _, AbstractIntroducer (_, inner) -> match_tyu template inner bindings
+    | Weak _, _ | _, Weak _ ->
+      if tyu_equal template actual tydef_env
+      then Ok bindings
+      else Error "Weak type mismatch while instantiating variant"
+    | _ ->
+      let message =
+        Printf.sprintf
+          "Type mismatch while instantiating constructor %s: expected %s but got %s"
+          constr_name
+          (Pretty.show_ty_use template)
+          (Pretty.show_ty_use actual)
+      in
+      Error message
+  and match_ty template actual bindings =
+    match template, actual with
+    | Named (name1, args1), Named (name2, args2)
+      when name1 = name2 && List.length args1 = List.length args2 ->
+      match_tyu_lists args1 args2 bindings
+    | Raw (mode1, shape1, raw1), Raw (mode2, shape2, raw2)
+      when mode1 = mode2 && shape1 = shape2 -> match_raw_ty raw1 raw2 bindings
+    | Raw (mode, shape, raw), Named (name, args)
+    | Named (name, args), Raw (mode, shape, raw) ->
+      if is_variant_ty (Named (name, args)) tydef_env
+      then (
+        let message =
+          Printf.sprintf
+            "Type mismatch while instantiating constructor %s: expected variant type but \
+             got %s"
+            constr_name
+            (Pretty.show_ty actual)
+        in
+        Error message)
+      else (
+        let mode2, shape2, raw2 = ty_to_raw_ty actual tydef_env in
+        if mode = mode2 && shape = shape2
+        then match_raw_ty raw raw2 bindings
+        else (
+          let message =
+            Printf.sprintf
+              "Type mismatch while instantiating constructor %s: expected %s but got %s"
+              constr_name
+              (Pretty.show_ty template)
+              (Pretty.show_ty actual)
+          in
+          Error message))
+    | _ ->
+      let message =
+        Printf.sprintf
+          "Type mismatch while instantiating constructor %s: expected %s but got %s"
+          constr_name
+          (Pretty.show_ty template)
+          (Pretty.show_ty actual)
+      in
+      Error message
+  and match_raw_ty template actual bindings =
+    match template, actual with
+    | Int, Int | Bool, Bool -> Ok bindings
+    | Product tys1, Product tys2 when List.length tys1 = List.length tys2 ->
+      match_tyu_lists tys1 tys2 bindings
+    | Array tyu1, Array tyu2 -> match_tyu tyu1 tyu2 bindings
+    | Variant vars1, Variant vars2 when List.length vars1 = List.length vars2 ->
+      match_variants vars1 vars2 bindings
+    | _ ->
+      let message =
+        Printf.sprintf "Raw type mismatch while instantiating constructor %s" constr_name
+      in
+      Error message
+  and match_variants variants1 variants2 bindings =
+    match variants1, variants2 with
+    | [], [] -> Ok bindings
+    | v1 :: rest1, v2 :: rest2
+      when v1.constr_name = v2.constr_name
+           && List.length v1.constr_args = List.length v2.constr_args -> begin
+      match match_tyu_lists v1.constr_args v2.constr_args bindings with
+      | Error _ as e -> e
+      | Ok new_bindings -> match_variants rest1 rest2 new_bindings
+    end
+    | _ ->
+      let message =
+        Printf.sprintf
+          "Variant shape mismatch while instantiating constructor %s"
+          constr_name
+      in
+      Error message
+  and match_tyu_lists templates actuals bindings =
+    match templates, actuals with
+    | [], [] -> Ok bindings
+    | t :: ts, a :: rest -> begin
+      match match_tyu t a bindings with
+      | Error _ as e -> e
+      | Ok new_bindings -> match_tyu_lists ts rest new_bindings
+    end
+    | _ -> Error "Arity mismatch while matching constructor argument types"
+  in
+  let extract_bindings constr_args =
+    if List.length constr_args <> List.length type_args
+    then (
+      let message =
+        Printf.sprintf
+          "Arity mismatch for constructor %s while instantiating ADT: expected %d but \
+           got %d"
+          constr_name
+          (List.length constr_args)
+          (List.length type_args)
+      in
+      Error message)
+    else match_tyu_lists constr_args type_args []
+  in
+  match ty with
+  | Raw (_, shape, Variant variants) ->
+    let result =
+      match List.find_opt (fun (v : variant) -> v.constr_name = constr_name) variants with
+      | None ->
+        let message =
+          Printf.sprintf
+            "Constructor %s not found in type %s"
+            constr_name
+            (Pretty.show_ty ty)
+        in
+        Error message
+      | Some { constr_args; _ } -> extract_bindings constr_args
+    in
+    begin match result with
+    | Error message -> raise (Error.TypeError { loc = None; message })
+    | Ok bindings ->
+      let instantiated_args =
+        List.map
+          (fun abs_name ->
+             match List.assoc_opt abs_name bindings with
+             | Some tyu -> tyu
+             | None ->
+               let message =
+                 Printf.sprintf
+                   "Could not infer abstract type %s while instantiating constructor %s"
+                   abs_name
+                   constr_name
+               in
+               raise (Error.TypeError { loc = None; message }))
+          abstracts
+      in
+      let polarity =
+        match shape with
+        | Data -> Plus
+        | Codata -> Minus
+      in
+      Polarised (polarity, Named (ty_name, instantiated_args))
+    end
+  | _ ->
+    let message =
+      Printf.sprintf
+        "Type %s is not a variant type, cannot get constructor %s's argument types"
+        (Pretty.show_ty ty)
+        constr_name
+    in
+    raise (Error.TypeError { loc = None; message })
+;;
+
+let tyu_of_instantiated_namespaced_variant
+      ((ty_name, abstracts) : name * string list)
+      (ty : ty)
+      ((constr_name, type_args) : name * ty_use list)
+      (tydef_env : tydef_env)
+  : ty_use
+  =
+  match constr_name with
+  | Base name ->
+    tyu_of_instantiated_raw_variant (ty_name, abstracts) ty (name, type_args) tydef_env
+  | Namespaced (_, name) ->
+    tyu_of_instantiated_raw_variant (ty_name, abstracts) ty (name, type_args) tydef_env
+;;
+
 let args_of_namespaced_variant (constr : name) (ty : ty) : ty_use list =
   match constr with
   | Base name -> args_of_raw_variant name ty
   | Namespaced (_, name) -> args_of_raw_variant name ty
-;;
-
-(* TODO: the granularity of this tyu upgrading system can be improved 
- * returns the most specific of two equal tyu's.
- * invariant: must be equal *)
-let most_specific_tyu (tyu1 : ty_use) (tyu2 : ty_use) (tydef_env : tydef_env) : ty_use =
-  if not (tyu_equal tyu1 tyu2 tydef_env)
-  then (
-    let message =
-      Printf.sprintf
-        "Cannot get most specific tyu of two tyus that are not equal: %s and %s"
-        (Pretty.show_ty_use tyu1)
-        (Pretty.show_ty_use tyu2)
-    in
-    raise (Error.TypeError { loc = None; message }))
-  else (
-    match tyu1, tyu2 with
-    | Abstract _, Abstract _ -> tyu1 (* tyu_equal ensures that both are equal *)
-    | Abstract _, tyu | tyu, Abstract _ -> tyu
-    | (Polarised _ as tyu), _ | _, (Polarised _ as tyu) -> tyu
-    | AbstractIntroducer _, _ | _, AbstractIntroducer _ ->
-      failwith "TODO: most_specific_tyu does not yet support abstract introducers"
-    | Weak _, tyu -> tyu)
 ;;
 
 let validate_tydef (name, abstracts) ty (tydef_env : tydef_env) =
@@ -700,4 +881,46 @@ let rec is_lazy_tyu tyu tydef_env =
      | Minus, By_value -> true
      | Plus, By_value -> false
      | Minus, By_name -> false)
+;;
+
+let is_subtype_tyu subtype supertype tydef_env : bool =
+  ignore (supertype, subtype, tydef_env);
+  failwith "TODO: is_subtype_tyu is not yet implemented"
+;;
+
+let ( let* ) = Option.bind
+
+(* the join of several type uses is the 
+ * least upper bound of all the type uses, ie
+ * the most specified supertype of all the tyus
+ * present.
+ *)
+let rec join_tyu (tyus : ty_use list) tydef_env : ty_use option =
+  match tyus with
+  | [] -> None
+  | [ tyu ] -> Some tyu
+  | tyu :: rest ->
+    let* rest_tyu = join_tyu rest tydef_env in
+    if is_subtype_tyu tyu rest_tyu tydef_env
+    then Some rest_tyu
+    else if is_subtype_tyu rest_tyu tyu tydef_env
+    then Some tyu
+    else None
+;;
+
+(* the meet of several type uses 
+ * the most specified subtype of all the tyus
+ * present.
+ *)
+let rec meet_tyu (tyus : ty_use list) tydef_env : ty_use option =
+  match tyus with
+  | [] -> None
+  | [ tyu ] -> Some tyu
+  | tyu :: rest ->
+    let* rest_tyu = meet_tyu rest tydef_env in
+    if is_subtype_tyu tyu rest_tyu tydef_env
+    then Some tyu
+    else if is_subtype_tyu rest_tyu tyu tydef_env
+    then Some rest_tyu
+    else None
 ;;

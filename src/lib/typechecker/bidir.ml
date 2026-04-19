@@ -118,51 +118,26 @@ module IMap = Map.Make (Int)
 
 type context = Ast.ty_use IMap.t
 
-let merge_contexts (ctx1 : context) (ctx2 : context) tydef_env : context =
+let merge_contexts (ctx1 : context) (ctx2 : context) : context =
   IMap.union
-    (fun id tyu1 tyu2 ->
-       if not (tyu_equal tyu1 tyu2 tydef_env)
-       then (
-         let msg =
-           Printf.sprintf
-             "merge_contexts: conflicting types for id %d: %s vs %s"
-             id
-             (Syntax.Pretty.show_ty_use tyu1)
-             (Syntax.Pretty.show_ty_use tyu2)
-         in
-         type_error msg)
-       else Some (Type.most_specific_tyu tyu1 tyu2 tydef_env))
+    (fun _id _tyu1 _tyu2 ->
+       (* two instance of the same usage should not happen, as each use should be linear *)
+       assert false)
     ctx1
     ctx2
 ;;
 
-let add_to_context tydef_env id tyu ctx =
-  merge_contexts ctx (IMap.singleton id tyu) tydef_env
-;;
+let add_to_context id tyu ctx = merge_contexts ctx (IMap.singleton id tyu)
+let remove_from_context id ctx = IMap.remove id ctx
+let empty_context () : context = IMap.empty
 
-let type_of_usages (ids : int list) (ctx : context) (tydef_env : tydef_env)
-  : (Ast.ty_use option, string) result
-  =
-  List.fold_left
-    (fun acc id ->
-       match acc, IMap.find_opt id ctx with
-       | Error _, _ -> acc
-       | Ok None, result | Ok result, None -> Ok result
-       | Ok (Some tyu), Some tyu' ->
-         if not (tyu_equal tyu tyu' tydef_env)
-         then (
-           let msg =
-             Printf.sprintf
-               "type_of_usages: conflicting types for id %d: %s vs %s"
-               id
-               (Syntax.Pretty.show_ty_use tyu)
-               (Syntax.Pretty.show_ty_use tyu')
-           in
-           Error msg)
-         else Ok (Some (Type.most_specific_tyu tyu tyu' tydef_env)))
-    (Ok None)
-    ids
-;;
+exception UnderspecifiedTypeError
+exception AttemptOtherSide
+
+type inference_mode =
+  | CommandInferData
+  | CommandInferCodata
+  | None
 
 let annotate (term : typed_term) (tyu : Ast.ty_use) : typed_term = set_term_ty term tyu
 
@@ -179,6 +154,7 @@ let rec synthesize
   let annotate_with = annotate expr in
   let ann, node = expr in
   match node with
+  (* variables *)
   | Ast.Variable (Namespaced _ as n) -> begin
     match Env.lookup_env n ty_env with
     | None ->
@@ -187,42 +163,19 @@ let rec synthesize
         (Printf.sprintf "Namespaced variable %s not found" (Pretty.show_name n))
     | Some { origin_path; obj = tyu } ->
       let tyu = Type.qualify_tyu origin_path tyu in
-      annotate_with tyu, tyu, knowledge
+      annotate_with tyu, tyu, empty_context ()
   end
   | Ast.Variable (Base _) ->
     (match ann.unique_id with
      | None -> assert false (* impossible case *)
      | Some unique_id ->
      match IMap.find_opt unique_id knowledge with
-     | Some ty_use -> annotate_with ty_use, ty_use, knowledge
-     | None ->
-       let tyu = WeakTyu.new_unknown_tyu () in
-       let knowledge = add_to_context tydef_env unique_id tyu knowledge in
-       annotate_with tyu, tyu, knowledge)
-  | Ast.Num _ ->
-    let tyu = WeakTyu.new_constructor_tyu Int in
-    annotate_with tyu, tyu, knowledge
-  | Ast.Bool _ ->
-    let tyu = WeakTyu.new_constructor_tyu Bool in
-    annotate_with tyu, tyu, knowledge
+     | Some ty_use -> annotate_with ty_use, ty_use, empty_context ()
+     | None -> raise UnderspecifiedTypeError)
   | Ast.Exit ->
     let tyu = WeakTyu.new_destructor_tyu Int in
-    annotate_with tyu, tyu, knowledge
-  | Ast.Tuple [] ->
-    let tyu = WeakTyu.new_constructor_tyu (Product []) in
-    annotate_with tyu, tyu, knowledge
-  | Ast.Tuple terms ->
-    let terms, typs, new_knowledge =
-      List.fold_left
-        (fun (terms_acc, tys_acc, ctx_acc) term ->
-           let term, ty_use, term_ctx = synthesize ctx_acc term tydef_env ty_env in
-           term :: terms_acc, ty_use :: tys_acc, merge_contexts ctx_acc term_ctx tydef_env)
-        ([], [], knowledge)
-        terms
-    in
-    let terms, typs = List.rev terms, List.rev typs in
-    let tyu = WeakTyu.new_constructor_tyu (Product typs) in
-    annotate (ann, Ast.Tuple terms) tyu, tyu, new_knowledge
+    annotate_with tyu, tyu, empty_context ()
+  (* upshifts - synthesizing annotated terms *)
   | Ast.Ann (tterm, ty_use) -> begin
     match validate_tyu ty_use tydef_env with
     | Error msg ->
@@ -230,109 +183,183 @@ let rec synthesize
         ?loc:ann.loc
         (Printf.sprintf "synthesize: annotation has invalid type: %s" msg)
     | Ok _ ->
+    match is_constructor_tyu ty_use tydef_env with
+    (* Only true constructor types and abstract types end up here.
+     * For abstract types, we don't care about whether they are constructors, but
+     * they need the annotations to propagate knowledge *)
+    | Some true | None ->
       let checked_term, demands = check knowledge tterm ty_use tydef_env ty_env in
       (* we can remove the annotations here *)
       checked_term, ty_use, demands
+    | Some false ->
+      let synthesized_term, synthesized_tyu, demands =
+        synthesize knowledge tterm tydef_env ty_env
+      in
+      if not (Type.is_subtype_tyu synthesized_tyu ty_use tydef_env)
+      then
+        type_mismatch
+          ?loc:ann.loc
+          ty_use
+          synthesized_tyu
+          "synthesize: annotation type mismatch with synthesized type"
+      else annotate synthesized_term synthesized_tyu, synthesized_tyu, demands
   end
   | Ast.Rec (Ast.Wildcard _, _) -> assert false (* impossible case, rejected by syntax *)
   | Ast.Rec ((Ast.Var (_, name) as tbinder), tterm) ->
     let inner_expr, inferred_tyu, demands = synthesize knowledge tterm tydef_env ty_env in
     let relevant_ids = binder_ids_of_binder tbinder in
-    let binder_tyu =
-      match type_of_usages relevant_ids demands tydef_env with
-      | Ok None ->
-        type_error
-          ?loc:ann.loc
-          (Printf.sprintf "synthesize: recursive binder %s has no usages" name)
-      | Error msg -> type_error ?loc:ann.loc msg
-      | Ok (Some ty_use) -> ty_use
-    in
-    if not (tyu_equal inferred_tyu binder_tyu tydef_env)
-    then
-      type_mismatch
-        ?loc:ann.loc
-        binder_tyu
-        inferred_tyu
-        (Printf.sprintf
-           "synthesize: recursive binder %s has type %s but body has type %s"
-           name
-           (Syntax.Pretty.show_ty_use binder_tyu)
-           (Syntax.Pretty.show_ty_use inferred_tyu))
-    else (
-      let tyu = most_specific_tyu inferred_tyu binder_tyu tydef_env in
-      if
-        recursive_name_in_unguarded_position name tterm
-        && not (Type.is_lazy_tyu tyu tydef_env)
-      then
+    let usage_tyus = List.map (fun id -> IMap.find id demands) relevant_ids in
+    let out_tyu =
+      match meet_tyu (inferred_tyu :: usage_tyus) tydef_env with
+      | None ->
         type_error
           ?loc:ann.loc
           (Printf.sprintf
-             "synthesize: recursive binder %s appears in an unguarded position and has \
-              non-lazy type %s"
+             "synthesize: type mismatch between usages of recursive binder %s: %s"
              name
-             (Syntax.Pretty.show_ty_use tyu))
-      else (
-        let expr = ann, Ast.Rec (tbinder, inner_expr) in
-        annotate expr tyu, tyu, demands))
+             (String.concat ", " (List.map Syntax.Pretty.show_ty_use usage_tyus)))
+      | Some ty_use -> ty_use
+    in
+    if
+      recursive_name_in_unguarded_position name tterm
+      && not (Type.is_lazy_tyu out_tyu tydef_env)
+    then
+      type_error
+        ?loc:ann.loc
+        (Printf.sprintf
+           "synthesize: recursive binder %s appears in an unguarded position and has \
+            non-lazy type %s"
+           name
+           (Syntax.Pretty.show_ty_use out_tyu))
+    else (
+      (* remove the binder usages from the demands *)
+      let new_demands =
+        List.fold_left (fun acc id -> remove_from_context id acc) demands relevant_ids
+      in
+      let expr = ann, Ast.Rec (tbinder, inner_expr) in
+      annotate expr out_tyu, out_tyu, new_demands)
   | Ast.Mu (tbinder, tcommand) ->
-    let tcommand, new_knowledge = typecheck_command knowledge tcommand tydef_env ty_env in
+    let tcommand, demands = typecheck_command knowledge tcommand tydef_env ty_env in
     let relevant_ids = binder_ids_of_binder tbinder in
-    (match type_of_usages relevant_ids new_knowledge tydef_env with
-     | Error msg -> type_error ?loc:ann.loc msg
-     | Ok res ->
-       let tyu =
-         match res with
-         | Some tyu -> Type.negate_tyu tyu
-         | None -> WeakTyu.new_unknown_tyu ()
-       in
-       let expr = ann, Ast.Mu (tbinder, tcommand) in
-       annotate expr tyu, tyu, new_knowledge)
+    if List.is_empty relevant_ids
+    then (
+      let expr = ann, Ast.Mu (tbinder, tcommand) in
+      annotate expr (WeakTyu.new_unknown_tyu ()), WeakTyu.new_unknown_tyu (), demands)
+    else (
+      let usage_tyus = List.map (fun id -> IMap.find id demands) relevant_ids in
+      let out_tyu =
+        match meet_tyu usage_tyus tydef_env with
+        | None ->
+          type_error
+            ?loc:ann.loc
+            (Printf.sprintf
+               "synthesize: type mismatch between usages of binder %s: %s"
+               (match tbinder with
+                | Ast.Var (_, name) -> name
+                | Ast.Wildcard _ -> "_")
+               (String.concat ", " (List.map Syntax.Pretty.show_ty_use usage_tyus)))
+        | Some ty_use -> Type.negate_tyu ty_use
+      in
+      begin match is_constructor_tyu out_tyu tydef_env with
+      | Some true -> raise AttemptOtherSide
+      | Some false | None ->
+        let new_demands =
+          List.fold_left (fun acc id -> remove_from_context id acc) demands relevant_ids
+        in
+        let expr = ann, Ast.Mu (tbinder, tcommand) in
+        annotate expr out_tyu, out_tyu, new_demands
+      end)
   | Ast.Matcher branches ->
-    let new_branches, most_specific_type_of_consumed, new_knowledge =
+    let new_branches, type_uses, demands =
       List.fold_left
-        (fun (branches_acc, most_specific_type_of_consumed, demands) (pattern, command) ->
-           let new_command, tyu_of_pattern_opt, new_knowledge =
+        (fun (branches_acc, type_uses_acc, demands_acc) (pattern, command) ->
+           let new_command, requested_tyu, new_demands =
              match pattern with
              | Ast.Numeral _ ->
-               let cmd, command_knowledge =
-                 typecheck_command demands command tydef_env ty_env
+               let cmd, out_demands =
+                 typecheck_command knowledge command tydef_env ty_env
                in
-               cmd, Some (WeakTyu.new_constructor_tyu Int), command_knowledge
+               cmd, WeakTyu.new_constructor_tyu Int, out_demands
              | Ast.Boolean _ ->
-               let cmd, command_knowledge =
-                 typecheck_command demands command tydef_env ty_env
+               let cmd, out_demands =
+                 typecheck_command knowledge command tydef_env ty_env
                in
-               cmd, Some (WeakTyu.new_constructor_tyu Bool), command_knowledge
+               cmd, WeakTyu.new_constructor_tyu Bool, out_demands
              | Ast.Binder binder ->
+               let cmd, new_demands =
+                 typecheck_command knowledge command tydef_env ty_env
+               in
                let unique_ids = binder_ids_of_binder binder in
-               let cmd, command_knowledge =
-                 typecheck_command demands command tydef_env ty_env
-               in
-               begin match type_of_usages unique_ids command_knowledge tydef_env with
-               | Error msg -> type_error ?loc:ann.loc msg
-               | Ok None -> cmd, Some (WeakTyu.new_unknown_tyu ()), command_knowledge
-               | Ok (Some result) ->
-                 if not (Type.is_constructor_tyu_forced result tydef_env)
+               if List.is_empty unique_ids
+               then cmd, WeakTyu.new_unknown_tyu (), new_demands
+               else (
+                 let usage_tyus =
+                   List.map (fun id -> IMap.find id new_demands) unique_ids
+                 in
+                 let out_tyu =
+                   match meet_tyu usage_tyus tydef_env with
+                   | None ->
+                     let msg =
+                       Printf.sprintf
+                         "synthesize: type mismatch between usages of binder in pattern: \
+                          %s"
+                         (String.concat
+                            ", "
+                            (List.map Syntax.Pretty.show_ty_use usage_tyus))
+                     in
+                     type_error ?loc:ann.loc msg
+                   | Some ty_use -> ty_use
+                 in
+                 if not (Type.is_constructor_tyu_forced out_tyu tydef_env)
                  then type_error ?loc:ann.loc "variable is not a constructed item"
-                 else cmd, Some result, command_knowledge
-               end
+                 else (
+                   let new_demands =
+                     List.fold_left
+                       (fun acc id -> remove_from_context id acc)
+                       new_demands
+                       unique_ids
+                   in
+                   cmd, out_tyu, new_demands))
              | Ast.Tup subpats ->
-               let cmd, command_knowledge =
-                 typecheck_command demands command tydef_env ty_env
+               let cmd, new_demands =
+                 typecheck_command knowledge command tydef_env ty_env
                in
-               let unique_ids = List.map binder_ids_of_binder subpats in
-               let types_of_binders =
+               let out_tyus =
                  List.map
-                   (fun ids ->
-                      match type_of_usages ids command_knowledge tydef_env with
-                      | Error msg -> type_error ?loc:ann.loc msg
-                      | Ok (Some result) -> result
-                      | Ok None -> WeakTyu.new_unknown_tyu ())
-                   unique_ids
+                   (fun subpat ->
+                      let unique_ids = binder_ids_of_binder subpat in
+                      if List.is_empty unique_ids
+                      then WeakTyu.new_unknown_tyu ()
+                      else (
+                        let usage_tyus =
+                          List.map (fun id -> IMap.find id new_demands) unique_ids
+                        in
+                        match meet_tyu usage_tyus tydef_env with
+                        | None ->
+                          let msg =
+                            Printf.sprintf
+                              "synthesize: type mismatch between usages of binder in \
+                               pattern: %s"
+                              (String.concat
+                                 ", "
+                                 (List.map Syntax.Pretty.show_ty_use usage_tyus))
+                          in
+                          type_error ?loc:ann.loc msg
+                        | Some ty_use -> ty_use))
+                   subpats
                in
-               ( cmd
-               , Some (WeakTyu.new_constructor_tyu (Product types_of_binders))
-               , command_knowledge )
+               let new_demands =
+                 List.fold_left
+                   (fun acc subpat ->
+                      let unique_ids = binder_ids_of_binder subpat in
+                      List.fold_left
+                        (fun acc id -> remove_from_context id acc)
+                        acc
+                        unique_ids)
+                   new_demands
+                   subpats
+               in
+               cmd, WeakTyu.new_constructor_tyu (Product out_tyus), new_demands
              | Ast.Constr { pat_name; pat_args } ->
              match
                type_of_namespaced_constructor pat_name (List.length pat_args) tydef_env
@@ -345,14 +372,7 @@ let rec synthesize
                    (List.length pat_args)
                in
                type_error ?loc:ann.loc msg
-             | Some (ty_name, abs_tys, ty, polarity) ->
-               (* Idea:
-                * - inject holes for any abstract types
-                * - get the expected type for each variant argument
-                * - typecheck the command with these expectations
-                * - output the type of the pattern with the abstract types replaced
-                *   by those holes, which may unify in the typechecking of the command
-                *)
+             | Some (ty_name, abs_tys, ty, _) ->
                let new_bindings =
                  List.map (fun abs -> abs, WeakTyu.new_unknown_tyu ()) abs_tys
                in
@@ -372,58 +392,99 @@ let rec synthesize
                  in
                  type_error ?loc:ann.loc msg)
                else (
-                 let ty_with_holes = Ast.Named (ty_name, List.map snd new_bindings) in
-                 let arg_with_tys = List.combine pat_args variant_tys in
+                 (* using the types we have just discovered, IF the types are fully resolved, we
+                  * inject them into the term *)
                  let new_knowledge =
-                   List.fold_left
-                     (fun ctx_acc (pat_arg, arg_ty) ->
-                        let unique_ids = binder_ids_of_binder pat_arg in
-                        List.fold_left
-                          (fun ctx_acc id -> add_to_context tydef_env id arg_ty ctx_acc)
-                          ctx_acc
-                          unique_ids)
-                     demands
-                     arg_with_tys
+                   List.fold_left2
+                     (fun ctx_acc pat_arg arg_tyu ->
+                        if not (tyu_is_resolved arg_tyu)
+                        then ctx_acc
+                        else (
+                          let unique_ids = binder_ids_of_binder pat_arg in
+                          List.fold_left
+                            (fun ctx_acc id -> add_to_context id arg_tyu ctx_acc)
+                            ctx_acc
+                            unique_ids))
+                     knowledge
+                     pat_args
+                     variant_tys
                  in
-                 let cmd, command_knowledge =
+                 let cmd, new_demands =
                    typecheck_command new_knowledge command tydef_env ty_env
                  in
-                 let acquired_tyu = Ast.Polarised (polarity, ty_with_holes) in
-                 cmd, Some acquired_tyu, command_knowledge)
+                 let out_tyus =
+                   List.map
+                     (fun subpat ->
+                        let unique_ids = binder_ids_of_binder subpat in
+                        if List.is_empty unique_ids
+                        then WeakTyu.new_unknown_tyu ()
+                        else (
+                          let usage_tyus =
+                            List.map (fun id -> IMap.find id new_demands) unique_ids
+                          in
+                          match meet_tyu usage_tyus tydef_env with
+                          | None ->
+                            let msg =
+                              Printf.sprintf
+                                "synthesize: type mismatch between usages of binder in \
+                                 pattern: %s"
+                                (String.concat
+                                   ", "
+                                   (List.map Syntax.Pretty.show_ty_use usage_tyus))
+                            in
+                            type_error ?loc:ann.loc msg
+                          | Some ty_use -> ty_use))
+                     pat_args
+                 in
+                 (* finally, we inject these back into the expected type *)
+                 let acquired_tyu =
+                   tyu_of_instantiated_namespaced_variant
+                     (ty_name, abs_tys)
+                     ty
+                     (pat_name, out_tyus)
+                     tydef_env
+                 in
+                 let new_demands =
+                   List.fold_left
+                     (fun acc subpat ->
+                        let unique_ids = binder_ids_of_binder subpat in
+                        List.fold_left
+                          (fun acc id -> remove_from_context id acc)
+                          acc
+                          unique_ids)
+                     new_demands
+                     pat_args
+                 in
+                 cmd, acquired_tyu, new_demands)
            in
-           match most_specific_type_of_consumed, tyu_of_pattern_opt with
-           | continue, None | None, continue ->
-             ( (pattern, new_command) :: branches_acc
-             , continue
-             , merge_contexts demands new_knowledge tydef_env )
-           | Some most_specific, Some new_ty ->
-             if not (tyu_equal most_specific new_ty tydef_env)
-             then (
-               let msg =
-                 Printf.sprintf
-                   "synthesize: type mismatch between matcher branches: %s vs %s"
-                   (Syntax.Pretty.show_ty_use most_specific)
-                   (Syntax.Pretty.show_ty_use new_ty)
-               in
-               type_error ?loc:ann.loc msg)
-             else
-               ( (pattern, new_command) :: branches_acc
-               , Some (Type.most_specific_tyu most_specific new_ty tydef_env)
-               , merge_contexts demands new_knowledge tydef_env ))
-        ([], None, knowledge)
+           ( (pattern, new_command) :: branches_acc
+           , requested_tyu :: type_uses_acc
+           , merge_contexts demands_acc new_demands ))
+        ([], [], empty_context ())
         branches
     in
-    (match most_specific_type_of_consumed with
-     | None ->
-       let message =
-         Printf.sprintf
-           "synthesize: unable to determine type of matcher expression from branches"
-       in
-       type_error ?loc:ann.loc message
-     | Some tyu ->
-       let matcher_tyu = Type.negate_tyu tyu in
-       let expr = ann, Ast.Matcher (List.rev new_branches) in
-       annotate expr matcher_tyu, matcher_tyu, new_knowledge)
+    begin match meet_tyu type_uses tydef_env with
+    | None ->
+      let message =
+        Printf.sprintf
+          "synthesize: type mismatch between branches of matcher: %s"
+          (String.concat ", " (List.map Syntax.Pretty.show_ty_use type_uses))
+      in
+      type_error ?loc:ann.loc message
+    | Some out_tyu ->
+      let matcher_tyu = Type.negate_tyu out_tyu in
+      let expr = ann, Ast.Matcher (List.rev new_branches) in
+      annotate expr matcher_tyu, matcher_tyu, demands
+    end
+  (* constructors *)
+  (* constructors will cause the bidirectional typechecker to backtrack 
+   * and attempt the other side of a command, with the exception of
+   * algebraic data types, which can infer their type, and hence behave as an upshift
+   * without an annotation.
+   * oh, but the constructors synthesized here should still be in a checkable position. we should attempt to flip
+   * if we are typechecking a command.
+   * TODO: add a flag to indicate whether the synthesis is at the command level or term level, and only raise AttemptOtherSide if we are at command level.
+   *)
   | Ast.Construction { cons_name; cons_args } ->
     let typ =
       type_of_namespaced_constructor cons_name (List.length cons_args) tydef_env
@@ -457,12 +518,14 @@ let rec synthesize
       else (
         (* for each constituent term, we now have the expected types of each. 
          * create a new cons_args by checking each term against its expected type *)
-        let new_cons_args, new_knowledge =
+        let new_cons_args, new_demands =
           List.fold_left2
-            (fun (acc, ctx) arg expected_ty ->
-               let new_arg, new_ctx = check ctx arg expected_ty tydef_env ty_env in
-               new_arg :: acc, merge_contexts ctx new_ctx tydef_env)
-            ([], knowledge)
+            (fun (acc, discoveries) arg expected_ty ->
+               let new_arg, new_discoveries =
+                 check knowledge arg expected_ty tydef_env ty_env
+               in
+               new_arg :: acc, merge_contexts discoveries new_discoveries)
+            ([], empty_context ())
             cons_args
             variant_tys
         in
@@ -471,38 +534,10 @@ let rec synthesize
         let expr =
           ann, Ast.Construction { cons_name; cons_args = List.rev new_cons_args }
         in
-        annotate expr tyu, tyu, new_knowledge)
+        annotate expr tyu, tyu, new_demands)
     end
-  | Ast.Arr terms ->
-    (* ensure that each term is ty_equal with the last, and return the most
-     * specific term *)
-    let new_terms, most_specific_term, total_knowledge =
-      List.fold_left
-        (fun (terms_acc, ty_acc, ctx_acc) term ->
-           let t, ty_use, term_ctx = synthesize ctx_acc term tydef_env ty_env in
-           match ty_acc with
-           | None ->
-             t :: terms_acc, Some ty_use, merge_contexts ctx_acc term_ctx tydef_env
-           | Some ty_use_acc ->
-             if not (tyu_equal ty_use_acc ty_use tydef_env)
-             then
-               type_mismatch
-                 ?loc:ann.loc
-                 ty_use_acc
-                 ty_use
-                 "synthesize: TArr terms have mismatched types"
-             else t :: terms_acc, Some ty_use, merge_contexts ctx_acc term_ctx tydef_env)
-        ([], None, knowledge)
-        terms
-    in
-    (match most_specific_term with
-     | None ->
-       let tyu = WeakTyu.new_constructor_tyu (Array (WeakTyu.new_unknown_tyu ())) in
-       annotate expr tyu, tyu, total_knowledge
-     | Some most_specific_term ->
-       let expr = ann, Ast.Arr (List.rev new_terms) in
-       let tyu = WeakTyu.new_constructor_tyu (Array most_specific_term) in
-       annotate expr tyu, tyu, total_knowledge)
+  (* constructors. attempt the other side instead *)
+  | Ast.Num _ | Ast.Bool _ | Ast.Tuple _ | Ast.Arr _ -> raise AttemptOtherSide
 
 (* workflow - given demands, check an expression with a type and output discoveries 
  * invariant - the expected type is valid
@@ -526,64 +561,64 @@ and check
         (Printf.sprintf "Namespaced variable %s not found" (Pretty.show_name n))
     | Some { origin_path; obj = tyu } ->
       let tyu = Type.qualify_tyu origin_path tyu in
-      if not (tyu_equal expected_type tyu tydef_env)
-      then
-        type_mismatch
-          ?loc:ann.loc
-          expected_type
-          tyu
-          "check: variable expected type mismatch"
-      else (
-        let best_tyu = Type.most_specific_tyu expected_type tyu tydef_env in
-        annotate expr best_tyu, knowledge)
+      (match join_tyu [ expected_type; tyu ] tydef_env with
+       | None ->
+         type_mismatch
+           ?loc:ann.loc
+           expected_type
+           tyu
+           "check: variable expected type mismatch"
+       | Some best_tyu -> annotate expr best_tyu, knowledge)
   end
   | Ast.Variable (Base _) ->
     (match ann.unique_id with
      | None -> assert false (* impossible case *)
      | Some unique_id ->
-     match IMap.find_opt unique_id knowledge with
-     | Some ty_use ->
-       if not (tyu_equal expected_type ty_use tydef_env)
-       then
-         type_mismatch
-           ?loc:ann.loc
-           expected_type
-           ty_use
-           "check: variable expected type mismatch"
-       else (
-         let best_tyu = Type.most_specific_tyu expected_type ty_use tydef_env in
-         annotate expr best_tyu, add_to_context tydef_env unique_id best_tyu knowledge)
-     | None ->
-       annotate_with_tyu expr, add_to_context tydef_env unique_id expected_type knowledge)
+       annotate_with_tyu expr, add_to_context unique_id expected_type (empty_context ()))
+  (* constructors *)
   | Ast.Num _ ->
-    let _, tyu, knowledge = synthesize knowledge expr tydef_env ty_env in
-    if not (tyu_equal expected_type tyu tydef_env)
-    then type_mismatch ?loc:ann.loc expected_type tyu "check: TNum expected type mismatch"
-    else annotate_with_tyu expr, knowledge
+    if not (is_constructor_tyu_forced expected_type tydef_env)
+    then
+      type_mismatch
+        ?loc:ann.loc
+        expected_type
+        (WeakTyu.new_constructor_tyu Int)
+        "check: TNum expected type mismatch"
+    else if is_subtype_tyu expected_type (WeakTyu.new_constructor_tyu Int) tydef_env
+    then annotate_with_tyu expr, empty_context ()
+    else
+      type_mismatch
+        ?loc:ann.loc
+        expected_type
+        (WeakTyu.new_constructor_tyu Int)
+        "check: TNum expected type mismatch"
   | Ast.Bool _ ->
-    let _, tyu, knowledge = synthesize knowledge expr tydef_env ty_env in
-    if not (tyu_equal expected_type tyu tydef_env)
+    if not (is_constructor_tyu_forced expected_type tydef_env)
     then
-      type_mismatch ?loc:ann.loc expected_type tyu "check: TBool expected type mismatch"
-    else annotate_with_tyu expr, knowledge
-  | Ast.Exit ->
-    let _, tyu, knowledge = synthesize knowledge expr tydef_env ty_env in
-    if not (tyu_equal expected_type tyu tydef_env)
-    then
-      type_mismatch ?loc:ann.loc expected_type tyu "check: TExit expected type mismatch"
-    else annotate_with_tyu expr, knowledge
+      type_mismatch
+        ?loc:ann.loc
+        expected_type
+        (WeakTyu.new_constructor_tyu Bool)
+        "check: TBool expected type mismatch"
+    else if is_subtype_tyu expected_type (WeakTyu.new_constructor_tyu Bool) tydef_env
+    then annotate_with_tyu expr, empty_context ()
+    else
+      type_mismatch
+        ?loc:ann.loc
+        expected_type
+        (WeakTyu.new_constructor_tyu Bool)
+        "check: TBool expected type mismatch"
   | Ast.Mu (tbinder, tcommand) ->
     let tbinder_ty = Type.negate_tyu expected_type in
-    let new_demands =
+    let new_knowledge =
       List.fold_left
-        (fun acc id -> add_to_context tydef_env id tbinder_ty acc)
+        (fun acc id -> add_to_context id tbinder_ty acc)
         knowledge
         (binder_ids_of_binder tbinder)
     in
-    let updated_knowledge = merge_contexts knowledge new_demands tydef_env in
-    let cmd, knowledge = typecheck_command updated_knowledge tcommand tydef_env ty_env in
+    let cmd, demands = typecheck_command new_knowledge tcommand tydef_env ty_env in
     let expr = ann, Ast.Mu (tbinder, cmd) in
-    annotate expr expected_type, knowledge
+    annotate expr expected_type, demands
   | Ast.Tuple terms ->
     if not (Type.is_constructor_tyu_forced expected_type tydef_env)
     then
@@ -607,17 +642,19 @@ and check
             (WeakTyu.new_constructor_tyu (Product expected_tys))
             "check: TTuple arity mismatch"
         else (
-          let new_terms, knowledge =
+          let new_terms, demands =
             List.fold_left2
-              (fun (terms, ctx_acc) term expected_ty ->
-                 let t, term_demands = check ctx_acc term expected_ty tydef_env ty_env in
-                 t :: terms, merge_contexts ctx_acc term_demands tydef_env)
-              ([], knowledge)
+              (fun (terms, demands_acc) term expected_ty ->
+                 let t, term_demands =
+                   check knowledge term expected_ty tydef_env ty_env
+                 in
+                 t :: terms, merge_contexts demands_acc term_demands)
+              ([], empty_context ())
               terms
               expected_tys
           in
           let expr = ann, Ast.Tuple (List.rev new_terms) in
-          annotate expr expected_type, knowledge)
+          annotate expr expected_type, demands)
       | _ ->
         type_mismatch
           ?loc:ann.loc
@@ -634,27 +671,27 @@ and check
         ?loc:ann.loc
         (Printf.sprintf "check: annotation has invalid type: %s" msg)
     | Ok _ ->
-      if not (tyu_equal ty_use expected_type tydef_env)
-      then type_mismatch ?loc:ann.loc expected_type ty_use "check: TAnn type mismatch"
+      if not (is_subtype_tyu ty_use expected_type tydef_env)
+      then
+        type_mismatch
+          ?loc:ann.loc
+          expected_type
+          ty_use
+          "check: TAnn annotation type mismatch with expected type"
       else (
-        let most_specific_tyu = Type.most_specific_tyu expected_type ty_use tydef_env in
-        let checked_term, knowledge =
-          check knowledge tterm most_specific_tyu tydef_env ty_env
-        in
-        checked_term, knowledge)
+        let checked_term, demands = check knowledge tterm ty_use tydef_env ty_env in
+        let expr = ann, Ast.Ann (checked_term, ty_use) in
+        annotate expr expected_type, demands)
   end
   | Ast.Rec (Ast.Wildcard _, _) -> assert false (* impossible case, rejected by syntax *)
   | Ast.Rec ((Ast.Var (_, name) as tbinder), tterm) ->
-    let new_demands =
+    let usage_tyus =
       List.map (fun id -> id, expected_type) (binder_ids_of_binder tbinder)
     in
-    let updated_knowledge =
-      List.fold_left
-        (fun acc (id, ty) -> add_to_context tydef_env id ty acc)
-        knowledge
-        new_demands
+    let new_knowledge =
+      List.fold_left (fun acc (id, ty) -> add_to_context id ty acc) knowledge usage_tyus
     in
-    let term, knowledge = check updated_knowledge tterm expected_type tydef_env ty_env in
+    let term, demands = check new_knowledge tterm expected_type tydef_env ty_env in
     let expr = ann, Ast.Rec (tbinder, term) in
     if
       recursive_name_in_unguarded_position name tterm
@@ -667,18 +704,34 @@ and check
             type %s"
            name
            (Syntax.Pretty.show_ty_use expected_type))
-    else annotate expr expected_type, knowledge
-  | Ast.Matcher _ ->
-    let t, ty_use, discoveries = synthesize knowledge expr tydef_env ty_env in
-    if not (tyu_equal expected_type ty_use tydef_env)
-    then type_mismatch ?loc:ann.loc expected_type ty_use "check: TMatcher type mismatch"
-    else t, discoveries
-  | Ast.Construction _ ->
-    let t, ty_use, discoveries = synthesize knowledge expr tydef_env ty_env in
-    if not (tyu_equal expected_type ty_use tydef_env)
-    then
-      type_mismatch ?loc:ann.loc expected_type ty_use "check: TConstruction type mismatch"
-    else t, discoveries
+    else annotate expr expected_type, demands
+  | Ast.Construction { cons_name; cons_args } ->
+    let typ =
+      type_of_namespaced_constructor cons_name (List.length cons_args) tydef_env
+    in
+    begin match typ with
+    | None ->
+      let msg =
+        Printf.sprintf
+          "check: type for constructor %s with arity %d not found"
+          (Syntax.Pretty.show_name cons_name)
+          (List.length cons_args)
+      in
+      type_error ?loc:ann.loc msg
+    | Some (name, abs_tys, _, polarity) ->
+      let new_abstracts = List.map (fun abs -> abs, WeakTyu.new_unknown_tyu ()) abs_tys in
+      let compared_tyu =
+        Ast.Polarised (polarity, Ast.Named (name, List.map snd new_abstracts))
+      in
+      if is_subtype_tyu compared_tyu expected_type tydef_env
+      then annotate expr compared_tyu, empty_context ()
+      else
+        type_mismatch
+          ?loc:ann.loc
+          expected_type
+          compared_tyu
+          "check: constructor type mismatch with expected type"
+    end
   | Ast.Arr terms ->
     if not (Type.is_constructor_tyu_forced expected_type tydef_env)
     then
@@ -693,18 +746,18 @@ and check
       | false, _ ->
         assert false (* impossible, as we just verified that this is a constructor *)
       | _, Array expected_elem_ty ->
-        let new_terms, knowledge =
+        let new_terms, demands =
           List.fold_left
-            (fun (terms, ctx_acc) term ->
+            (fun (terms, demands_acc) term ->
                let t, term_demands =
-                 check ctx_acc term expected_elem_ty tydef_env ty_env
+                 check knowledge term expected_elem_ty tydef_env ty_env
                in
-               t :: terms, merge_contexts ctx_acc term_demands tydef_env)
-            ([], knowledge)
+               t :: terms, merge_contexts demands_acc term_demands)
+            ([], empty_context ())
             terms
         in
         let expr = ann, Ast.Arr (List.rev new_terms) in
-        annotate expr expected_type, knowledge
+        annotate expr expected_type, demands
       | _ ->
         type_mismatch
           ?loc:ann.loc
@@ -712,6 +765,9 @@ and check
           (WeakTyu.new_constructor_tyu (Array (WeakTyu.new_unknown_tyu ())))
           "check: TArr expected type mismatch"
       end)
+  (* destructors *)
+  (* TODO: implement upshifts for these destructors *)
+  | Ast.Exit | Ast.Matcher _ -> raise AttemptOtherSide
 
 and typecheck_command
       (knowledge : context)
@@ -815,7 +871,7 @@ let rec tycheck_mod_tli
     in
     let new_knowledge =
       List.fold_left
-        (fun acc id -> add_to_context tydef_env id inferred_ty acc)
+        (fun acc id -> add_to_context id inferred_ty acc)
         synth_knowledge
         (binder_ids_of_binder tbinder)
     in

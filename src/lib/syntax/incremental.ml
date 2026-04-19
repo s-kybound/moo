@@ -41,10 +41,7 @@ let rec parse_module_aux
          | [] -> "unexpected token " ^ got
          | [ expected ] -> Printf.sprintf "expected %s, got %s" expected got
          | _ ->
-           Printf.sprintf
-             "expected one of %s, got %s"
-             (String.concat ", " expecteds)
-             got
+           Printf.sprintf "expected one of %s, got %s" (String.concat ", " expecteds) got
        in
        raise (SyntaxError { span; message })
      | None -> raise (SyntaxError { span; message = "unknown syntax error" }))
