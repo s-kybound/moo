@@ -33,9 +33,8 @@ let z : co64 = 42
 
 // procedures are sugar over call-by-value codata matchers
 // note that there is no return type, you must supply an exit continuation.
-proc id (x : i64, k : -i64) {
+let id (x : i64, k : -i64) =
     x . k
-}
 
 // sugar for
 let id : codata[cbv] (i64, -i64) =
