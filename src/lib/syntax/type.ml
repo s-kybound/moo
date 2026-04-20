@@ -65,23 +65,29 @@ let rec negate_tyu (ty_use : ty_use) : ty_use =
 module WeakTyu = struct
   let new_meta_var () : meta_var =
     let id = genint () in
-    { id; cell = Inferred { constructor = None; raw_lower_bound = None } }
+    { id
+    ; cell = Inferred { constructor = None; raw_lower_bound = None; polarity = None }
+    }
   ;;
 
-  let new_unknown_tyu () : ty_use =
+  let new_unknown_tyu polarity : ty_use =
     let meta = new_meta_var () in
+    meta.cell <- Inferred { constructor = None; raw_lower_bound = None; polarity };
     Weak { link = { negated = false; meta } }
   ;;
 
-  let new_constructor_tyu raw : ty_use =
+  let new_constructor_tyu raw polarity : ty_use =
     let meta = new_meta_var () in
-    meta.cell <- Inferred { constructor = Some true; raw_lower_bound = Some raw };
+    meta.cell
+    <- Inferred { constructor = Some true; raw_lower_bound = Some raw; polarity };
     Weak { link = { negated = false; meta } }
   ;;
 
-  let new_destructor_tyu raw : ty_use =
-    let constructor_tyu = new_constructor_tyu raw in
-    negate_tyu constructor_tyu
+  let new_destructor_tyu raw polarity : ty_use =
+    let meta = new_meta_var () in
+    meta.cell
+    <- Inferred { constructor = Some false; raw_lower_bound = Some raw; polarity };
+    Weak { link = { negated = false; meta } }
   ;;
 
   (* checks if there isn't enough information in a tyu to determine
@@ -90,8 +96,8 @@ module WeakTyu = struct
     match tyu with
     | Weak { link = { meta; _ } } -> begin
       match meta.cell with
-      | Inferred { constructor = None; raw_lower_bound = _ }
-      | Inferred { constructor = _; raw_lower_bound = None } -> true
+      | Inferred { constructor = None; raw_lower_bound = _; _ }
+      | Inferred { constructor = _; raw_lower_bound = None; _ } -> true
       | _ -> false
     end
     | _ -> false
@@ -130,7 +136,12 @@ module Substitute = struct
         | Some r -> Some (raw_ty_replace bindings r)
         | None -> None
       in
-      meta.cell <- Inferred { constructor; raw_lower_bound };
+      let polarity =
+        match cons.polarity with
+        | Some p -> Some p
+        | None -> None
+      in
+      meta.cell <- Inferred { constructor; raw_lower_bound; polarity };
       meta
 
   and ty_replace (bindings : (string * ty_use) list) (target : ty) : ty =
@@ -293,9 +304,9 @@ let rec tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env) : bool * raw_ty =
   | Unified tyu ->
     let is_cons, raw_ty = tyu_to_raw_ty tyu tydef_env in
     is_cons <> negated, raw_ty
-  | Inferred { constructor; raw_lower_bound } ->
-  match constructor, raw_lower_bound with
-  | Some is_constructor, Some raw_ty -> is_constructor <> negated, raw_ty
+  | Inferred { constructor; raw_lower_bound; polarity } ->
+  match constructor, raw_lower_bound, polarity with
+  | Some is_constructor, Some raw_ty, _ -> is_constructor <> negated, raw_ty
   | _ ->
     let message =
       Printf.sprintf
@@ -487,7 +498,17 @@ and unify_constraints
   : (meta_core_constraints * meta_core_constraints, unit) result
   =
   let constructor_check c1 c2 = c1 = c2 <> negate in
+  let polarity_check p1 p2 =
+    match p1, p2 with
+    | Plus, Plus | Minus, Minus -> negate
+    | Plus, Minus | Minus, Plus -> not negate
+  in
   let constructor_assign c = c <> negate in
+  let polarity_assign p =
+    match p with
+    | Plus -> if negate then Minus else Plus
+    | Minus -> if negate then Plus else Minus
+  in
   let cons_results =
     match cons1.constructor, cons2.constructor with
     | Some c1, Some c2 ->
@@ -499,26 +520,37 @@ and unify_constraints
   match cons_results with
   | Error () -> Error ()
   | Ok (new_con1, new_con2) ->
-  match cons1.raw_lower_bound, cons2.raw_lower_bound with
-  | Some r1, Some r2 ->
-    if raw_ty_equal r1 r2 tydef_env
-    then
-      Ok
-        ( { constructor = new_con1; raw_lower_bound = Some r1 }
-        , { constructor = new_con2; raw_lower_bound = Some r2 } )
-    else Error ()
-  | Some r, None ->
-    Ok
-      ( { constructor = new_con1; raw_lower_bound = Some r }
-      , { constructor = new_con2; raw_lower_bound = Some r } )
-  | None, Some r ->
-    Ok
-      ( { constructor = new_con1; raw_lower_bound = Some r }
-      , { constructor = new_con2; raw_lower_bound = Some r } )
-  | None, None ->
-    Ok
-      ( { constructor = new_con1; raw_lower_bound = None }
-      , { constructor = new_con2; raw_lower_bound = None } )
+    let pol_results =
+      match cons1.polarity, cons2.polarity with
+      | Some p1, Some p2 ->
+        if polarity_check p1 p2 then Ok (Some p1, Some p2) else Error ()
+      | Some p, None -> Ok (Some p, Some (polarity_assign p))
+      | None, Some p -> Ok (Some (polarity_assign p), Some p)
+      | None, None -> Ok (None, None)
+    in
+    (match pol_results with
+     | Error () -> Error ()
+     | Ok (new_pol1, new_pol2) ->
+     match cons1.raw_lower_bound, cons2.raw_lower_bound with
+     | Some r1, Some r2 ->
+       if raw_ty_equal r1 r2 tydef_env
+       then
+         Ok
+           ( { constructor = new_con1; raw_lower_bound = Some r1; polarity = new_pol1 }
+           , { constructor = new_con2; raw_lower_bound = Some r2; polarity = new_pol2 } )
+       else Error ()
+     | Some r, None ->
+       Ok
+         ( { constructor = new_con1; raw_lower_bound = Some r; polarity = new_pol1 }
+         , { constructor = new_con2; raw_lower_bound = Some r; polarity = new_pol2 } )
+     | None, Some r ->
+       Ok
+         ( { constructor = new_con1; raw_lower_bound = Some r; polarity = new_pol1 }
+         , { constructor = new_con2; raw_lower_bound = Some r; polarity = new_pol2 } )
+     | None, None ->
+       Ok
+         ( { constructor = new_con1; raw_lower_bound = None; polarity = new_pol1 }
+         , { constructor = new_con2; raw_lower_bound = None; polarity = new_pol2 } ))
 ;;
 
 (* Given a constructor's name and arity, look up the first matching type 

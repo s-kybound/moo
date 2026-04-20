@@ -64,6 +64,19 @@ let rec show_ty_use tyu =
   | `Shaped (id, cons) ->
     let shape = if cons <> negated then "constructor" else "destructor" in
     Printf.sprintf "[inferred-?%d]%s" id shape
+  | `FullyInferred (constructor, polarity, raw) ->
+    let chirality =
+      match polarity, constructor <> negated with
+      | Plus, true -> Data
+      | Minus, true -> Codata
+      | Minus, false -> Data
+      | Plus, false -> Codata
+    in
+    Printf.sprintf
+      "[inferred]%s%s %s"
+      (show_polarity polarity)
+      (show_shape chirality)
+      (show_raw_ty raw)
   | `Inferred (id, constructor, raw) ->
     let is_constructor = constructor <> negated in
     Printf.sprintf
@@ -77,11 +90,12 @@ let rec show_ty_use tyu =
 and describe_meta_var { id; cell } =
   match cell with
   | Unified tyu -> `Unified tyu
-  | Inferred { constructor; raw_lower_bound } ->
-  match constructor, raw_lower_bound with
-  | Some cons, Some raw -> `Inferred (id, cons, raw)
-  | Some cons, None -> `Shaped (id, cons)
-  | _, _ -> `Unknown id
+  | Inferred { constructor; raw_lower_bound; polarity } ->
+  match constructor, polarity, raw_lower_bound with
+  | Some cons, Some pol, Some raw -> `FullyInferred (cons, pol, raw)
+  | Some cons, None, Some raw -> `Inferred (id, cons, raw)
+  | Some cons, None, None -> `Shaped (id, cons)
+  | _, _, _ -> `Unknown id
 
 and show_ty ty =
   match ty with
