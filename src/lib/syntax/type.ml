@@ -498,11 +498,7 @@ and unify_constraints
   : (meta_core_constraints * meta_core_constraints, unit) result
   =
   let constructor_check c1 c2 = c1 = c2 <> negate in
-  let polarity_check p1 p2 =
-    match p1, p2 with
-    | Plus, Plus | Minus, Minus -> negate
-    | Plus, Minus | Minus, Plus -> not negate
-  in
+  let polarity_check p1 p2 = p1 = p2 <> negate in
   let constructor_assign c = c <> negate in
   let polarity_assign p =
     match p with

@@ -571,44 +571,38 @@ and check
        annotate_with_tyu expr, add_to_context unique_id expected_type (empty_context ()))
   (* constructors *)
   | Ast.Num _ ->
+    let target_tyu = WeakTyu.new_constructor_tyu Int implicit_polarity in
     if not (is_constructor_tyu_forced expected_type tydef_env)
     then
       type_mismatch
         ?loc:ann.loc
         expected_type
-        (WeakTyu.new_constructor_tyu Int implicit_polarity)
+        target_tyu
         "check: TNum expected type mismatch"
-    else if
-      is_subtype_tyu
-        expected_type
-        (WeakTyu.new_constructor_tyu Int implicit_polarity)
-        tydef_env
+    else if is_subtype_tyu expected_type target_tyu tydef_env
     then annotate_with_tyu expr, empty_context ()
     else
       type_mismatch
         ?loc:ann.loc
         expected_type
-        (WeakTyu.new_constructor_tyu Int implicit_polarity)
+        target_tyu
         "check: TNum expected type mismatch"
   | Ast.Bool _ ->
+    let target_tyu = WeakTyu.new_constructor_tyu Bool implicit_polarity in
     if not (is_constructor_tyu_forced expected_type tydef_env)
     then
       type_mismatch
         ?loc:ann.loc
         expected_type
-        (WeakTyu.new_constructor_tyu Bool implicit_polarity)
+        target_tyu
         "check: TBool expected type mismatch"
-    else if
-      is_subtype_tyu
-        expected_type
-        (WeakTyu.new_constructor_tyu Bool implicit_polarity)
-        tydef_env
+    else if is_subtype_tyu expected_type target_tyu tydef_env
     then annotate_with_tyu expr, empty_context ()
     else
       type_mismatch
         ?loc:ann.loc
         expected_type
-        (WeakTyu.new_constructor_tyu Bool implicit_polarity)
+        target_tyu
         "check: TBool expected type mismatch"
   | Ast.Mu (tbinder, tcommand) ->
     let tbinder_ty = Type.negate_tyu expected_type in
@@ -622,15 +616,17 @@ and check
     let expr = ann, Ast.Mu (tbinder, cmd) in
     annotate expr expected_type, demands
   | Ast.Tuple terms ->
+    let target_tyu =
+      WeakTyu.new_constructor_tyu
+        (Product (List.init (List.length terms) (fun _ -> WeakTyu.new_unknown_tyu None)))
+        implicit_polarity
+    in
     if not (Type.is_constructor_tyu_forced expected_type tydef_env)
     then
       type_mismatch
         ?loc:ann.loc
         expected_type
-        (WeakTyu.new_constructor_tyu
-           (Product
-              (List.init (List.length terms) (fun _ -> WeakTyu.new_unknown_tyu None)))
-           implicit_polarity)
+        target_tyu
         "check: TTuple expected type mismatch"
     else (
       let is_constructor, raw_ty = Type.tyu_to_raw_ty expected_type tydef_env in
@@ -826,7 +822,13 @@ and typecheck_command
     with
     | SynthOtherSide ->
       if previous_error = `First_attempt
-      then typecheck_command_aux check_term synth_term `Right `AttemptOtherSide
+      then (
+        let new_direction =
+          match expression_side with
+          | `Left -> `Right
+          | `Right -> `Left
+        in
+        typecheck_command_aux check_term synth_term new_direction `AttemptOtherSide)
       else begin
         let left_term, right_term =
           if expression_side = `Left
@@ -838,8 +840,8 @@ and typecheck_command
         | `AttemptOtherSide ->
           let message =
             Printf.sprintf
-              "typecheck_command: both sides of the command are constructors. Left term: \
-               %s, Right term: %s"
+              "typecheck_command: Command is underspecified, cannot determine the type \
+               of the destructor. Left term: %s, Right term: %s"
               (Syntax.Pretty.show_term ~ann_show:(fun _ s -> s) left_term)
               (Syntax.Pretty.show_term ~ann_show:(fun _ s -> s) right_term)
           in
@@ -856,7 +858,13 @@ and typecheck_command
       end
     | UnderspecifiedTypeError ->
       if previous_error = `First_attempt
-      then typecheck_command_aux check_term synth_term `Right `AttemptOtherSide
+      then (
+        let new_direction =
+          match expression_side with
+          | `Left -> `Right
+          | `Right -> `Left
+        in
+        typecheck_command_aux check_term synth_term new_direction `AttemptOtherSide)
       else (
         match previous_error with
         | `First_attempt -> assert false (* impossible case *)
@@ -917,8 +925,8 @@ and typecheck_command
       synthesize knowledge tout_term tydef_env ty_env None
     in
     let in_ty_use = Type.negate_tyu out_ty_use in
-    let expected_in_ty = WeakTyu.new_constructor_tyu Int None in
-    if not (tyu_equal out_ty_use (Type.negate_tyu expected_in_ty) tydef_env)
+    let expected_in_ty = WeakTyu.new_destructor_tyu Int None in
+    if not (is_subtype_tyu out_ty_use expected_in_ty tydef_env)
     then
       type_mismatch
         ?loc:ann.loc
@@ -943,8 +951,8 @@ and typecheck_command
       synthesize knowledge tout_term tydef_env ty_env None
     in
     let in_ty_use = Type.negate_tyu out_ty_use in
-    let expected_in_ty = WeakTyu.new_constructor_tyu Int None in
-    if not (tyu_equal out_ty_use (Type.negate_tyu expected_in_ty) tydef_env)
+    let expected_in_ty = WeakTyu.new_destructor_tyu Int None in
+    if not (is_subtype_tyu out_ty_use expected_in_ty tydef_env)
     then
       type_mismatch
         ?loc:ann.loc

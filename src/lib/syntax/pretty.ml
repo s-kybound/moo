@@ -66,15 +66,21 @@ let rec show_ty_use tyu =
     Printf.sprintf "[inferred-?%d]%s" id shape
   | `FullyInferred (constructor, polarity, raw) ->
     let chirality =
-      match polarity, constructor <> negated with
+      match polarity, constructor with
       | Plus, true -> Data
       | Minus, true -> Codata
       | Minus, false -> Data
       | Plus, false -> Codata
     in
+    let final_polarity =
+      match negated, polarity with
+      | true, Plus -> Minus
+      | true, Minus -> Plus
+      | false, pol -> pol
+    in
     Printf.sprintf
       "[inferred]%s%s %s"
-      (show_polarity polarity)
+      (show_polarity final_polarity)
       (show_shape chirality)
       (show_raw_ty raw)
   | `Inferred (id, constructor, raw) ->
