@@ -361,14 +361,14 @@ and surface_command_to_ast_command_node (cmd : Surface.command)
     Ast.Core { l_term = expression_term; r_term = continuation_term }
   | Surface.Cutlet
       { binder = { name; typ }; bound_term; body; implied_bound_term_polarity } ->
-    let binding_term =
+    let bound_term =
       match typ with
       | None -> surface_term_to_ast_term bound_term
       | Some ty_use ->
         let ann, t_node = surface_term_to_ast_term bound_term in
         mk_term ~loc:ann (Ast.Ann ((ann, t_node), surface_ty_use_to_ast_ty_use ty_use))
     in
-    let bound_term =
+    let binding_term =
       mk_term
         ~loc:(ann_of_surface_loc cmd.loc)
         (Ast.Mu
