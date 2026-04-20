@@ -69,14 +69,19 @@ module WeakTyu = struct
     { id
     ; cell =
         Inferred
-          { constructor = None; raw_lower_bound = None; polarity = None; modality = None }
+          { constructor = None
+          ; raw_lower_bound = None
+          ; polarity = None
+          ; left_focusing = None
+          }
     }
   ;;
 
   let new_unknown_tyu polarity : ty_use =
     let meta = new_meta_var () in
     meta.cell
-    <- Inferred { constructor = None; raw_lower_bound = None; polarity; modality = None };
+    <- Inferred
+         { constructor = None; raw_lower_bound = None; polarity; left_focusing = None };
     Weak { link = { negated = false; meta } }
   ;;
 
@@ -87,7 +92,7 @@ module WeakTyu = struct
          { constructor = Some true
          ; raw_lower_bound = Some raw
          ; polarity
-         ; modality = None
+         ; left_focusing = None
          };
     Weak { link = { negated = false; meta } }
   ;;
@@ -99,20 +104,24 @@ module WeakTyu = struct
          { constructor = Some false
          ; raw_lower_bound = Some raw
          ; polarity
-         ; modality = None
+         ; left_focusing = None
          };
     Weak { link = { negated = false; meta } }
   ;;
 
   (* checks if there isn't enough information in a tyu to determine
-   * some inferred type *)
-  let is_unknown tyu =
+   * direction. *)
+  let rec is_unknown tyu =
     match tyu with
+    | Abstract { left_focusing = None; _ } -> true
     | Weak { link = { meta; _ } } -> begin
       match meta.cell with
-      | Inferred { constructor = None; raw_lower_bound = _; _ }
-      | Inferred { constructor = _; raw_lower_bound = None; _ } -> true
-      | _ -> false
+      | Unified t -> is_unknown t
+      | Inferred { left_focusing = Some _; _ } -> false
+      | Inferred { constructor = Some _; _ } -> false
+      (* without a constructor or left_focusing, 
+       * we do not know how to resolve the type *)
+      | _ -> true
     end
     | _ -> false
   ;;
@@ -155,7 +164,7 @@ module Substitute = struct
            { constructor = cons.constructor
            ; raw_lower_bound
            ; polarity = cons.polarity
-           ; modality = cons.modality
+           ; left_focusing = cons.left_focusing
            };
       meta
 
@@ -205,16 +214,6 @@ let canonical_ty (name : name) (ty_uses : ty_use list) (tydef_env : tydef_env) :
   aux name ty_uses
 ;;
 
-let shape_of_ty (ty : ty) (tydef_env : tydef_env) : shape =
-  match ty with
-  | Raw (_, shape, _) -> shape
-  | Named (name, ty_uses) ->
-    let canonical = canonical_ty name ty_uses tydef_env in
-    (match Substitute.resolve_parameterized_ty canonical tydef_env with
-     | Raw (_, shape, _) -> shape
-     | _ -> assert false)
-;;
-
 let is_variant_ty (ty : ty) (tydef_env : tydef_env) : bool =
   match ty with
   | Raw (_, _, Variant _) -> true
@@ -239,8 +238,11 @@ let rec tyu_is_resolved (tyu : ty_use) : bool =
 
 and meta_var_is_resolved m : bool =
   match m.cell with
-  | Inferred { polarity; constructor; raw_lower_bound; modality } ->
-    polarity <> None && constructor <> None && raw_lower_bound <> None && modality <> None
+  | Inferred { polarity; constructor; raw_lower_bound; left_focusing } ->
+    polarity <> None
+    && constructor <> None
+    && raw_lower_bound <> None
+    && left_focusing <> None
   | Unified tyu -> tyu_is_resolved tyu
 ;;
 
@@ -271,10 +273,7 @@ let rec tyu_to_raw_ty_strict (tyu : ty_use) (tydef_env : tydef_env)
         name
     in
     raise (Error.TypeError { loc = None; message })
-  | AbstractIntroducer (_, tyu) ->
-    tyu_to_raw_ty_strict
-      tyu
-      tydef_env (* TODO - emit the information on the abstract variable *)
+  | AbstractIntroducer (_, tyu) -> tyu_to_raw_ty_strict tyu tydef_env
   | Weak { link = { negated; meta } } ->
   match meta.cell with
   | Unified tyu ->
@@ -283,16 +282,21 @@ let rec tyu_to_raw_ty_strict (tyu : ty_use) (tydef_env : tydef_env)
     | Plus, true | Minus, false -> m, Minus, s, r
     | Minus, true | Plus, false -> m, Plus, s, r
     end
-  | Inferred { polarity; constructor; raw_lower_bound; modality } ->
+  | Inferred { polarity; constructor; raw_lower_bound; left_focusing } ->
     if tyu_is_resolved tyu
     then (
       let m, p, s, r =
-        match polarity, constructor, raw_lower_bound, modality with
-        | Some pol, Some cons, Some raw, Some mode ->
+        match polarity, constructor, raw_lower_bound, left_focusing with
+        | Some pol, Some cons, Some raw, Some focus ->
           let shape =
             match pol, cons with
             | Plus, true | Minus, false -> Data
             | Plus, false | Minus, true -> Codata
+          in
+          let mode =
+            match focus, pol with
+            | true, Plus | false, Minus -> By_value
+            | true, Minus | false, Plus -> By_name
           in
           mode, pol, shape, raw
         | _ -> assert false (* this case is impossible due to the is_resolved check *)
@@ -393,19 +397,17 @@ let is_constructor_tyu_forced tyu tydef_env =
 let is_constructor_tyu = is_constructor_tyu ~update:false
 let ( let* ) = Option.bind
 
-let rec instantiate_abstract_introducer ty_use : ty_use =
+let rec instantiate_abstract_introducer ty_use : ty_use * (string * (string * bool)) list =
   match ty_use with
   | AbstractIntroducer (abstract, inner) ->
+    let name = genvar abstract.name in
     let instantiated_abstract =
-      Abstract
-        { name = genvar abstract.name
-        ; negated = false
-        ; left_focusing = Some abstract.left_focusing
-        }
+      Abstract { name; negated = false; left_focusing = Some abstract.left_focusing }
     in
-    instantiate_abstract_introducer
-    @@ Substitute.tyu_replace [ abstract.name, instantiated_abstract ] inner
-  | _ -> ty_use
+    let inner = Substitute.tyu_replace [ abstract.name, instantiated_abstract ] inner in
+    let inner_instantiated, new_names = instantiate_abstract_introducer inner in
+    inner_instantiated, (abstract.name, (name, abstract.left_focusing)) :: new_names
+  | _ -> ty_use, []
 ;;
 
 let rec abstract_in_tyu (ty_use : ty_use) (target_abstract : string) : bool =
@@ -464,7 +466,8 @@ let abstract_in_constructor_position
     then assert false
     else (
       match body with
-      | Weak _ | Abstract _ -> assert false
+      | Weak _ -> assert false
+      | Abstract _ -> List.rev constructor_acc
       | AbstractIntroducer (abstract, tyu) ->
         if abstract.name = target_abstract
         then assert false (* shadowed - should not be counted *)
@@ -570,11 +573,13 @@ let abstract_in_constructor_position
 ;;
 
 let rec is_subtype_tyu subtype supertype tydef_env : bool =
+  Printf.eprintf
+    "Checking if %s is a subtype of %s\n%!"
+    (Pretty.show_ty_use subtype)
+    (Pretty.show_ty_use supertype);
   match subtype, supertype with
   | ( Abstract { name = name1; negated = neg1; _ }
     , Abstract { name = name2; negated = neg2; _ } ) -> name1 = name2 && neg1 = neg2
-  | Abstract _, _ | _, Abstract _ ->
-    false (* abstract types are only subtypes of themselves *)
   | ( Weak { link = { negated = neg1; meta = meta1 } as link1 }
     , Weak ({ link = { negated = neg2; meta = meta2 } } as weak2) ) ->
     (* check if they are the same meta var, if so check if the negation flags match 
@@ -604,40 +609,295 @@ let rec is_subtype_tyu subtype supertype tydef_env : bool =
         let unify_result = unify_constraints ~negate cons1 cons2 tydef_env in
         begin match unify_result with
         | Ok (new_cons1, _) ->
+          Printf.eprintf
+            "Unifying weak type variables %d and %d succeeded\n%!"
+            meta1.id
+            meta2.id;
           (* unify the first tyu with the second*)
           meta1.cell <- Inferred new_cons1;
           weak2.link <- link1;
           true
-        | Error _ -> false
+        | Error _ ->
+          Printf.eprintf
+            "Unifying weak type variables %d and %d failed\n%!"
+            meta1.id
+            meta2.id;
+          false
         end)
+  | AbstractIntroducer (abstract1, tyu1), AbstractIntroducer (abstract2, tyu2) ->
+    if abstract1.left_focusing == abstract2.left_focusing
+    then (
+      (* substitute all abstract 2 in tyu2 with abstract 1
+       * then check for subtype relationship *)
+      let replaced_abstract =
+        Abstract
+          { name = abstract1.name
+          ; negated = false
+          ; left_focusing = Some abstract1.left_focusing
+          }
+      in
+      let substituted_tyu2 =
+        Substitute.tyu_replace [ abstract2.name, replaced_abstract ] tyu2
+      in
+      is_subtype_tyu tyu1 substituted_tyu2 tydef_env)
+    else (
+      (* substitute all abstract 2 in tyu2 with ~abstract 1
+       * then check for subtype relationship *)
+      let replaced_abstract =
+        Abstract
+          { name = abstract1.name
+          ; negated = true
+          ; left_focusing = Some abstract1.left_focusing
+          }
+      in
+      let substituted_tyu2 =
+        Substitute.tyu_replace [ abstract2.name, replaced_abstract ] tyu2
+      in
+      is_subtype_tyu tyu1 substituted_tyu2 tydef_env)
+  | pol_type, AbstractIntroducer (abstract, inner) ->
+    if not (abstract_in_constructor_position inner abstract.name tydef_env)
+    then false
+    else (
+      let substituted_inner, new_opaques = instantiate_abstract_introducer supertype in
+      let new_opaques =
+        List.map (fun (_, (name, left_focusing)) -> name, left_focusing) new_opaques
+      in
+      abstract_compatible substituted_inner pol_type tydef_env new_opaques)
+  | AbstractIntroducer (abstract, inner), pol_type ->
+    Printf.eprintf
+      "Checking if abstract introducer %s is compatible with %s\n%!"
+      abstract.name
+      (Pretty.show_ty_use pol_type);
+    if abstract_in_constructor_position inner abstract.name tydef_env
+    then false
+    else (
+      Printf.eprintf "Instantiating abstract introducer %s\n%!" abstract.name;
+      let substituted_inner, new_opaques = instantiate_abstract_introducer subtype in
+      let new_opaques =
+        List.map (fun (_, (name, left_focusing)) -> name, left_focusing) new_opaques
+      in
+      let res = abstract_compatible substituted_inner pol_type tydef_env new_opaques in
+      Printf.eprintf "Result of checking compatibility: %b\n%!" res;
+      res)
   | Weak { link = { negated; meta } }, other_tyu
   | other_tyu, Weak { link = { negated; meta } } ->
     (* if the weak tyu is fully unsolved, we can just unify it with the other tyu *)
     unify_weak_with_tyu negated meta other_tyu tydef_env
+  | Abstract _, _ | _, Abstract _ ->
+    false (* abstract types are only subtypes of themselves (or weak vars) *)
   | Polarised (pol1, ty1), Polarised (pol2, ty2) ->
     pol1 = pol2 && is_subtype_ty ty1 ty2 tydef_env
-  | AbstractIntroducer (abstract1, tyu1), AbstractIntroducer (abstract2, tyu2) ->
-    if abstract1.left_focusing == abstract2.left_focusing
-    then (
-      (* substitute all abstract 2 in tyu2 with tyu1
-       * then check for subtype relationship *)
-      let substituted_tyu2 = Substitute.tyu_replace [ abstract2.name, tyu1 ] tyu2 in
-      is_subtype_tyu tyu1 substituted_tyu2 tydef_env)
-    else (
-      (* substitute all abstract 2 in tyu2 with ~tyu1 *
-       * then check for subtype relationship *)
-      let substituted_tyu2 =
-        Substitute.tyu_replace [ abstract2.name, negate_tyu tyu1 ] tyu2
+
+and type_has_direction tyu left_focusing tydef_env : bool =
+  match tyu with
+  | Abstract { left_focusing = None; _ } -> assert false
+  | Abstract { left_focusing = Some lf; negated; _ } -> lf = left_focusing <> negated
+  | AbstractIntroducer (_, inner) -> type_has_direction inner left_focusing tydef_env
+  | Polarised (pol, ty) ->
+    let mode, _, _ = ty_to_raw_ty ty tydef_env in
+    let tyu_is_left_focusing =
+      match pol, mode with
+      | Plus, By_value | Minus, By_name -> true
+      | Plus, By_name | Minus, By_value -> false
+    in
+    tyu_is_left_focusing = left_focusing
+  | Weak { link = { negated; meta } } ->
+  match meta.cell with
+  | Unified tyu -> type_has_direction tyu left_focusing tydef_env <> negated
+  | Inferred constraints ->
+  match constraints.left_focusing with
+  | Some lf -> lf = left_focusing <> negated
+  | None ->
+    meta.cell
+    <- Inferred { constraints with left_focusing = Some (left_focusing <> negated) };
+    true
+
+and abstract_compatible
+      (abstract_body : ty_use)
+      (pol_type : ty_use)
+      (tydef_env : tydef_env)
+      (new_opaques : (string * bool) list) (* whether the abstract is left-focusing *)
+  : bool
+  =
+  Printf.eprintf
+    "Checking if abstract body %s is compatible with %s\n%!"
+    (Pretty.show_ty_use abstract_body)
+    (Pretty.show_ty_use pol_type);
+  let solutions = Hashtbl.create (List.length new_opaques) in
+  let rec aux_tyu abstract_body pol_type =
+    match abstract_body, pol_type with
+    | Abstract { left_focusing = None; _ }, _ | Weak _, _ | AbstractIntroducer _, _ ->
+      assert false
+    | ( Abstract { name = name1; negated = neg1; left_focusing = lf1 }
+      , Abstract { name = name2; negated = neg2; left_focusing = lf2 } ) ->
+      if List.mem_assoc name1 new_opaques
+      then assert false (* the opaques should be unique *)
+      else name1 = name2 && neg1 = neg2 && lf1 = lf2
+    | Abstract { name; left_focusing = Some lf1; negated }, _ ->
+      if List.mem_assoc name new_opaques
+      then (
+        match Hashtbl.find_opt solutions name with
+        | Some solution ->
+          let compared_solution = if negated then negate_tyu solution else solution in
+          let res = tyu_equal compared_solution pol_type tydef_env in
+          Printf.eprintf
+            "Comparing solution %s with pol_type %s: %b\n%!"
+            (Pretty.show_ty_use compared_solution)
+            (Pretty.show_ty_use pol_type)
+            res;
+          res
+        | None ->
+          let stored_type = if negated then negate_tyu pol_type else pol_type in
+          if type_has_direction stored_type lf1 tydef_env
+          then (
+            Hashtbl.add solutions name stored_type;
+            (* match stored_type with
+            | Weak {link = { negated = weak_negated; meta } } ->
+              (* we have determined it is compatible, 
+               * force the unification regardless
+               * (type erasure)
+               *)
+               let to_store = if (negated <> weak_negated)
+                 then negate_tyu abstract_body
+                 else abstract_body
+                in
+               meta.cell <- Unified to_store;
+               true
+            | _ -> *)
+            true)
+          else false)
+      else false
+    | _, Abstract _ -> false
+    | Polarised (pol1, ty1), Polarised (pol2, ty2) -> pol1 = pol2 && aux_ty ty1 ty2
+    | Polarised _, AbstractIntroducer _ ->
+      let instantiated, _new_opaques = instantiate_abstract_introducer pol_type in
+      (* don't care about the new opaques, just figure out if
+       * they are compatible with what we already have *)
+      aux_tyu abstract_body instantiated
+    | Polarised _, Weak { link = { negated; meta } } ->
+      aux_unify_weak negated meta abstract_body
+  and aux_unify_weak negated meta tyu =
+    let compared_tyu = if negated then negate_tyu tyu else tyu in
+    match meta.cell with
+    | Unified meta_tyu -> aux_tyu compared_tyu meta_tyu
+    | Inferred constraints ->
+    match compared_tyu with
+    | Abstract { left_focusing = Some left_focusing; negated; _ } ->
+      (* unify if we don't know anything yet *)
+      let unifiable =
+        let raw_compatible =
+          match constraints.raw_lower_bound with
+          | Some _ -> false
+          | None -> true
+        in
+        let left_focusing_compatible =
+          match constraints.left_focusing with
+          | Some lf -> lf = left_focusing <> negated
+          | None -> true
+        in
+        (* we don't care about polarity or constructor for abstract types *)
+        raw_compatible && left_focusing_compatible
       in
-      is_subtype_tyu tyu1 substituted_tyu2 tydef_env)
-  | (Polarised _ as pol_type), AbstractIntroducer (abstract, inner) ->
-    if not (abstract_in_constructor_position inner abstract.name tydef_env)
-    then false
-    else failwith "TODO: "
-  | AbstractIntroducer (abstract, inner), (Polarised _ as pol_type) ->
-    if abstract_in_constructor_position inner abstract.name tydef_env
-    then false
-    else failwith "TODO: "
+      if unifiable then meta.cell <- Unified compared_tyu;
+      unifiable
+    | _ ->
+      let unifiable =
+        begin
+          let _, polarity, shape, raw = tyu_to_raw_ty_strict compared_tyu tydef_env in
+          let raw_compatible =
+            match constraints.raw_lower_bound with
+            | Some r -> aux_raw_ty raw r
+            | None -> true
+          in
+          let polarity_compatible =
+            match constraints.polarity with
+            | Some pol -> pol = polarity
+            | None -> true
+          in
+          let focus_compatible =
+            match constraints.left_focusing with
+            | Some lf -> type_has_direction compared_tyu lf tydef_env
+            | None -> true
+          in
+          let shape_compatible =
+            match constraints.constructor with
+            | Some is_constructor ->
+              let is_cons =
+                match polarity, shape with
+                | Plus, Data | Minus, Codata -> true
+                | Plus, Codata | Minus, Data -> false
+              in
+              is_constructor = is_cons
+            | None -> true
+          in
+          Printf.eprintf
+            "Checking weak type variable %d against tyu %s: raw_compatible=%b, \
+             polarity_compatible=%b, focus_compatible=%b, shape_compatible=%b\n\
+             %!"
+            meta.id
+            (Pretty.show_ty_use compared_tyu)
+            raw_compatible
+            polarity_compatible
+            focus_compatible
+            shape_compatible;
+          raw_compatible && polarity_compatible && focus_compatible && shape_compatible
+        end
+      in
+      Printf.eprintf
+        "Unifying weak type variable %d with tyu %s: %b\n%!"
+        meta.id
+        (Pretty.show_ty_use compared_tyu)
+        unifiable;
+      if unifiable then meta.cell <- Unified compared_tyu;
+      unifiable
+  and aux_ty ty1 ty2 =
+    Printf.eprintf
+      "Comparing types %s and %s\n%!"
+      (Pretty.show_ty ty1)
+      (Pretty.show_ty ty2);
+    match ty1, ty2 with
+    | Raw (mode1, shape1, raw_ty1), Raw (mode2, shape2, raw_ty2) ->
+      mode1 = mode2 && shape1 = shape2 && aux_raw_ty raw_ty1 raw_ty2
+    | Raw (m1, s1, r1), ty | ty, Raw (m1, s1, r1) ->
+      let m2, s2, r2 = ty_to_raw_ty ty tydef_env in
+      m1 = m2 && s1 = s2 && aux_raw_ty r1 r2
+    | Named (name1, ty_uses1), Named (name2, ty_uses2) ->
+      let canonical1 = canonical_ty name1 ty_uses1 tydef_env in
+      let canonical2 = canonical_ty name2 ty_uses2 tydef_env in
+      if is_variant_ty canonical1 tydef_env && is_variant_ty canonical2 tydef_env
+      then aux_variant canonical1 canonical2
+      else (
+        let resolved1 = Substitute.resolve_parameterized_ty canonical1 tydef_env in
+        let resolved2 = Substitute.resolve_parameterized_ty canonical2 tydef_env in
+        aux_ty resolved1 resolved2)
+  and aux_variant ty1 ty2 =
+    match ty1, ty2 with
+    | Named (name1, ty_uses1), Named (name2, ty_uses2) ->
+      name1 = name2
+      && List.length ty_uses1 = List.length ty_uses2
+      && List.for_all2 (fun tyu1 tyu2 -> aux_tyu tyu1 tyu2) ty_uses1 ty_uses2
+    | _ -> assert false
+  and aux_raw_ty rty1 rty2 =
+    Printf.eprintf
+      "Comparing raw types %s and %s\n%!"
+      (Pretty.show_raw_ty rty1)
+      (Pretty.show_raw_ty rty2);
+    match rty1, rty2 with
+    | Int, Int -> true
+    | Bool, Bool -> true
+    | Bool, _ | _, Bool -> false
+    | Int, _ | _, Int -> false
+    | Product tys1, Product tys2 ->
+      List.length tys1 = List.length tys2
+      && List.for_all2 (fun ty_use1 ty_use2 -> aux_tyu ty_use1 ty_use2) tys1 tys2
+    | Product _, _ | _, Product _ -> false
+    | Array ty_use1, Array ty_use2 -> aux_tyu ty_use1 ty_use2
+    | Array _, _ | _, Array _ -> false
+    | Variant _, Variant _ ->
+      (* variants are never directly compared *)
+      assert false
+  in
+  aux_tyu abstract_body pol_type
 
 and is_subtype_ty (ty1 : ty) (ty2 : ty) tydef_env : bool =
   match ty1, ty2 with
@@ -702,18 +962,55 @@ and unify_weak_with_tyu
   match meta.cell with
   | Unified sol -> tyu_equal sol compared_tyu tydef_env
   | Inferred constraints ->
+  match compared_tyu with
+  | Abstract { left_focusing = Some left_focusing; negated; _ } ->
+    (* unify if we don't know anything yet *)
     let unifiable =
-      match constraints.constructor, constraints.raw_lower_bound with
-      | None, None -> true
-      | Some is_constructor, None ->
-        is_constructor == is_constructor_tyu_forced compared_tyu tydef_env
-      | None, Some raw_ty ->
-        let _, ty_raw_ty = tyu_to_raw_ty compared_tyu tydef_env in
-        is_subtype_raw_ty raw_ty ty_raw_ty tydef_env
-      | Some is_constructor, Some raw_ty ->
-        let _, ty_raw_ty = tyu_to_raw_ty compared_tyu tydef_env in
-        is_constructor == is_constructor_tyu_forced compared_tyu tydef_env
-        && is_subtype_raw_ty raw_ty ty_raw_ty tydef_env
+      let raw_compatible =
+        match constraints.raw_lower_bound with
+        | Some _ -> false
+        | None -> true
+      in
+      let left_focusing_compatible =
+        match constraints.left_focusing with
+        | Some lf -> lf = left_focusing <> negated
+        | None -> true
+      in
+      (* we don't care about polarity or constructor for abstract types *)
+      raw_compatible && left_focusing_compatible
+    in
+    if unifiable then meta.cell <- Unified compared_tyu;
+    unifiable
+  | _ ->
+    let unifiable =
+      let _, polarity, shape, raw_ty = tyu_to_raw_ty_strict compared_tyu tydef_env in
+      let constructor_compatible =
+        match constraints.constructor with
+        | Some is_constructor ->
+          let is_cons =
+            match polarity, shape with
+            | Plus, Data | Minus, Codata -> true
+            | Plus, Codata | Minus, Data -> false
+          in
+          is_constructor = is_cons
+        | None -> true
+      in
+      let raw_compatible =
+        match constraints.raw_lower_bound with
+        | Some r -> is_subtype_raw_ty r raw_ty tydef_env
+        | None -> true
+      in
+      let polarity_compatible =
+        match constraints.polarity with
+        | Some pol -> pol = polarity
+        | None -> true
+      in
+      let focus_compatible =
+        match constraints.left_focusing with
+        | Some lf -> type_has_direction compared_tyu lf tydef_env
+        | None -> true
+      in
+      polarity_compatible && focus_compatible && constructor_compatible && raw_compatible
     in
     if unifiable then meta.cell <- Unified compared_tyu;
     unifiable
@@ -727,12 +1024,14 @@ and unify_constraints
   =
   let constructor_check c1 c2 = c1 = c2 <> negate in
   let polarity_check p1 p2 = p1 = p2 <> negate in
+  let focus_check f1 f2 = f1 = f2 <> negate in
   let constructor_assign c = c <> negate in
   let polarity_assign p =
     match p with
     | Plus -> if negate then Minus else Plus
     | Minus -> if negate then Plus else Minus
   in
+  let focus_assign f = f <> negate in
   let cons_results =
     match cons1.constructor, cons2.constructor with
     | Some c1, Some c2 ->
@@ -755,16 +1054,17 @@ and unify_constraints
     (match pol_results with
      | Error () -> Error ()
      | Ok (new_pol1, new_pol2) ->
-       let mode_results =
-         match cons1.modality, cons2.modality with
-         | Some m1, Some m2 -> if m1 = m2 then Ok (Some m1, Some m2) else Error ()
-         | Some m, None -> Ok (Some m, Some m)
-         | None, Some m -> Ok (Some m, Some m)
+       let focus_results =
+         match cons1.left_focusing, cons2.left_focusing with
+         | Some lf1, Some lf2 ->
+           if focus_check lf1 lf2 then Ok (Some lf1, Some lf2) else Error ()
+         | Some lf, None -> Ok (Some lf, Some (focus_assign lf))
+         | None, Some lf -> Ok (Some (focus_assign lf), Some lf)
          | None, None -> Ok (None, None)
        in
-       (match mode_results with
+       (match focus_results with
         | Error () -> Error ()
-        | Ok (new_mod1, new_mod2) ->
+        | Ok (new_focus1, new_focus2) ->
         match cons1.raw_lower_bound, cons2.raw_lower_bound with
         | Some r1, Some r2 ->
           if is_subtype_raw_ty r1 r2 tydef_env
@@ -773,12 +1073,12 @@ and unify_constraints
               ( { constructor = new_con1
                 ; raw_lower_bound = Some r1
                 ; polarity = new_pol1
-                ; modality = new_mod1
+                ; left_focusing = new_focus1
                 }
               , { constructor = new_con2
                 ; raw_lower_bound = Some r2
                 ; polarity = new_pol2
-                ; modality = new_mod2
+                ; left_focusing = new_focus2
                 } )
           else Error ()
         | Some r, None ->
@@ -786,36 +1086,36 @@ and unify_constraints
             ( { constructor = new_con1
               ; raw_lower_bound = Some r
               ; polarity = new_pol1
-              ; modality = new_mod1
+              ; left_focusing = new_focus1
               }
             , { constructor = new_con2
               ; raw_lower_bound = Some r
               ; polarity = new_pol2
-              ; modality = new_mod2
+              ; left_focusing = new_focus2
               } )
         | None, Some r ->
           Ok
             ( { constructor = new_con1
               ; raw_lower_bound = Some r
               ; polarity = new_pol1
-              ; modality = new_mod1
+              ; left_focusing = new_focus1
               }
             , { constructor = new_con2
               ; raw_lower_bound = Some r
               ; polarity = new_pol2
-              ; modality = new_mod2
+              ; left_focusing = new_focus2
               } )
         | None, None ->
           Ok
             ( { constructor = new_con1
               ; raw_lower_bound = None
               ; polarity = new_pol1
-              ; modality = new_mod1
+              ; left_focusing = new_focus1
               }
             , { constructor = new_con2
               ; raw_lower_bound = None
               ; polarity = new_pol2
-              ; modality = new_mod2
+              ; left_focusing = new_focus2
               } )))
 
 and tyu_equal tyu1 tyu2 tydef_env : bool =

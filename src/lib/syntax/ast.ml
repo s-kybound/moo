@@ -12,7 +12,7 @@ let empty_core_ann : core_ann = { loc = None }
 type meta_core_constraints =
   { constructor : bool option
   ; polarity : polarity option
-  ; modality : mode option
+  ; left_focusing : bool option
   ; raw_lower_bound : raw_ty option
   }
 

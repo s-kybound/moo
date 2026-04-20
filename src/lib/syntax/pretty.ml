@@ -65,7 +65,7 @@ let rec show_ty_use tyu =
   | `Unknown id ->
     let prefix = if negated then "~" else "" in
     Printf.sprintf "%s?%d" prefix id
-  | `FullyInferred (constructor, polarity, raw, mode) ->
+  | `FullyInferred (constructor, polarity, raw, left_focusing) ->
     let chirality =
       match polarity, constructor with
       | Plus, true -> Data
@@ -78,6 +78,13 @@ let rec show_ty_use tyu =
       | true, Plus -> Minus
       | true, Minus -> Plus
       | false, pol -> pol
+    in
+    let mode =
+      match left_focusing, polarity with
+      | true, Plus -> By_value
+      | true, Minus -> By_name
+      | false, Plus -> By_name
+      | false, Minus -> By_value
     in
     Printf.sprintf
       "%s%s[%s] %s"
@@ -113,9 +120,9 @@ let rec show_ty_use tyu =
 and describe_meta_var { id; cell } =
   match cell with
   | Unified tyu -> `Unified tyu
-  | Inferred { constructor; raw_lower_bound; polarity; modality } ->
-  match constructor, polarity, raw_lower_bound, modality with
-  | Some cons, Some pol, Some raw, Some mode -> `FullyInferred (cons, pol, raw, mode)
+  | Inferred { constructor; raw_lower_bound; polarity; left_focusing } ->
+  match constructor, polarity, raw_lower_bound, left_focusing with
+  | Some cons, Some pol, Some raw, Some focus -> `FullyInferred (cons, pol, raw, focus)
   | Some cons, Some pol, Some raw, _ -> `InferrerableMode (cons, pol, raw)
   | Some cons, _, Some raw, _ -> `Shaped (id, cons, raw)
   | _ -> `Unknown id

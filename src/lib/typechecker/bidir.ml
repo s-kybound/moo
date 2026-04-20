@@ -118,16 +118,29 @@ module IMap = Map.Make (Int)
 
 type context = Ast.ty_use IMap.t
 
-let merge_contexts (ctx1 : context) (ctx2 : context) : context =
+let merge_contexts (ctx1 : context) (ctx2 : context) tydef_env : context =
   IMap.union
-    (fun _id _tyu1 _tyu2 ->
-       (* two instance of the same usage should not happen, as each use should be linear *)
-       assert false)
+    (fun _id tyu1 tyu2 ->
+       if is_subtype_tyu tyu1 tyu2 tydef_env
+       then Some tyu1
+       else if is_subtype_tyu tyu2 tyu1 tydef_env
+       then Some tyu2
+       else (
+         let msg =
+           Printf.sprintf
+             "Type error: conflicting demands for usage of binder: %s vs %s"
+             (Pretty.show_ty_use tyu1)
+             (Pretty.show_ty_use tyu2)
+         in
+         type_error msg))
     ctx1
     ctx2
 ;;
 
-let add_to_context id tyu ctx = merge_contexts ctx (IMap.singleton id tyu)
+let add_to_context id tyu ctx tydef_env =
+  merge_contexts ctx (IMap.singleton id tyu) tydef_env
+;;
+
 let remove_from_context id ctx = IMap.remove id ctx
 let empty_context () : context = IMap.empty
 
@@ -140,6 +153,7 @@ let annotate (term : typed_term) (tyu : Ast.ty_use) : typed_term = set_term_ty t
  *            it returns the demands in order to have that expression have that type 
  *            it also returns the annotated terms themselves *)
 let rec synthesize
+          ?(second_pass = false)
           (knowledge : context)
           (expr : typed_term)
           (tydef_env : tydef_env)
@@ -167,7 +181,14 @@ let rec synthesize
      | Some unique_id ->
      match IMap.find_opt unique_id knowledge with
      | Some ty_use -> annotate_with ty_use, ty_use, empty_context ()
-     | None -> raise UnderspecifiedTypeError)
+     | None ->
+       if second_pass
+       then (
+         let unknown = WeakTyu.new_unknown_tyu implicit_polarity in
+         ( annotate_with unknown
+         , unknown
+         , add_to_context unique_id unknown (empty_context ()) tydef_env ))
+       else raise UnderspecifiedTypeError)
   | Ast.Exit ->
     let tyu = WeakTyu.new_destructor_tyu Int implicit_polarity in
     annotate_with tyu, tyu, empty_context ()
@@ -182,7 +203,6 @@ let rec synthesize
       let checked_term, demands =
         check knowledge tterm ty_use tydef_env ty_env implicit_polarity
       in
-      (* we can remove the annotations here *)
       checked_term, ty_use, demands
   end
   | Ast.Rec (Ast.Wildcard _, _) -> assert false (* impossible case, rejected by syntax *)
@@ -396,7 +416,8 @@ let rec synthesize
                         else (
                           let unique_ids = binder_ids_of_binder pat_arg in
                           List.fold_left
-                            (fun ctx_acc id -> add_to_context id arg_tyu ctx_acc)
+                            (fun ctx_acc id ->
+                               add_to_context id arg_tyu ctx_acc tydef_env)
                             ctx_acc
                             unique_ids))
                      knowledge
@@ -453,7 +474,7 @@ let rec synthesize
            in
            ( (pattern, new_command) :: branches_acc
            , requested_tyu :: type_uses_acc
-           , merge_contexts demands_acc new_demands ))
+           , merge_contexts demands_acc new_demands tydef_env ))
         ([], [], empty_context ())
         branches
     in
@@ -517,7 +538,7 @@ let rec synthesize
                let new_arg, new_discoveries =
                  check knowledge arg expected_ty tydef_env ty_env None
                in
-               new_arg :: acc, merge_contexts discoveries new_discoveries)
+               new_arg :: acc, merge_contexts discoveries new_discoveries tydef_env)
             ([], empty_context ())
             cons_args
             variant_tys
@@ -554,21 +575,43 @@ and check
         ?loc:ann.loc
         (Printf.sprintf "Namespaced variable %s not found" (Pretty.show_name n))
     | Some { origin_path; obj = tyu } ->
+      Printf.eprintf
+        "check: variable %s has type %s, checking against expected type %s\n%!"
+        (Pretty.show_name n)
+        (Pretty.show_ty_use tyu)
+        (Pretty.show_ty_use expected_type);
       let tyu = Type.qualify_tyu origin_path tyu in
-      (match join_tyu [ expected_type; tyu ] tydef_env with
-       | None ->
-         type_mismatch
-           ?loc:ann.loc
-           expected_type
-           tyu
-           "check: variable expected type mismatch"
-       | Some best_tyu -> annotate expr best_tyu, knowledge)
+      if is_subtype_tyu tyu expected_type tydef_env
+      then annotate expr tyu, empty_context ()
+      else
+        type_mismatch
+          ?loc:ann.loc
+          expected_type
+          tyu
+          "check: variable expected type mismatch"
   end
-  | Ast.Variable (Base _) ->
+  | Ast.Variable (Base _ as n) ->
     (match ann.unique_id with
      | None -> assert false (* impossible case *)
      | Some unique_id ->
-       annotate_with_tyu expr, add_to_context unique_id expected_type (empty_context ()))
+     match IMap.find_opt unique_id knowledge with
+     | Some known_tyu ->
+       Printf.eprintf
+         "check: variable %s has type %s, checking against expected type %s\n%!"
+         (Pretty.show_name n)
+         (Pretty.show_ty_use known_tyu)
+         (Pretty.show_ty_use expected_type);
+       if is_subtype_tyu known_tyu expected_type tydef_env
+       then annotate expr expected_type, empty_context ()
+       else
+         type_mismatch
+           ?loc:ann.loc
+           expected_type
+           known_tyu
+           "check: variable expected type mismatch"
+     | None ->
+       ( annotate_with_tyu expr
+       , add_to_context unique_id expected_type (empty_context ()) tydef_env ))
   (* constructors *)
   | Ast.Num _ ->
     let target_tyu = WeakTyu.new_constructor_tyu Int implicit_polarity in
@@ -579,7 +622,7 @@ and check
         expected_type
         target_tyu
         "check: TNum expected type mismatch"
-    else if is_subtype_tyu expected_type target_tyu tydef_env
+    else if is_subtype_tyu target_tyu expected_type tydef_env
     then annotate_with_tyu expr, empty_context ()
     else
       type_mismatch
@@ -596,7 +639,7 @@ and check
         expected_type
         target_tyu
         "check: TBool expected type mismatch"
-    else if is_subtype_tyu expected_type target_tyu tydef_env
+    else if is_subtype_tyu target_tyu expected_type tydef_env
     then annotate_with_tyu expr, empty_context ()
     else
       type_mismatch
@@ -608,7 +651,7 @@ and check
     let tbinder_ty = Type.negate_tyu expected_type in
     let new_knowledge =
       List.fold_left
-        (fun acc id -> add_to_context id tbinder_ty acc)
+        (fun acc id -> add_to_context id tbinder_ty acc tydef_env)
         knowledge
         (binder_ids_of_binder tbinder)
     in
@@ -616,10 +659,13 @@ and check
     let expr = ann, Ast.Mu (tbinder, cmd) in
     annotate expr expected_type, demands
   | Ast.Tuple terms ->
+    (* check the tuple against an 
+     * an unknown type first, and then check it against our type *)
+    let target_unknowns =
+      List.init (List.length terms) (fun _ -> WeakTyu.new_unknown_tyu None)
+    in
     let target_tyu =
-      WeakTyu.new_constructor_tyu
-        (Product (List.init (List.length terms) (fun _ -> WeakTyu.new_unknown_tyu None)))
-        implicit_polarity
+      WeakTyu.new_constructor_tyu (Product target_unknowns) implicit_polarity
     in
     if not (Type.is_constructor_tyu_forced expected_type tydef_env)
     then
@@ -648,13 +694,22 @@ and check
                  let t, term_demands =
                    check knowledge term expected_ty tydef_env ty_env None
                  in
-                 t :: terms, merge_contexts demands_acc term_demands)
+                 t :: terms, merge_contexts demands_acc term_demands tydef_env)
               ([], empty_context ())
               terms
-              expected_tys
+              target_unknowns
           in
-          let expr = ann, Ast.Tuple (List.rev new_terms) in
-          annotate expr expected_type, demands)
+          (* given all of this, unify the unknown type against the expected type *)
+          if is_subtype_tyu target_tyu expected_type tydef_env
+          then (
+            let expr = ann, Ast.Tuple (List.rev new_terms) in
+            annotate expr expected_type, demands)
+          else
+            type_mismatch
+              ?loc:ann.loc
+              expected_type
+              target_tyu
+              "check: TTuple expected type mismatch after checking terms")
       | _ ->
         type_mismatch
           ?loc:ann.loc
@@ -692,7 +747,10 @@ and check
       List.map (fun id -> id, expected_type) (binder_ids_of_binder tbinder)
     in
     let new_knowledge =
-      List.fold_left (fun acc (id, ty) -> add_to_context id ty acc) knowledge usage_tyus
+      List.fold_left
+        (fun acc (id, ty) -> add_to_context id ty acc tydef_env)
+        knowledge
+        usage_tyus
     in
     let term, demands =
       check new_knowledge tterm expected_type tydef_env ty_env implicit_polarity
@@ -740,33 +798,43 @@ and check
           "check: constructor type mismatch with expected type"
     end
   | Ast.Arr terms ->
+    let target_unknown = WeakTyu.new_unknown_tyu None in
+    let target_tyu =
+      WeakTyu.new_constructor_tyu (Array target_unknown) implicit_polarity
+    in
     if not (Type.is_constructor_tyu_forced expected_type tydef_env)
     then
       type_mismatch
         ?loc:ann.loc
         expected_type
-        (WeakTyu.new_constructor_tyu
-           (Array (WeakTyu.new_unknown_tyu None))
-           implicit_polarity)
+        target_tyu
         "check: TArr expected type mismatch"
     else (
       let is_constructor, raw_ty = Type.tyu_to_raw_ty expected_type tydef_env in
       begin match is_constructor, raw_ty with
       | false, _ ->
         assert false (* impossible, as we just verified that this is a constructor *)
-      | _, Array expected_elem_ty ->
+      | _, Array _ ->
         let new_terms, demands =
           List.fold_left
             (fun (terms, demands_acc) term ->
                let t, term_demands =
-                 check knowledge term expected_elem_ty tydef_env ty_env None
+                 check knowledge term target_unknown tydef_env ty_env None
                in
-               t :: terms, merge_contexts demands_acc term_demands)
+               t :: terms, merge_contexts demands_acc term_demands tydef_env)
             ([], empty_context ())
             terms
         in
-        let expr = ann, Ast.Arr (List.rev new_terms) in
-        annotate expr expected_type, demands
+        if is_subtype_tyu target_tyu expected_type tydef_env
+        then (
+          let expr = ann, Ast.Arr (List.rev new_terms) in
+          annotate expr expected_type, demands)
+        else
+          type_mismatch
+            ?loc:ann.loc
+            expected_type
+            target_tyu
+            "check: TArr expected type mismatch after checking terms"
       | _ ->
         type_mismatch
           ?loc:ann.loc
@@ -781,14 +849,14 @@ and check
     let synthesized_term, synthesized_tyu, demands =
       synthesize knowledge expr tydef_env ty_env implicit_polarity
     in
-    if not (is_subtype_tyu synthesized_tyu expected_type tydef_env)
+    if not (is_subtype_tyu expected_type synthesized_tyu tydef_env)
     then
       type_mismatch
         ?loc:ann.loc
         expected_type
         synthesized_tyu
         "check: destructor expected type mismatch"
-    else annotate synthesized_term synthesized_tyu, demands
+    else annotate synthesized_term expected_type, demands
 
 and typecheck_command
       (knowledge : context)
@@ -805,20 +873,76 @@ and typecheck_command
         then Some Ast.Plus, Some Ast.Minus
         else Some Ast.Minus, Some Ast.Plus
       in
+      Printf.eprintf
+        "typecheck_command_aux: attempting to synthesize %s and check %s against its \
+         negation\n\
+         %!"
+        (Syntax.Pretty.show_term ~ann_show:(fun _ s -> s) synth_term)
+        (Syntax.Pretty.show_term ~ann_show:(fun _ s -> s) check_term);
+      Printf.eprintf
+        "synthesizing %s with polarity %s\n%!"
+        (Syntax.Pretty.show_term ~ann_show:(fun _ s -> s) synth_term)
+        (match synth_mode with
+         | Some Ast.Plus -> "+"
+         | Some Ast.Minus -> "-"
+         | None -> "None");
+      Printf.eprintf
+        "knowledge before synthesis: %s\n%!"
+        (String.concat
+           ", "
+           (List.map
+              (fun (id, tyu) ->
+                 Printf.sprintf "%d: %s" id (Syntax.Pretty.show_ty_use tyu))
+              (IMap.bindings knowledge)));
       let synth_expr, synth_tyu, synth_demands =
-        synthesize knowledge synth_term tydef_env ty_env synth_mode
+        if previous_error = `First_attempt
+        then synthesize knowledge synth_term tydef_env ty_env synth_mode
+        else synthesize ~second_pass:true knowledge synth_term tydef_env ty_env synth_mode
       in
-      let check_expr, check_demands =
-        check knowledge check_term (Type.negate_tyu synth_tyu) tydef_env ty_env check_mode
-      in
-      let out_demands = merge_contexts synth_demands check_demands in
-      match expression_side with
-      | `Left ->
-        let cmd = Ast.Core { l_term = synth_expr; r_term = check_expr } in
-        mk_command ann cmd, out_demands
-      | `Right ->
-        let cmd = Ast.Core { l_term = check_expr; r_term = synth_expr } in
-        mk_command ann cmd, out_demands
+      match is_constructor_tyu synth_tyu tydef_env with
+      | Some true -> raise SynthOtherSide
+      | Some false | None ->
+        Printf.eprintf
+          "synthesized type %s for %s\n%!"
+          (Syntax.Pretty.show_ty_use synth_tyu)
+          (Syntax.Pretty.show_term ~ann_show:(fun _ s -> s) synth_expr);
+        Printf.eprintf
+          "demands after synthesis: %s\n%!"
+          (String.concat
+             ", "
+             (List.map
+                (fun (id, tyu) ->
+                   Printf.sprintf "%d: %s" id (Syntax.Pretty.show_ty_use tyu))
+                (IMap.bindings synth_demands)));
+        Printf.eprintf
+          "checking %s against type %s\n%!"
+          (Syntax.Pretty.show_term ~ann_show:(fun _ s -> s) check_term)
+          (Syntax.Pretty.show_ty_use (Type.negate_tyu synth_tyu));
+        let check_expr, check_demands =
+          check
+            knowledge
+            check_term
+            (Type.negate_tyu synth_tyu)
+            tydef_env
+            ty_env
+            check_mode
+        in
+        let out_demands = merge_contexts synth_demands check_demands tydef_env in
+        Printf.eprintf
+          "demands after checking: %s\n%!"
+          (String.concat
+             ", "
+             (List.map
+                (fun (id, tyu) ->
+                   Printf.sprintf "%d: %s" id (Syntax.Pretty.show_ty_use tyu))
+                (IMap.bindings out_demands)));
+        (match expression_side with
+         | `Left ->
+           let cmd = Ast.Core { l_term = synth_expr; r_term = check_expr } in
+           mk_command ann cmd, out_demands
+         | `Right ->
+           let cmd = Ast.Core { l_term = check_expr; r_term = synth_expr } in
+           mk_command ann cmd, out_demands)
     with
     | SynthOtherSide ->
       if previous_error = `First_attempt
@@ -945,7 +1069,10 @@ and typecheck_command
           (Ast.Arith
              (Ast.Bop
                 { op = top; l_term = tl_term; r_term = tr_term; out_term = tout_term }))
-      , merge_contexts out_demands (merge_contexts left_demands right_demands) ))
+      , merge_contexts
+          out_demands
+          (merge_contexts left_demands right_demands tydef_env)
+          tydef_env ))
   | Ast.Arith (Ast.Unop { op = top; in_term = tin_term; out_term = tout_term }) ->
     let tout_term, out_ty_use, out_demands =
       synthesize knowledge tout_term tydef_env ty_env None
@@ -966,11 +1093,12 @@ and typecheck_command
       ( mk_command
           ann
           (Ast.Arith (Ast.Unop { op = top; in_term = tin_term; out_term = tout_term }))
-      , merge_contexts out_demands in_demands ))
+      , merge_contexts out_demands in_demands tydef_env ))
   | Ast.Fork (cmd1, cmd2) ->
     let cmd1, ctx1_demands = typecheck_command knowledge cmd1 tydef_env ty_env in
     let cmd2, ctx2_demands = typecheck_command knowledge cmd2 tydef_env ty_env in
-    mk_command ann (Ast.Fork (cmd1, cmd2)), merge_contexts ctx1_demands ctx2_demands
+    ( mk_command ann (Ast.Fork (cmd1, cmd2))
+    , merge_contexts ctx1_demands ctx2_demands tydef_env )
 ;;
 
 let rec tycheck_mod_tli
@@ -987,7 +1115,7 @@ let rec tycheck_mod_tli
     in
     let new_knowledge =
       List.fold_left
-        (fun acc id -> add_to_context id inferred_ty acc)
+        (fun acc id -> add_to_context id inferred_ty acc tydef_env)
         knowledge
         (binder_ids_of_binder tbinder)
     in

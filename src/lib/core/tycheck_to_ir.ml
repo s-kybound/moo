@@ -68,19 +68,7 @@ let rec should_focus_left (tyu : Ast.ty_use) (tydef_env : Type.tydef_env) : bool
   | Ast.Weak { link = { negated; meta } } ->
   match meta.cell with
   | Unified tyu -> should_focus_left tyu tydef_env <> negated
-  | Inferred { modality = Some m; polarity = Some p; _ } -> begin
-    match m, p with
-    | By_value, Plus -> not negated
-    | By_value, Minus -> negated
-    | By_name, Plus -> negated
-    | By_name, Minus -> not negated
-  end
-  (* without polarity, assume positive polarity for constructors *)
-  | Inferred { modality = Some m; constructor = Some c; _ } -> begin
-    match m with
-    | By_value -> if c then not negated else negated
-    | By_name -> if c then negated else not negated
-  end
+  | Inferred { left_focusing = Some lf; _ } -> lf <> negated
   (* without modality, left for data, right for codata
    * ie direction towards constructors *)
   | Inferred { constructor = Some c; _ } -> c <> negated

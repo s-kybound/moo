@@ -332,10 +332,15 @@ and make_matcher_body ann branches =
        let ast_cmd =
          List.fold_right
            (fun (gensym_binder, original_binder, ty_use) acc_cmd ->
-              cutlet_let
-                original_binder
-                (mk_ann ~loc:ann (mk_var ~loc:ann gensym_binder) ty_use)
-                acc_cmd)
+              (* curr limitation: if the ty_use is abstract, don't use it*)
+              match ty_use with
+              | Ast.Abstract _ ->
+                cutlet_let original_binder (mk_var ~loc:ann gensym_binder) acc_cmd
+              | _ ->
+                cutlet_let
+                  original_binder
+                  (mk_ann ~loc:ann (mk_var ~loc:ann gensym_binder) ty_use)
+                  acc_cmd)
            binder_ty_uses
            (surface_command_to_ast_command cmd)
        in
