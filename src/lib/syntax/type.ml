@@ -317,40 +317,6 @@ let rec tyu_to_raw_ty_strict (tyu : ty_use) (tydef_env : tydef_env)
       raise (Error.TypeError { loc = None; message }))
 ;;
 
-(* returns whether the tyu is a constructor or destructor of
- * some raw type *)
-let rec tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env) : bool * raw_ty =
-  match tyu with
-  | Polarised (polarity, ty) ->
-    let _, shape, raw_ty = ty_to_raw_ty ty tydef_env in
-    let is_constructor =
-      match polarity, shape with
-      | Plus, Data | Minus, Codata -> true
-      | Plus, Codata | Minus, Data -> false
-    in
-    is_constructor, raw_ty
-  | Abstract { name; _ } ->
-    let message = Printf.sprintf "Cannot convert abstract type %s to raw type" name in
-    raise (Error.TypeError { loc = None; message })
-  | AbstractIntroducer (_, tyu) -> tyu_to_raw_ty tyu tydef_env
-  | Weak { link = { negated; meta } } ->
-  match meta.cell with
-  | Unified tyu ->
-    let is_cons, raw_ty = tyu_to_raw_ty tyu tydef_env in
-    is_cons <> negated, raw_ty
-  | Inferred { constructor; raw_lower_bound; polarity; _ } ->
-  match constructor, raw_lower_bound, polarity with
-  | Some is_constructor, Some raw_ty, _ -> is_constructor <> negated, raw_ty
-  | _ ->
-    let message =
-      Printf.sprintf
-        "Cannot convert weak type variable %s to raw type because it does not have \
-         enough constraints"
-        (Pretty.show_ty_use tyu)
-    in
-    raise (Error.TypeError { loc = None; message })
-;;
-
 let rec is_constructor_tyu ~update (tyu : ty_use) (tydef_env : tydef_env) : bool option =
   match tyu with
   | Abstract { name; left_focusing = None; _ } ->
@@ -725,12 +691,16 @@ and abstract_compatible
     (Pretty.show_ty_use pol_type);
   let solutions = Hashtbl.create (List.length new_opaques) in
   let rec aux_tyu abstract_body pol_type =
+    Printf.eprintf
+      "Comparing abstract body %s with pol_type %s\n%!"
+      (Pretty.show_ty_use abstract_body)
+      (Pretty.show_ty_use pol_type);
     match abstract_body, pol_type with
     | Abstract { left_focusing = None; _ }, _ | Weak _, _ | AbstractIntroducer _, _ ->
       assert false
     | ( Abstract { name = name1; negated = neg1; left_focusing = lf1 }
       , Abstract { name = name2; negated = neg2; left_focusing = lf2 } ) ->
-      if List.mem_assoc name1 new_opaques
+      if List.mem_assoc name2 new_opaques
       then assert false (* the opaques should be unique *)
       else name1 = name2 && neg1 = neg2 && lf1 = lf2
     | Abstract { name; left_focusing = Some lf1; negated }, _ ->
@@ -800,6 +770,10 @@ and abstract_compatible
       in
       if unifiable then meta.cell <- Unified compared_tyu;
       unifiable
+    | AbstractIntroducer _ ->
+      (* unify if the abstract introducer is compatible with the compared tyu *)
+      let instantiated, _new_opaques = instantiate_abstract_introducer tyu in
+      aux_unify_weak negated meta instantiated
     | _ ->
       let unifiable =
         begin
@@ -981,6 +955,19 @@ and unify_weak_with_tyu
     in
     if unifiable then meta.cell <- Unified compared_tyu;
     unifiable
+  | Abstract { left_focusing = None; name; _ } ->
+    let message =
+      Printf.sprintf
+        "Malformed type: abstract type %s is used without a direction\n\
+         (ie without being under a polarised type or an abstract introducer)"
+        (match compared_tyu with
+         | Abstract { name; _ } -> name
+         | _ -> assert false)
+    in
+    raise (MalformedType (Ast.Base name, message))
+  | AbstractIntroducer _ ->
+    let instantiated, _ = instantiate_abstract_introducer tyu in
+    unify_weak_with_tyu negated meta instantiated tydef_env
   | _ ->
     let unifiable =
       let _, polarity, shape, raw_ty = tyu_to_raw_ty_strict compared_tyu tydef_env in

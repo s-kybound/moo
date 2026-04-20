@@ -675,51 +675,28 @@ and check
         target_tyu
         "check: TTuple expected type mismatch"
     else (
-      let is_constructor, raw_ty = Type.tyu_to_raw_ty expected_type tydef_env in
-      begin match is_constructor, raw_ty with
-      | false, _ ->
-        assert false (* impossible, as we just verified that this is a constructor *)
-      | _, Product expected_tys ->
-        if List.length terms <> List.length expected_tys
-        then
-          type_mismatch
-            ?loc:ann.loc
-            expected_type
-            (WeakTyu.new_constructor_tyu (Product expected_tys) implicit_polarity)
-            "check: TTuple arity mismatch"
-        else (
-          let new_terms, demands =
-            List.fold_left2
-              (fun (terms, demands_acc) term expected_ty ->
-                 let t, term_demands =
-                   check knowledge term expected_ty tydef_env ty_env None
-                 in
-                 t :: terms, merge_contexts demands_acc term_demands tydef_env)
-              ([], empty_context ())
-              terms
-              target_unknowns
-          in
-          (* given all of this, unify the unknown type against the expected type *)
-          if is_subtype_tyu target_tyu expected_type tydef_env
-          then (
-            let expr = ann, Ast.Tuple (List.rev new_terms) in
-            annotate expr expected_type, demands)
-          else
-            type_mismatch
-              ?loc:ann.loc
-              expected_type
-              target_tyu
-              "check: TTuple expected type mismatch after checking terms")
-      | _ ->
+      let new_terms, demands =
+        List.fold_left2
+          (fun (terms, demands_acc) term expected_ty ->
+             let t, term_demands =
+               check knowledge term expected_ty tydef_env ty_env None
+             in
+             t :: terms, merge_contexts demands_acc term_demands tydef_env)
+          ([], empty_context ())
+          terms
+          target_unknowns
+      in
+      (* given all of this, unify the unknown type against the expected type *)
+      if is_subtype_tyu target_tyu expected_type tydef_env
+      then (
+        let expr = ann, Ast.Tuple (List.rev new_terms) in
+        annotate expr expected_type, demands)
+      else
         type_mismatch
           ?loc:ann.loc
           expected_type
-          (WeakTyu.new_constructor_tyu
-             (Product
-                (List.init (List.length terms) (fun _ -> WeakTyu.new_unknown_tyu None)))
-             implicit_polarity)
-          "check: TTuple expected type mismatch"
-      end)
+          target_tyu
+          "check: TTuple expected type mismatch after checking terms")
   | Ast.Ann (tterm, ty_use) -> begin
     match validate_tyu ty_use tydef_env with
     | Error msg ->
@@ -810,40 +787,26 @@ and check
         target_tyu
         "check: TArr expected type mismatch"
     else (
-      let is_constructor, raw_ty = Type.tyu_to_raw_ty expected_type tydef_env in
-      begin match is_constructor, raw_ty with
-      | false, _ ->
-        assert false (* impossible, as we just verified that this is a constructor *)
-      | _, Array _ ->
-        let new_terms, demands =
-          List.fold_left
-            (fun (terms, demands_acc) term ->
-               let t, term_demands =
-                 check knowledge term target_unknown tydef_env ty_env None
-               in
-               t :: terms, merge_contexts demands_acc term_demands tydef_env)
-            ([], empty_context ())
-            terms
-        in
-        if is_subtype_tyu target_tyu expected_type tydef_env
-        then (
-          let expr = ann, Ast.Arr (List.rev new_terms) in
-          annotate expr expected_type, demands)
-        else
-          type_mismatch
-            ?loc:ann.loc
-            expected_type
-            target_tyu
-            "check: TArr expected type mismatch after checking terms"
-      | _ ->
+      let new_terms, demands =
+        List.fold_left
+          (fun (terms, demands_acc) term ->
+             let t, term_demands =
+               check knowledge term target_unknown tydef_env ty_env None
+             in
+             t :: terms, merge_contexts demands_acc term_demands tydef_env)
+          ([], empty_context ())
+          terms
+      in
+      if is_subtype_tyu target_tyu expected_type tydef_env
+      then (
+        let expr = ann, Ast.Arr (List.rev new_terms) in
+        annotate expr expected_type, demands)
+      else
         type_mismatch
           ?loc:ann.loc
           expected_type
-          (WeakTyu.new_constructor_tyu
-             (Array (WeakTyu.new_unknown_tyu None))
-             implicit_polarity)
-          "check: TArr expected type mismatch"
-      end)
+          target_tyu
+          "check: TArr expected type mismatch after checking terms")
   (* destructors - all downshifts here *)
   | Ast.Exit | Ast.Matcher _ ->
     let synthesized_term, synthesized_tyu, demands =
