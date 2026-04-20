@@ -333,10 +333,29 @@ and make_matcher_body ann branches =
          List.fold_right
            (fun (gensym_binder, original_binder, ty_use) acc_cmd ->
               (* curr limitation: if the ty_use is abstract, don't use it*)
-              match ty_use with
-              | Ast.Abstract _ ->
-                cutlet_let original_binder (mk_var ~loc:ann gensym_binder) acc_cmd
-              | _ ->
+              let rec ty_use_contains_abstract ty_use =
+                match ty_use with
+                | Ast.Weak _ -> assert false
+                | Ast.Polarised (_, t) -> ty_contains_abstract t
+                | Ast.Abstract _ -> true
+                | Ast.AbstractIntroducer (_, inner) -> ty_use_contains_abstract inner
+              and ty_contains_abstract ty =
+                match ty with
+                | Ast.Named (_, tyu_list) -> List.exists ty_use_contains_abstract tyu_list
+                | Ast.Raw (_, _, raw_ty) -> raw_ty_contains_abstract raw_ty
+              and raw_ty_contains_abstract raw_ty =
+                match raw_ty with
+                | Ast.Int | Ast.Bool -> false
+                | Ast.Product tyu_list -> List.exists ty_use_contains_abstract tyu_list
+                | Ast.Array tyu -> ty_use_contains_abstract tyu
+                | Ast.Variant variants ->
+                  List.exists
+                    (fun v -> List.exists ty_use_contains_abstract v.Ast.constr_args)
+                    variants
+              in
+              if ty_use_contains_abstract ty_use
+              then cutlet_let original_binder (mk_var ~loc:ann gensym_binder) acc_cmd
+              else
                 cutlet_let
                   original_binder
                   (mk_ann ~loc:ann (mk_var ~loc:ann gensym_binder) ty_use)
