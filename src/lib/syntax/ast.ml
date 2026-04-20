@@ -6,20 +6,18 @@ let empty_core_ann : core_ann = { loc = None }
 
 (*
  * An inferred weak type variable.
- * Since our inference system will default to data[cbv], we only
- * need to keep track of whether the type is a constructor or destructor.
  * If it is ever compared against a more specific type, it adopts the meet of
  * the two types.
  *)
 type meta_core_constraints =
   { constructor : bool option
   ; polarity : polarity option
+  ; modality : mode option
   ; raw_lower_bound : raw_ty option
   }
 
 and meta_core_cell =
   | Inferred of meta_core_constraints
-    (* if left like this, will be inferred to data[cbv] or codata[cbn] in the future *)
   | Unified of ty_use
 
 and meta_var =

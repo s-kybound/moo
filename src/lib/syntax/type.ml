@@ -66,27 +66,40 @@ module WeakTyu = struct
   let new_meta_var () : meta_var =
     let id = genint () in
     { id
-    ; cell = Inferred { constructor = None; raw_lower_bound = None; polarity = None }
+    ; cell =
+        Inferred
+          { constructor = None; raw_lower_bound = None; polarity = None; modality = None }
     }
   ;;
 
   let new_unknown_tyu polarity : ty_use =
     let meta = new_meta_var () in
-    meta.cell <- Inferred { constructor = None; raw_lower_bound = None; polarity };
+    meta.cell
+    <- Inferred { constructor = None; raw_lower_bound = None; polarity; modality = None };
     Weak { link = { negated = false; meta } }
   ;;
 
   let new_constructor_tyu raw polarity : ty_use =
     let meta = new_meta_var () in
     meta.cell
-    <- Inferred { constructor = Some true; raw_lower_bound = Some raw; polarity };
+    <- Inferred
+         { constructor = Some true
+         ; raw_lower_bound = Some raw
+         ; polarity
+         ; modality = None
+         };
     Weak { link = { negated = false; meta } }
   ;;
 
   let new_destructor_tyu raw polarity : ty_use =
     let meta = new_meta_var () in
     meta.cell
-    <- Inferred { constructor = Some false; raw_lower_bound = Some raw; polarity };
+    <- Inferred
+         { constructor = Some false
+         ; raw_lower_bound = Some raw
+         ; polarity
+         ; modality = None
+         };
     Weak { link = { negated = false; meta } }
   ;;
 
@@ -126,22 +139,18 @@ module Substitute = struct
       meta.cell <- Unified new_tyu;
       meta
     | Inferred cons ->
-      let constructor =
-        match cons.constructor with
-        | Some c -> Some c
-        | None -> None
-      in
       let raw_lower_bound =
         match cons.raw_lower_bound with
         | Some r -> Some (raw_ty_replace bindings r)
         | None -> None
       in
-      let polarity =
-        match cons.polarity with
-        | Some p -> Some p
-        | None -> None
-      in
-      meta.cell <- Inferred { constructor; raw_lower_bound; polarity };
+      meta.cell
+      <- Inferred
+           { constructor = cons.constructor
+           ; raw_lower_bound
+           ; polarity = cons.polarity
+           ; modality = cons.modality
+           };
       meta
 
   and ty_replace (bindings : (string * ty_use) list) (target : ty) : ty =
@@ -202,36 +211,24 @@ let is_variant_ty (ty : ty) (tydef_env : tydef_env) : bool =
 ;;
 
 (* resolved - means there is no chance that the 
- * type can be further resolved
+ * outer shape of the type can be further resolved
+ * it may contain unresolved inner tyus, but the outer structure is fully known.
  *)
 let rec tyu_is_resolved (tyu : ty_use) : bool =
   match tyu with
-  | Polarised (_, ty) -> ty_is_resolved ty
   | AbstractIntroducer (_, tyu) -> tyu_is_resolved tyu
+  | Polarised _ -> true
   | Abstract _ -> true
   | Weak { link = { meta; _ } } -> meta_var_is_resolved meta
 
 and meta_var_is_resolved m : bool =
   match m.cell with
-  (* inferred meta variables can be further resolved *)
-  | Inferred _ -> false
+  | Inferred { polarity; constructor; raw_lower_bound; modality } ->
+    polarity <> None
+    && constructor <> None
+    && raw_lower_bound <> None
+    && modality <> None
   | Unified tyu -> tyu_is_resolved tyu
-
-and ty_is_resolved (ty : ty) : bool =
-  match ty with
-  | Named (_, ty_uses) -> List.for_all tyu_is_resolved ty_uses
-  | Raw (_, _, raw_ty) -> raw_ty_is_resolved raw_ty
-
-and raw_ty_is_resolved (raw_ty : raw_ty) : bool =
-  match raw_ty with
-  | Int -> true
-  | Bool -> true
-  | Product ty_uses -> List.for_all tyu_is_resolved ty_uses
-  | Array ty_use -> tyu_is_resolved ty_use
-  | Variant variants ->
-    List.for_all
-      (fun { constr_args; _ } -> List.for_all tyu_is_resolved constr_args)
-      variants
 ;;
 
 let ty_to_raw_ty (ty : ty) (tydef_env : tydef_env) : mode * shape * raw_ty =
@@ -273,14 +270,34 @@ let rec tyu_to_raw_ty_strict (tyu : ty_use) (tydef_env : tydef_env)
     | Plus, true | Minus, false -> m, Minus, s, r
     | Minus, true | Plus, false -> m, Plus, s, r
     end
-  | Inferred _ ->
-    let message =
-      Printf.sprintf
-        "Cannot obtain modal, polarity information of weak type variable %s that has not \
-         been fully unified"
-        (Pretty.show_ty_use tyu)
-    in
-    raise (Error.TypeError { loc = None; message })
+  | Inferred { polarity; constructor; raw_lower_bound; modality } ->
+    if tyu_is_resolved tyu
+    then (
+      let m, p, s, r =
+        match polarity, constructor, raw_lower_bound, modality with
+        | Some pol, Some cons, Some raw, Some mode ->
+          let shape =
+            match pol, cons with
+            | Plus, true | Minus, false -> Data
+            | Plus, false | Minus, true -> Codata
+          in
+          mode, pol, shape, raw
+        | _ -> assert false (* this case is impossible due to the is_resolved check *)
+      in
+      let final_polarity =
+        match p, negated with
+        | Plus, true | Minus, false -> Minus
+        | Minus, true | Plus, false -> Plus
+      in
+      m, final_polarity, s, r)
+    else (
+      let message =
+        Printf.sprintf
+          "Cannot obtain modal, polarity information of weak type variable %s that has \
+           not been fully unified"
+          (Pretty.show_ty_use tyu)
+      in
+      raise (Error.TypeError { loc = None; message }))
 ;;
 
 (* returns whether the tyu is a constructor or destructor of
@@ -304,7 +321,7 @@ let rec tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env) : bool * raw_ty =
   | Unified tyu ->
     let is_cons, raw_ty = tyu_to_raw_ty tyu tydef_env in
     is_cons <> negated, raw_ty
-  | Inferred { constructor; raw_lower_bound; polarity } ->
+  | Inferred { constructor; raw_lower_bound; polarity; _ } ->
   match constructor, raw_lower_bound, polarity with
   | Some is_constructor, Some raw_ty, _ -> is_constructor <> negated, raw_ty
   | _ ->
@@ -361,6 +378,7 @@ let is_constructor_tyu_forced tyu tydef_env =
 
 (* we will have the standard is_constructor_tyu as a non-updating version *)
 let is_constructor_tyu = is_constructor_tyu ~update:false
+let ( let* ) = Option.bind
 
 let rec is_subtype_tyu subtype supertype tydef_env : bool =
   match subtype, supertype with
@@ -542,29 +560,105 @@ and unify_constraints
     (match pol_results with
      | Error () -> Error ()
      | Ok (new_pol1, new_pol2) ->
-     match cons1.raw_lower_bound, cons2.raw_lower_bound with
-     | Some r1, Some r2 ->
-       if is_subtype_raw_ty r1 r2 tydef_env
-       then
-         Ok
-           ( { constructor = new_con1; raw_lower_bound = Some r1; polarity = new_pol1 }
-           , { constructor = new_con2; raw_lower_bound = Some r2; polarity = new_pol2 } )
-       else Error ()
-     | Some r, None ->
-       Ok
-         ( { constructor = new_con1; raw_lower_bound = Some r; polarity = new_pol1 }
-         , { constructor = new_con2; raw_lower_bound = Some r; polarity = new_pol2 } )
-     | None, Some r ->
-       Ok
-         ( { constructor = new_con1; raw_lower_bound = Some r; polarity = new_pol1 }
-         , { constructor = new_con2; raw_lower_bound = Some r; polarity = new_pol2 } )
-     | None, None ->
-       Ok
-         ( { constructor = new_con1; raw_lower_bound = None; polarity = new_pol1 }
-         , { constructor = new_con2; raw_lower_bound = None; polarity = new_pol2 } ))
+       let mode_results =
+         match cons1.modality, cons2.modality with
+         | Some m1, Some m2 -> if m1 = m2 then Ok (Some m1, Some m2) else Error ()
+         | Some m, None -> Ok (Some m, Some m)
+         | None, Some m -> Ok (Some m, Some m)
+         | None, None -> Ok (None, None)
+       in
+       (match mode_results with
+        | Error () -> Error ()
+        | Ok (new_mod1, new_mod2) ->
+        match cons1.raw_lower_bound, cons2.raw_lower_bound with
+        | Some r1, Some r2 ->
+          if is_subtype_raw_ty r1 r2 tydef_env
+          then
+            Ok
+              ( { constructor = new_con1
+                ; raw_lower_bound = Some r1
+                ; polarity = new_pol1
+                ; modality = new_mod1
+                }
+              , { constructor = new_con2
+                ; raw_lower_bound = Some r2
+                ; polarity = new_pol2
+                ; modality = new_mod2
+                } )
+          else Error ()
+        | Some r, None ->
+          Ok
+            ( { constructor = new_con1
+              ; raw_lower_bound = Some r
+              ; polarity = new_pol1
+              ; modality = new_mod1
+              }
+            , { constructor = new_con2
+              ; raw_lower_bound = Some r
+              ; polarity = new_pol2
+              ; modality = new_mod2
+              } )
+        | None, Some r ->
+          Ok
+            ( { constructor = new_con1
+              ; raw_lower_bound = Some r
+              ; polarity = new_pol1
+              ; modality = new_mod1
+              }
+            , { constructor = new_con2
+              ; raw_lower_bound = Some r
+              ; polarity = new_pol2
+              ; modality = new_mod2
+              } )
+        | None, None ->
+          Ok
+            ( { constructor = new_con1
+              ; raw_lower_bound = None
+              ; polarity = new_pol1
+              ; modality = new_mod1
+              }
+            , { constructor = new_con2
+              ; raw_lower_bound = None
+              ; polarity = new_pol2
+              ; modality = new_mod2
+              } )))
 
 and tyu_equal tyu1 tyu2 tydef_env : bool =
   is_subtype_tyu tyu1 tyu2 tydef_env && is_subtype_tyu tyu2 tyu1 tydef_env
+;;
+
+(* the join of several type uses is the 
+ * least upper bound of all the type uses, ie
+ * the most specified supertype of all the tyus
+ * present.
+ *)
+let rec join_tyu (tyus : ty_use list) tydef_env : ty_use option =
+  match tyus with
+  | [] -> None
+  | [ tyu ] -> Some tyu
+  | tyu :: rest ->
+    let* rest_tyu = join_tyu rest tydef_env in
+    if is_subtype_tyu tyu rest_tyu tydef_env
+    then Some rest_tyu
+    else if is_subtype_tyu rest_tyu tyu tydef_env
+    then Some tyu
+    else None
+
+(* the meet of several type uses 
+ * the most specified subtype of all the tyus
+ * present.
+ *)
+and meet_tyu (tyus : ty_use list) tydef_env : ty_use option =
+  match tyus with
+  | [] -> None
+  | [ tyu ] -> Some tyu
+  | tyu :: rest ->
+    let* rest_tyu = meet_tyu rest tydef_env in
+    if is_subtype_tyu tyu rest_tyu tydef_env
+    then Some tyu
+    else if is_subtype_tyu rest_tyu tyu tydef_env
+    then Some rest_tyu
+    else None
 ;;
 
 (* Given a constructor's name and arity, look up the first matching type 
@@ -927,41 +1021,4 @@ let rec is_lazy_tyu tyu tydef_env =
      | Minus, By_value -> true
      | Plus, By_value -> false
      | Minus, By_name -> false)
-;;
-
-let ( let* ) = Option.bind
-
-(* the join of several type uses is the 
- * least upper bound of all the type uses, ie
- * the most specified supertype of all the tyus
- * present.
- *)
-let rec join_tyu (tyus : ty_use list) tydef_env : ty_use option =
-  match tyus with
-  | [] -> None
-  | [ tyu ] -> Some tyu
-  | tyu :: rest ->
-    let* rest_tyu = join_tyu rest tydef_env in
-    if is_subtype_tyu tyu rest_tyu tydef_env
-    then Some rest_tyu
-    else if is_subtype_tyu rest_tyu tyu tydef_env
-    then Some tyu
-    else None
-;;
-
-(* the meet of several type uses 
- * the most specified subtype of all the tyus
- * present.
- *)
-let rec meet_tyu (tyus : ty_use list) tydef_env : ty_use option =
-  match tyus with
-  | [] -> None
-  | [ tyu ] -> Some tyu
-  | tyu :: rest ->
-    let* rest_tyu = meet_tyu rest tydef_env in
-    if is_subtype_tyu tyu rest_tyu tydef_env
-    then Some tyu
-    else if is_subtype_tyu rest_tyu tyu tydef_env
-    then Some rest_tyu
-    else None
 ;;

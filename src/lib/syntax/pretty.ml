@@ -61,10 +61,27 @@ let rec show_ty_use tyu =
   | `Unknown id ->
     let prefix = if negated then "~" else "" in
     Printf.sprintf "%s?%d" prefix id
-  | `Shaped (id, cons) ->
-    let shape = if cons <> negated then "constructor" else "destructor" in
-    Printf.sprintf "[inferred-?%d]%s" id shape
-  | `FullyInferred (constructor, polarity, raw) ->
+  | `FullyInferred (constructor, polarity, raw, mode) ->
+    let chirality =
+      match polarity, constructor with
+      | Plus, true -> Data
+      | Minus, true -> Codata
+      | Minus, false -> Data
+      | Plus, false -> Codata
+    in
+    let final_polarity =
+      match negated, polarity with
+      | true, Plus -> Minus
+      | true, Minus -> Plus
+      | false, pol -> pol
+    in
+    Printf.sprintf
+      "%s%s[%s] %s"
+      (show_polarity final_polarity)
+      (show_shape chirality)
+      (show_mode mode)
+      (show_raw_ty raw)
+  | `InferrerableMode (constructor, polarity, raw) ->
     let chirality =
       match polarity, constructor with
       | Plus, true -> Data
@@ -83,25 +100,21 @@ let rec show_ty_use tyu =
       (show_polarity final_polarity)
       (show_shape chirality)
       (show_raw_ty raw)
-  | `Inferred (id, constructor, raw) ->
-    let is_constructor = constructor <> negated in
-    Printf.sprintf
-      "[inferred-?%d]%sdata %s"
-      id
-      (if is_constructor then "+" else "-")
-      (show_raw_ty raw)
+  | `Shaped (id, constructor, raw) ->
+    let shape = if constructor then "constructor" else "destructor" in
+    Printf.sprintf "[inferred-?%d]%s %s" id shape (show_raw_ty raw)
   | `Unified tyu ->
     if negated then Printf.sprintf "~(%s)" (show_ty_use tyu) else show_ty_use tyu
 
 and describe_meta_var { id; cell } =
   match cell with
   | Unified tyu -> `Unified tyu
-  | Inferred { constructor; raw_lower_bound; polarity } ->
-  match constructor, polarity, raw_lower_bound with
-  | Some cons, Some pol, Some raw -> `FullyInferred (cons, pol, raw)
-  | Some cons, None, Some raw -> `Inferred (id, cons, raw)
-  | Some cons, None, None -> `Shaped (id, cons)
-  | _, _, _ -> `Unknown id
+  | Inferred { constructor; raw_lower_bound; polarity; modality } ->
+  match constructor, polarity, raw_lower_bound, modality with
+  | Some cons, Some pol, Some raw, Some mode -> `FullyInferred (cons, pol, raw, mode)
+  | Some cons, Some pol, Some raw, _ -> `InferrerableMode (cons, pol, raw)
+  | Some cons, _, Some raw, _ -> `Shaped (id, cons, raw)
+  | _ -> `Unknown id
 
 and show_ty ty =
   match ty with
