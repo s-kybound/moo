@@ -362,16 +362,12 @@ let is_constructor_tyu_forced tyu tydef_env =
 (* we will have the standard is_constructor_tyu as a non-updating version *)
 let is_constructor_tyu = is_constructor_tyu ~update:false
 
-let rec tyu_equal (tyu1 : ty_use) (tyu2 : ty_use) tydef_env : bool =
-  match tyu1, tyu2 with
-  | Abstract { negated = neg1; name = name1 }, Abstract { negated = neg2; name = name2 }
-    -> neg1 = neg2 && name1 = name2
-  | Abstract _, _ | _, Abstract _ -> false
-  | AbstractIntroducer _, AbstractIntroducer _ ->
-    (* check if the abstractIntroducers are alpha-equivalent, and if not if one is a subtype of the other *)
-    failwith "TODO: tyu_equal does not yet support abstract introducers"
-  | AbstractIntroducer _, _ | _, AbstractIntroducer _ ->
-    failwith "TODO: tyu_equal does not yet support abstract introducers"
+let rec is_subtype_tyu subtype supertype tydef_env : bool =
+  match subtype, supertype with
+  | Abstract { name = name1; negated = neg1 }, Abstract { name = name2; negated = neg2 }
+    -> name1 = name2 && neg1 = neg2
+  | Abstract _, _ | _, Abstract _ ->
+    false (* abstract types are only subtypes of themselves *)
   | ( Weak { link = { negated = neg1; meta = meta1 } as link1 }
     , Weak ({ link = { negated = neg2; meta = meta2 } } as weak2) ) ->
     (* check if they are the same meta var, if so check if the negation flags match 
@@ -388,7 +384,7 @@ let rec tyu_equal (tyu1 : ty_use) (tyu2 : ty_use) tydef_env : bool =
       | Unified tyu1, Unified tyu2 ->
         let compared_tyu1 = if neg1 then negate_tyu tyu1 else tyu1 in
         let compared_tyu2 = if neg2 then negate_tyu tyu2 else tyu2 in
-        tyu_equal compared_tyu1 compared_tyu2 tydef_env
+        is_subtype_tyu compared_tyu1 compared_tyu2 tydef_env
       | Unified sol1, Inferred _ ->
         let compared_sol1 = if neg1 then negate_tyu sol1 else sol1 in
         unify_weak_with_tyu neg2 meta2 compared_sol1 tydef_env
@@ -411,40 +407,59 @@ let rec tyu_equal (tyu1 : ty_use) (tyu2 : ty_use) tydef_env : bool =
   | other_tyu, Weak { link = { negated; meta } } ->
     (* if the weak tyu is fully unsolved, we can just unify it with the other tyu *)
     unify_weak_with_tyu negated meta other_tyu tydef_env
-  | Polarised (polarity1, ty1), Polarised (polarity2, ty2) ->
-    polarity1 = polarity2 && ty_equal ty1 ty2 tydef_env
+  | Polarised (pol1, ty1), Polarised (pol2, ty2) ->
+    pol1 = pol2 && is_subtype_ty ty1 ty2 tydef_env
+  | AbstractIntroducer (abstract1, tyu1), AbstractIntroducer (abstract2, tyu2) ->
+    if abstract1.left_focusing == abstract2.left_focusing
+    then (
+      (* substitute all abstract 2 in tyu2 with tyu1
+       * then check for subtype relationship *)
+      let substituted_tyu2 = Substitute.tyu_replace [ abstract2.name, tyu1 ] tyu2 in
+      is_subtype_tyu tyu1 substituted_tyu2 tydef_env)
+    else (
+      (* substitute all abstract 2 in tyu2 with ~tyu1 *
+       * then check for subtype relationship *)
+      let substituted_tyu2 =
+        Substitute.tyu_replace [ abstract2.name, negate_tyu tyu1 ] tyu2
+      in
+      is_subtype_tyu tyu1 substituted_tyu2 tydef_env)
+  | Polarised _, AbstractIntroducer _ -> failwith "TODO: "
+  | AbstractIntroducer _, Polarised _ -> failwith "TODO: "
 
-and ty_equal (ty1 : ty) (ty2 : ty) tydef_env : bool =
+and is_subtype_ty (ty1 : ty) (ty2 : ty) tydef_env : bool =
   match ty1, ty2 with
   | Named (name1, ty_uses1), Named (name2, ty_uses2) ->
     let canonical1 = canonical_ty name1 ty_uses1 tydef_env in
     let canonical2 = canonical_ty name2 ty_uses2 tydef_env in
     (* variants are treated differently - they use curry-style typing *)
     if is_variant_ty canonical1 tydef_env && is_variant_ty canonical2 tydef_env
-    then variant_equal canonical1 canonical2 tydef_env
+    then is_subtype_variant canonical1 canonical2 tydef_env
     else (
       let resolved1 = Substitute.resolve_parameterized_ty canonical1 tydef_env in
       let resolved2 = Substitute.resolve_parameterized_ty canonical2 tydef_env in
-      ty_equal resolved1 resolved2 tydef_env)
+      is_subtype_ty resolved1 resolved2 tydef_env)
   | Raw (mode1, shape1, raw_ty1), Raw (mode2, shape2, raw_ty2) ->
-    mode1 = mode2 && shape1 = shape2 && raw_ty_equal raw_ty1 raw_ty2 tydef_env
+    mode1 = mode2 && shape1 = shape2 && is_subtype_raw_ty raw_ty1 raw_ty2 tydef_env
   | Raw (m1, s1, r1), ty | ty, Raw (m1, s1, r1) ->
     if is_variant_ty ty tydef_env
     then false
     else (
       (* everything else uses church style typing *)
       let m2, s2, r2 = ty_to_raw_ty ty tydef_env in
-      m1 = m2 && s1 = s2 && raw_ty_equal r1 r2 tydef_env)
+      m1 = m2 && s1 = s2 && is_subtype_raw_ty r1 r2 tydef_env)
 
-and variant_equal (ty1 : ty) (ty2 : ty) tydef_env : bool =
+and is_subtype_variant (ty1 : ty) (ty2 : ty) tydef_env : bool =
   match ty1, ty2 with
   | Named (name1, ty_uses1), Named (name2, ty_uses2) ->
     name1 = name2
     && List.length ty_uses1 = List.length ty_uses2
-    && List.for_all2 (fun tyu1 tyu2 -> tyu_equal tyu1 tyu2 tydef_env) ty_uses1 ty_uses2
+    && List.for_all2
+         (fun tyu1 tyu2 -> is_subtype_tyu tyu1 tyu2 tydef_env)
+         ty_uses1
+         ty_uses2
   | _ -> assert false (* should have been checked by the caller *)
 
-and raw_ty_equal (rty1 : raw_ty) (rty2 : raw_ty) (tydef_env : tydef_env) : bool =
+and is_subtype_raw_ty (rty1 : raw_ty) (rty2 : raw_ty) (tydef_env : tydef_env) : bool =
   match rty1, rty2 with
   | Int, Int -> true
   | Bool, Bool -> true
@@ -453,11 +468,11 @@ and raw_ty_equal (rty1 : raw_ty) (rty2 : raw_ty) (tydef_env : tydef_env) : bool 
   | Product tys1, Product tys2 ->
     List.length tys1 = List.length tys2
     && List.for_all2
-         (fun ty_use1 ty_use2 -> tyu_equal ty_use1 ty_use2 tydef_env)
+         (fun ty_use1 ty_use2 -> is_subtype_tyu ty_use1 ty_use2 tydef_env)
          tys1
          tys2
   | Product _, _ | _, Product _ -> false
-  | Array ty_use1, Array ty_use2 -> tyu_equal ty_use1 ty_use2 tydef_env
+  | Array ty_use1, Array ty_use2 -> is_subtype_tyu ty_use1 ty_use2 tydef_env
   | Array _, _ | _, Array _ -> false
   | Variant _, Variant _ ->
     (* variants are never directly compared *)
@@ -481,11 +496,11 @@ and unify_weak_with_tyu
         is_constructor == is_constructor_tyu_forced compared_tyu tydef_env
       | None, Some raw_ty ->
         let _, ty_raw_ty = tyu_to_raw_ty compared_tyu tydef_env in
-        raw_ty_equal raw_ty ty_raw_ty tydef_env
+        is_subtype_raw_ty raw_ty ty_raw_ty tydef_env
       | Some is_constructor, Some raw_ty ->
         let _, ty_raw_ty = tyu_to_raw_ty compared_tyu tydef_env in
         is_constructor == is_constructor_tyu_forced compared_tyu tydef_env
-        && raw_ty_equal raw_ty ty_raw_ty tydef_env
+        && is_subtype_raw_ty raw_ty ty_raw_ty tydef_env
     in
     if unifiable then meta.cell <- Unified compared_tyu;
     unifiable
@@ -529,7 +544,7 @@ and unify_constraints
      | Ok (new_pol1, new_pol2) ->
      match cons1.raw_lower_bound, cons2.raw_lower_bound with
      | Some r1, Some r2 ->
-       if raw_ty_equal r1 r2 tydef_env
+       if is_subtype_raw_ty r1 r2 tydef_env
        then
          Ok
            ( { constructor = new_con1; raw_lower_bound = Some r1; polarity = new_pol1 }
@@ -547,6 +562,9 @@ and unify_constraints
        Ok
          ( { constructor = new_con1; raw_lower_bound = None; polarity = new_pol1 }
          , { constructor = new_con2; raw_lower_bound = None; polarity = new_pol2 } ))
+
+and tyu_equal tyu1 tyu2 tydef_env : bool =
+  is_subtype_tyu tyu1 tyu2 tydef_env && is_subtype_tyu tyu2 tyu1 tydef_env
 ;;
 
 (* Given a constructor's name and arity, look up the first matching type 
@@ -909,11 +927,6 @@ let rec is_lazy_tyu tyu tydef_env =
      | Minus, By_value -> true
      | Plus, By_value -> false
      | Minus, By_name -> false)
-;;
-
-let is_subtype_tyu subtype supertype tydef_env : bool =
-  ignore (supertype, subtype, tydef_env);
-  failwith "TODO: is_subtype_tyu is not yet implemented"
 ;;
 
 let ( let* ) = Option.bind
