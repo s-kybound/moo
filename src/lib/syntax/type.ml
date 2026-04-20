@@ -224,10 +224,7 @@ let rec tyu_is_resolved (tyu : ty_use) : bool =
 and meta_var_is_resolved m : bool =
   match m.cell with
   | Inferred { polarity; constructor; raw_lower_bound; modality } ->
-    polarity <> None
-    && constructor <> None
-    && raw_lower_bound <> None
-    && modality <> None
+    polarity <> None && constructor <> None && raw_lower_bound <> None && modality <> None
   | Unified tyu -> tyu_is_resolved tyu
 ;;
 
