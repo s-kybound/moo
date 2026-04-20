@@ -31,6 +31,7 @@ and ty_use =
   | Abstract of
       { negated : bool
       ; name : string
+      ; left_focusing : bool option
       }
   (* for type inference *)
   | Weak of { mutable link : weak_cell }

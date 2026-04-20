@@ -55,7 +55,16 @@ let rec should_focus_left (tyu : Ast.ty_use) (tydef_env : Type.tydef_env) : bool
     | Plus, By_name | Minus, By_value -> false
     end
   | Ast.AbstractIntroducer (_, tyu) -> should_focus_left tyu tydef_env
-  | Ast.Abstract _ -> failwith "TODO: abstract types not supported yet"
+  | Ast.Abstract { negated; left_focusing = Some lf; _ } -> if negated then not lf else lf
+  | Ast.Abstract { name; left_focusing = None; _ } ->
+    (* should not be possible *)
+    let message =
+      Printf.sprintf
+        "Cannot determine focus direction for abstract type %s, no left_focusing \
+         information provided"
+        name
+    in
+    raise (Error.TypeError { loc = None; message })
   | Ast.Weak { link = { negated; meta } } ->
   match meta.cell with
   | Unified tyu -> should_focus_left tyu tydef_env <> negated

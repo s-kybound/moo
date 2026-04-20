@@ -48,7 +48,8 @@ let rec negate_tyu (ty_use : ty_use) : ty_use =
   match ty_use with
   | Polarised (Plus, mty) -> Polarised (Minus, mty)
   | Polarised (Minus, mty) -> Polarised (Plus, mty)
-  | Abstract { negated; name } -> Abstract { negated = not negated; name }
+  | Abstract { negated; name; left_focusing } ->
+    Abstract { negated = not negated; name; left_focusing }
   | AbstractIntroducer (name, ty_use) -> AbstractIntroducer (name, negate_tyu ty_use)
   | Weak { link = { negated; meta } } ->
     let link = { negated = not negated; meta } in
@@ -124,9 +125,14 @@ module Substitute = struct
     | AbstractIntroducer ({ name; left_focusing }, ty_use) ->
       let new_bindings = List.remove_assoc name bindings in
       AbstractIntroducer ({ name; left_focusing }, tyu_replace new_bindings ty_use)
-    | Abstract { negated; name } -> begin
+    | Abstract { negated; name; left_focusing = None } -> begin
       match List.assoc_opt name bindings with
       | Some ty_use -> if negated then negate_tyu ty_use else ty_use
+      | None -> target
+    end
+    | Abstract { name; left_focusing = Some _; _ } -> begin
+      match List.assoc_opt name bindings with
+      | Some _ -> assert false (* we should not be replacing a focused abstract type *)
       | None -> target
     end
     | Weak { link = { negated; meta } } ->
@@ -197,6 +203,16 @@ let canonical_ty (name : name) (ty_uses : ty_use list) (tydef_env : tydef_env) :
     | Named (new_name, new_tyu_uses) -> aux new_name new_tyu_uses
   in
   aux name ty_uses
+;;
+
+let shape_of_ty (ty : ty) (tydef_env : tydef_env) : shape =
+  match ty with
+  | Raw (_, shape, _) -> shape
+  | Named (name, ty_uses) ->
+    let canonical = canonical_ty name ty_uses tydef_env in
+    (match Substitute.resolve_parameterized_ty canonical tydef_env with
+     | Raw (_, shape, _) -> shape
+     | _ -> assert false)
 ;;
 
 let is_variant_ty (ty : ty) (tydef_env : tydef_env) : bool =
@@ -333,8 +349,7 @@ let rec tyu_to_raw_ty (tyu : ty_use) (tydef_env : tydef_env) : bool * raw_ty =
 
 let rec is_constructor_tyu ~update (tyu : ty_use) (tydef_env : tydef_env) : bool option =
   match tyu with
-  (* TODO: semantics of abstract need to be redone due to abstract introducer *)
-  | Abstract { name; _ } ->
+  | Abstract { name; left_focusing = None; _ } ->
     let message =
       Printf.sprintf
         "Cannot determine whether an abstract type variable %s is a constructor or \
@@ -342,6 +357,7 @@ let rec is_constructor_tyu ~update (tyu : ty_use) (tydef_env : tydef_env) : bool
         name
     in
     raise (Error.TypeError { loc = None; message })
+  | Abstract { left_focusing = Some _; _ } -> None
   | AbstractIntroducer (_, tyu) -> is_constructor_tyu ~update tyu tydef_env
   | Polarised (pol, ty) ->
     let _, shape, _ = ty_to_raw_ty ty tydef_env in
@@ -377,10 +393,186 @@ let is_constructor_tyu_forced tyu tydef_env =
 let is_constructor_tyu = is_constructor_tyu ~update:false
 let ( let* ) = Option.bind
 
+let rec instantiate_abstract_introducer ty_use : ty_use =
+  match ty_use with
+  | AbstractIntroducer (abstract, inner) ->
+    let instantiated_abstract =
+      Abstract
+        { name = genvar abstract.name
+        ; negated = false
+        ; left_focusing = Some abstract.left_focusing
+        }
+    in
+    instantiate_abstract_introducer
+    @@ Substitute.tyu_replace [ abstract.name, instantiated_abstract ] inner
+  | _ -> ty_use
+;;
+
+let rec abstract_in_tyu (ty_use : ty_use) (target_abstract : string) : bool =
+  match ty_use with
+  | Abstract { name; _ } when name = target_abstract -> true
+  | Abstract _ -> false
+  | AbstractIntroducer (abstract, tyu) ->
+    if abstract.name = target_abstract (* shadowed *)
+    then false
+    else abstract_in_tyu tyu target_abstract
+  | Polarised (_, ty) -> abstract_in_ty ty target_abstract
+  | Weak _ -> assert false
+(* We only check for abstract types in types defined by the user - ie no weak types *)
+
+and abstract_in_ty (ty : ty) (target_abstract : string) : bool =
+  match ty with
+  | Named (_, ty_uses) ->
+    List.exists (fun tyu -> abstract_in_tyu tyu target_abstract) ty_uses
+  | Raw (_, _, raw_ty) -> abstract_in_raw_ty raw_ty target_abstract
+
+and abstract_in_raw_ty (raw_ty : raw_ty) (target_abstract : string) : bool =
+  match raw_ty with
+  | Int | Bool -> false
+  | Product ty_uses ->
+    List.exists (fun tyu -> abstract_in_tyu tyu target_abstract) ty_uses
+  | Array tyu -> abstract_in_tyu tyu target_abstract
+  | Variant _ -> assert false
+;;
+
+(* user-defined types in annotations can't be just raw variants *)
+
+(* it will check for the outermost type that contains all the 
+ * instances of the target abstract type, and
+ * return the path to that outermost type *)
+let abstract_in_constructor_position
+      (ty_use : ty_use)
+      (target_abstract : string)
+      (ty_env : tydef_env)
+  : bool
+  =
+  let seen = Hashtbl.create 10 in
+  let rec collapse_path acc =
+    match acc with
+    | [] -> assert false
+    | [ is_constr ] -> is_constr
+    | is_constr :: rest ->
+      let rest_constr = collapse_path rest in
+      (* destructor of destructor -> constructor
+       * constructor of constructor -> constructor
+       * anything else -> destructor
+       *)
+      if is_constr = rest_constr then true else false
+  in
+  let rec aux_tyu body constructor_acc =
+    if not (abstract_in_tyu body target_abstract)
+    then assert false
+    else (
+      match body with
+      | Weak _ | Abstract _ -> assert false
+      | AbstractIntroducer (abstract, tyu) ->
+        if abstract.name = target_abstract
+        then assert false (* shadowed - should not be counted *)
+        else aux_tyu tyu constructor_acc
+      | Polarised (pol, ty) -> aux_ty pol ty constructor_acc)
+  and aux_ty polarity body constructor_acc =
+    if not (abstract_in_ty body target_abstract)
+    then assert false
+    else (
+      match body with
+      | Raw (_, shape, raw_ty) ->
+        let constr_pos =
+          match polarity, shape with
+          | Plus, Data | Minus, Codata -> true
+          | Plus, Codata | Minus, Data -> false
+        in
+        aux_raw_ty None raw_ty (constr_pos :: constructor_acc)
+      | Named (name, tyus) ->
+      match Hashtbl.find_opt seen (name, tyus, polarity) with
+      | Some `Searching ->
+        (* the type is cyclic, ie
+             data foo<A> = (1 * +foo<A>)
+             and checking a +foo<A>
+             checks in aux_raw_ty should prevent this
+           *)
+        assert false
+      | Some (`Found constr_pos) -> List.rev (constr_pos :: constructor_acc)
+      | None ->
+        Hashtbl.add seen (name, tyus, polarity) `Searching;
+        let canonical = canonical_ty name tyus ty_env in
+        let resolved = Substitute.resolve_parameterized_ty canonical ty_env in
+        let result = collapse_path (aux_ty polarity resolved []) in
+        Hashtbl.add seen (name, tyus, polarity) (`Found result);
+        List.rev (result :: constructor_acc))
+  and aux_raw_ty name body constructor_acc =
+    match body with
+    | Int | Bool | Product [] | Variant [] -> assert false
+    | Array tyu -> aux_tyu tyu constructor_acc
+    | Product tyus | Variant [ { constr_args = tyus; _ } ] ->
+      (* check: is the abstract UNIQUELY in one of the tyus? 
+       * if so, go to that tyu, add the constructor position
+       * if not, then we have found the outermost type containing the abstract, return the path *)
+      let containing_uses =
+        List.filter (fun tyu -> abstract_in_tyu tyu target_abstract) tyus
+      in
+      if List.length containing_uses = 1
+      then (
+        let containing_use = List.hd containing_uses in
+        match containing_use with
+        | Polarised (pol, Named (name, tyus)) ->
+          if Hashtbl.find_opt seen (name, tyus, pol) = Some `Searching
+          then List.rev constructor_acc
+          else aux_tyu containing_use constructor_acc
+        | _ -> aux_tyu containing_use constructor_acc)
+      else List.rev constructor_acc
+    | Variant variants ->
+      (* if there are multiple variants, we need to check
+       * 1. is the abstract uniquely in one of the variants?
+       *    if so, go to that variant, verify its constructor position
+       * 2. if it is in multiple variants, we need to check
+       *    if all the variants agree on position. If not,
+       *    we REJECT that type as malformed.
+       *    if it is in multiple variants but they all agree on constructor position, we can return that position 
+       *)
+      let containing_variants =
+        List.filter
+          (fun { constr_args; _ } ->
+             List.exists (fun tyu -> abstract_in_tyu tyu target_abstract) constr_args)
+          variants
+      in
+      if
+        List.length containing_variants
+        = 1 (* pretend it is a single variant, and analyae the tyus from there *)
+      then aux_raw_ty name (Variant containing_variants) constructor_acc
+      else (
+        let positions =
+          containing_variants
+          |> List.map (fun var_branch -> aux_raw_ty name (Variant [ var_branch ]) [])
+          |> List.map collapse_path
+        in
+        (* make sure they all agree *)
+        if List.for_all (fun pos -> pos = List.hd positions) positions
+        then (
+          let is_constr = List.hd positions in
+          List.rev (is_constr :: constructor_acc))
+        else (
+          (* the name should be available for variant types *)
+          let name =
+            match name with
+            | Some n -> n
+            | None -> assert false
+          in
+          let message =
+            Printf.sprintf
+              "Malformed type: abstract type %s is used in both constructor and \
+               destructor position in a variant type"
+              target_abstract
+          in
+          raise (MalformedType (name, message))))
+  in
+  let paths = aux_tyu ty_use [] in
+  collapse_path paths
+;;
+
 let rec is_subtype_tyu subtype supertype tydef_env : bool =
   match subtype, supertype with
-  | Abstract { name = name1; negated = neg1 }, Abstract { name = name2; negated = neg2 }
-    -> name1 = name2 && neg1 = neg2
+  | ( Abstract { name = name1; negated = neg1; _ }
+    , Abstract { name = name2; negated = neg2; _ } ) -> name1 = name2 && neg1 = neg2
   | Abstract _, _ | _, Abstract _ ->
     false (* abstract types are only subtypes of themselves *)
   | ( Weak { link = { negated = neg1; meta = meta1 } as link1 }
@@ -438,8 +630,14 @@ let rec is_subtype_tyu subtype supertype tydef_env : bool =
         Substitute.tyu_replace [ abstract2.name, negate_tyu tyu1 ] tyu2
       in
       is_subtype_tyu tyu1 substituted_tyu2 tydef_env)
-  | Polarised _, AbstractIntroducer _ -> failwith "TODO: "
-  | AbstractIntroducer _, Polarised _ -> failwith "TODO: "
+  | (Polarised _ as pol_type), AbstractIntroducer (abstract, inner) ->
+    if not (abstract_in_constructor_position inner abstract.name tydef_env)
+    then false
+    else failwith "TODO: "
+  | AbstractIntroducer (abstract, inner), (Polarised _ as pol_type) ->
+    if abstract_in_constructor_position inner abstract.name tydef_env
+    then false
+    else failwith "TODO: "
 
 and is_subtype_ty (ty1 : ty) (ty2 : ty) tydef_env : bool =
   match ty1, ty2 with
@@ -747,9 +945,11 @@ let tyu_of_instantiated_raw_variant
       Error message
   and match_tyu template actual bindings =
     match template, actual with
-    | Abstract { negated; name }, _ ->
+    | Abstract { negated; name; left_focusing = None }, _ ->
       let bound_ty = if negated then negate_tyu actual else actual in
       add_binding name bound_ty bindings
+    (* should NOT be replacing this! *)
+    | Abstract { left_focusing = Some _; _ }, _ -> Ok bindings
     | Polarised (pol1, ty1), Polarised (pol2, ty2) when pol1 = pol2 ->
       match_ty ty1 ty2 bindings
     | AbstractIntroducer (_, inner), _ -> match_tyu inner actual bindings
@@ -1009,6 +1209,9 @@ let rec is_lazy_tyu tyu tydef_env =
     | Inferred { constructor = Some is_constructor; _ } -> not (is_constructor <> negated)
     | Inferred { constructor = None; _ } -> false
   end
+  | Ast.Abstract { negated; left_focusing = Some lf; _ } ->
+    (* lazy if left focusing neq negated *)
+    lf <> negated
   | Ast.Abstract _ -> false
   | Ast.AbstractIntroducer (_, inner_tyu) -> is_lazy_tyu inner_tyu tydef_env
   | Ast.Polarised (pol, ty) ->

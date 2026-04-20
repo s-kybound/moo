@@ -97,7 +97,9 @@ let rec recursive_definition_is_guarded rec_binder body : bool =
 let rec surface_ty_use_to_ast_ty_use (tyu : Surface.ty_use) : Ast.ty_use =
   match tyu with
   | Surface.Polarised (pol, ty) -> Ast.Polarised (pol, surface_ty_to_ast_ty ty)
-  | Surface.Abstract { negated; name } -> Ast.Abstract { negated; name }
+  (* the left focusing field is only for internal use, and corresponds to opaque types *)
+  | Surface.Abstract { negated; name } ->
+    Ast.Abstract { negated; name; left_focusing = None }
   | Surface.AbstractIntroducer (names, ty_use) ->
     List.fold_left
       (fun acc name -> Ast.AbstractIntroducer (name, acc))

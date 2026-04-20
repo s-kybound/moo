@@ -53,7 +53,11 @@ let show_unify_ty { name; left_focusing } =
 let rec show_ty_use tyu =
   match tyu with
   | Polarised (pol, t) -> Printf.sprintf "%s%s" (show_polarity pol) (show_ty t)
-  | Abstract { negated; name } -> if negated then Printf.sprintf "~%s" name else name
+  | Abstract { negated; name; left_focusing = None } ->
+    if negated then Printf.sprintf "~%s" name else name
+  | Abstract { negated; name; left_focusing = Some lf } ->
+    let focus_str = if lf then "<-" else "->" in
+    Printf.sprintf "%s(%s : %s)" (if negated then "~" else "") name focus_str
   | AbstractIntroducer (ty, ty_use) ->
     Printf.sprintf "[%s]%s" (show_unify_ty ty) (show_ty_use ty_use)
   | Weak { link = { negated; meta } } ->
