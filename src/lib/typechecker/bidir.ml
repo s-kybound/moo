@@ -132,12 +132,7 @@ let remove_from_context id ctx = IMap.remove id ctx
 let empty_context () : context = IMap.empty
 
 exception UnderspecifiedTypeError
-exception AttemptOtherSide
-
-type inference_mode =
-  | CommandInferData
-  | CommandInferCodata
-  | None
+exception SynthOtherSide
 
 let annotate (term : typed_term) (tyu : Ast.ty_use) : typed_term = set_term_ty term tyu
 
@@ -149,6 +144,7 @@ let rec synthesize
           (expr : typed_term)
           (tydef_env : tydef_env)
           (ty_env : ty_env)
+          (implicit_polarity : Ast.polarity option)
   : typed_term * Syntax.Ast.ty_use * context
   =
   let annotate_with = annotate expr in
@@ -173,7 +169,7 @@ let rec synthesize
      | Some ty_use -> annotate_with ty_use, ty_use, empty_context ()
      | None -> raise UnderspecifiedTypeError)
   | Ast.Exit ->
-    let tyu = WeakTyu.new_destructor_tyu Int in
+    let tyu = WeakTyu.new_destructor_tyu Int implicit_polarity in
     annotate_with tyu, tyu, empty_context ()
   (* upshifts - synthesizing annotated terms *)
   | Ast.Ann (tterm, ty_use) -> begin
@@ -183,30 +179,17 @@ let rec synthesize
         ?loc:ann.loc
         (Printf.sprintf "synthesize: annotation has invalid type: %s" msg)
     | Ok _ ->
-    match is_constructor_tyu ty_use tydef_env with
-    (* Only true constructor types and abstract types end up here.
-     * For abstract types, we don't care about whether they are constructors, but
-     * they need the annotations to propagate knowledge *)
-    | Some true | None ->
-      let checked_term, demands = check knowledge tterm ty_use tydef_env ty_env in
+      let checked_term, demands =
+        check knowledge tterm ty_use tydef_env ty_env implicit_polarity
+      in
       (* we can remove the annotations here *)
       checked_term, ty_use, demands
-    | Some false ->
-      let synthesized_term, synthesized_tyu, demands =
-        synthesize knowledge tterm tydef_env ty_env
-      in
-      if not (Type.is_subtype_tyu synthesized_tyu ty_use tydef_env)
-      then
-        type_mismatch
-          ?loc:ann.loc
-          ty_use
-          synthesized_tyu
-          "synthesize: annotation type mismatch with synthesized type"
-      else annotate synthesized_term synthesized_tyu, synthesized_tyu, demands
   end
   | Ast.Rec (Ast.Wildcard _, _) -> assert false (* impossible case, rejected by syntax *)
   | Ast.Rec ((Ast.Var (_, name) as tbinder), tterm) ->
-    let inner_expr, inferred_tyu, demands = synthesize knowledge tterm tydef_env ty_env in
+    let inner_expr, inferred_tyu, demands =
+      synthesize knowledge tterm tydef_env ty_env implicit_polarity
+    in
     let relevant_ids = binder_ids_of_binder tbinder in
     let usage_tyus = List.map (fun id -> IMap.find id demands) relevant_ids in
     let out_tyu =
@@ -244,7 +227,8 @@ let rec synthesize
     if List.is_empty relevant_ids
     then (
       let expr = ann, Ast.Mu (tbinder, tcommand) in
-      annotate expr (WeakTyu.new_unknown_tyu ()), WeakTyu.new_unknown_tyu (), demands)
+      let unknown_tyu = WeakTyu.new_unknown_tyu implicit_polarity in
+      annotate expr unknown_tyu, unknown_tyu, demands)
     else (
       let usage_tyus = List.map (fun id -> IMap.find id demands) relevant_ids in
       let out_tyu =
@@ -261,7 +245,7 @@ let rec synthesize
         | Some ty_use -> Type.negate_tyu ty_use
       in
       begin match is_constructor_tyu out_tyu tydef_env with
-      | Some true -> raise AttemptOtherSide
+      | Some true -> raise SynthOtherSide
       | Some false | None ->
         let new_demands =
           List.fold_left (fun acc id -> remove_from_context id acc) demands relevant_ids
@@ -270,6 +254,14 @@ let rec synthesize
         annotate expr out_tyu, out_tyu, new_demands
       end)
   | Ast.Matcher branches ->
+    let negated_polarity =
+      Option.map
+        (fun p ->
+           match p with
+           | Ast.Plus -> Ast.Minus
+           | Ast.Minus -> Ast.Plus)
+        implicit_polarity
+    in
     let new_branches, type_uses, demands =
       List.fold_left
         (fun (branches_acc, type_uses_acc, demands_acc) (pattern, command) ->
@@ -279,19 +271,19 @@ let rec synthesize
                let cmd, out_demands =
                  typecheck_command knowledge command tydef_env ty_env
                in
-               cmd, WeakTyu.new_constructor_tyu Int, out_demands
+               cmd, WeakTyu.new_constructor_tyu Int negated_polarity, out_demands
              | Ast.Boolean _ ->
                let cmd, out_demands =
                  typecheck_command knowledge command tydef_env ty_env
                in
-               cmd, WeakTyu.new_constructor_tyu Bool, out_demands
+               cmd, WeakTyu.new_constructor_tyu Bool negated_polarity, out_demands
              | Ast.Binder binder ->
                let cmd, new_demands =
                  typecheck_command knowledge command tydef_env ty_env
                in
                let unique_ids = binder_ids_of_binder binder in
                if List.is_empty unique_ids
-               then cmd, WeakTyu.new_unknown_tyu (), new_demands
+               then cmd, WeakTyu.new_unknown_tyu negated_polarity, new_demands
                else (
                  let usage_tyus =
                    List.map (fun id -> IMap.find id new_demands) unique_ids
@@ -329,7 +321,7 @@ let rec synthesize
                    (fun subpat ->
                       let unique_ids = binder_ids_of_binder subpat in
                       if List.is_empty unique_ids
-                      then WeakTyu.new_unknown_tyu ()
+                      then WeakTyu.new_unknown_tyu negated_polarity
                       else (
                         let usage_tyus =
                           List.map (fun id -> IMap.find id new_demands) unique_ids
@@ -359,7 +351,9 @@ let rec synthesize
                    new_demands
                    subpats
                in
-               cmd, WeakTyu.new_constructor_tyu (Product out_tyus), new_demands
+               ( cmd
+               , WeakTyu.new_constructor_tyu (Product out_tyus) negated_polarity
+               , new_demands )
              | Ast.Constr { pat_name; pat_args } ->
              match
                type_of_namespaced_constructor pat_name (List.length pat_args) tydef_env
@@ -374,7 +368,7 @@ let rec synthesize
                type_error ?loc:ann.loc msg
              | Some (ty_name, abs_tys, ty, _) ->
                let new_bindings =
-                 List.map (fun abs -> abs, WeakTyu.new_unknown_tyu ()) abs_tys
+                 List.map (fun abs -> abs, WeakTyu.new_unknown_tyu None) abs_tys
                in
                let variant_tys =
                  args_of_namespaced_variant pat_name ty
@@ -417,7 +411,7 @@ let rec synthesize
                      (fun subpat ->
                         let unique_ids = binder_ids_of_binder subpat in
                         if List.is_empty unique_ids
-                        then WeakTyu.new_unknown_tyu ()
+                        then WeakTyu.new_unknown_tyu None
                         else (
                           let usage_tyus =
                             List.map (fun id -> IMap.find id new_demands) unique_ids
@@ -483,7 +477,6 @@ let rec synthesize
    * without an annotation.
    * oh, but the constructors synthesized here should still be in a checkable position. we should attempt to flip
    * if we are typechecking a command.
-   * TODO: add a flag to indicate whether the synthesis is at the command level or term level, and only raise AttemptOtherSide if we are at command level.
    *)
   | Ast.Construction { cons_name; cons_args } ->
     let typ =
@@ -500,7 +493,7 @@ let rec synthesize
       type_error ?loc:ann.loc msg
     | Some (ty_name, abs_tys, ty, polarity) ->
       (* replace all the abstract types with holes *)
-      let bindings = List.map (fun abs -> abs, WeakTyu.new_unknown_tyu ()) abs_tys in
+      let bindings = List.map (fun abs -> abs, WeakTyu.new_unknown_tyu None) abs_tys in
       let variant_tys =
         args_of_namespaced_variant cons_name ty
         |> List.map (Substitute.tyu_replace bindings)
@@ -522,7 +515,7 @@ let rec synthesize
           List.fold_left2
             (fun (acc, discoveries) arg expected_ty ->
                let new_arg, new_discoveries =
-                 check knowledge arg expected_ty tydef_env ty_env
+                 check knowledge arg expected_ty tydef_env ty_env None
                in
                new_arg :: acc, merge_contexts discoveries new_discoveries)
             ([], empty_context ())
@@ -537,7 +530,7 @@ let rec synthesize
         annotate expr tyu, tyu, new_demands)
     end
   (* constructors. attempt the other side instead *)
-  | Ast.Num _ | Ast.Bool _ | Ast.Tuple _ | Ast.Arr _ -> raise AttemptOtherSide
+  | Ast.Num _ | Ast.Bool _ | Ast.Tuple _ | Ast.Arr _ -> raise SynthOtherSide
 
 (* workflow - given demands, check an expression with a type and output discoveries 
  * invariant - the expected type is valid
@@ -548,6 +541,7 @@ and check
       (expected_type : Syntax.Ast.ty_use)
       (tydef_env : tydef_env)
       (ty_env : ty_env)
+      (implicit_polarity : Ast.polarity option)
   : typed_term * context
   =
   let ann, node = expr in
@@ -582,15 +576,19 @@ and check
       type_mismatch
         ?loc:ann.loc
         expected_type
-        (WeakTyu.new_constructor_tyu Int)
+        (WeakTyu.new_constructor_tyu Int implicit_polarity)
         "check: TNum expected type mismatch"
-    else if is_subtype_tyu expected_type (WeakTyu.new_constructor_tyu Int) tydef_env
+    else if
+      is_subtype_tyu
+        expected_type
+        (WeakTyu.new_constructor_tyu Int implicit_polarity)
+        tydef_env
     then annotate_with_tyu expr, empty_context ()
     else
       type_mismatch
         ?loc:ann.loc
         expected_type
-        (WeakTyu.new_constructor_tyu Int)
+        (WeakTyu.new_constructor_tyu Int implicit_polarity)
         "check: TNum expected type mismatch"
   | Ast.Bool _ ->
     if not (is_constructor_tyu_forced expected_type tydef_env)
@@ -598,15 +596,19 @@ and check
       type_mismatch
         ?loc:ann.loc
         expected_type
-        (WeakTyu.new_constructor_tyu Bool)
+        (WeakTyu.new_constructor_tyu Bool implicit_polarity)
         "check: TBool expected type mismatch"
-    else if is_subtype_tyu expected_type (WeakTyu.new_constructor_tyu Bool) tydef_env
+    else if
+      is_subtype_tyu
+        expected_type
+        (WeakTyu.new_constructor_tyu Bool implicit_polarity)
+        tydef_env
     then annotate_with_tyu expr, empty_context ()
     else
       type_mismatch
         ?loc:ann.loc
         expected_type
-        (WeakTyu.new_constructor_tyu Bool)
+        (WeakTyu.new_constructor_tyu Bool implicit_polarity)
         "check: TBool expected type mismatch"
   | Ast.Mu (tbinder, tcommand) ->
     let tbinder_ty = Type.negate_tyu expected_type in
@@ -626,7 +628,9 @@ and check
         ?loc:ann.loc
         expected_type
         (WeakTyu.new_constructor_tyu
-           (Product (List.init (List.length terms) (fun _ -> WeakTyu.new_unknown_tyu ()))))
+           (Product
+              (List.init (List.length terms) (fun _ -> WeakTyu.new_unknown_tyu None)))
+           implicit_polarity)
         "check: TTuple expected type mismatch"
     else (
       let is_constructor, raw_ty = Type.tyu_to_raw_ty expected_type tydef_env in
@@ -639,14 +643,14 @@ and check
           type_mismatch
             ?loc:ann.loc
             expected_type
-            (WeakTyu.new_constructor_tyu (Product expected_tys))
+            (WeakTyu.new_constructor_tyu (Product expected_tys) implicit_polarity)
             "check: TTuple arity mismatch"
         else (
           let new_terms, demands =
             List.fold_left2
               (fun (terms, demands_acc) term expected_ty ->
                  let t, term_demands =
-                   check knowledge term expected_ty tydef_env ty_env
+                   check knowledge term expected_ty tydef_env ty_env None
                  in
                  t :: terms, merge_contexts demands_acc term_demands)
               ([], empty_context ())
@@ -661,7 +665,8 @@ and check
           expected_type
           (WeakTyu.new_constructor_tyu
              (Product
-                (List.init (List.length terms) (fun _ -> WeakTyu.new_unknown_tyu ()))))
+                (List.init (List.length terms) (fun _ -> WeakTyu.new_unknown_tyu None)))
+             implicit_polarity)
           "check: TTuple expected type mismatch"
       end)
   | Ast.Ann (tterm, ty_use) -> begin
@@ -679,7 +684,9 @@ and check
           ty_use
           "check: TAnn annotation type mismatch with expected type"
       else (
-        let checked_term, demands = check knowledge tterm ty_use tydef_env ty_env in
+        let checked_term, demands =
+          check knowledge tterm ty_use tydef_env ty_env implicit_polarity
+        in
         let expr = ann, Ast.Ann (checked_term, ty_use) in
         annotate expr expected_type, demands)
   end
@@ -691,7 +698,9 @@ and check
     let new_knowledge =
       List.fold_left (fun acc (id, ty) -> add_to_context id ty acc) knowledge usage_tyus
     in
-    let term, demands = check new_knowledge tterm expected_type tydef_env ty_env in
+    let term, demands =
+      check new_knowledge tterm expected_type tydef_env ty_env implicit_polarity
+    in
     let expr = ann, Ast.Rec (tbinder, term) in
     if
       recursive_name_in_unguarded_position name tterm
@@ -719,7 +728,9 @@ and check
       in
       type_error ?loc:ann.loc msg
     | Some (name, abs_tys, _, polarity) ->
-      let new_abstracts = List.map (fun abs -> abs, WeakTyu.new_unknown_tyu ()) abs_tys in
+      let new_abstracts =
+        List.map (fun abs -> abs, WeakTyu.new_unknown_tyu None) abs_tys
+      in
       let compared_tyu =
         Ast.Polarised (polarity, Ast.Named (name, List.map snd new_abstracts))
       in
@@ -738,7 +749,9 @@ and check
       type_mismatch
         ?loc:ann.loc
         expected_type
-        (WeakTyu.new_constructor_tyu (Array (WeakTyu.new_unknown_tyu ())))
+        (WeakTyu.new_constructor_tyu
+           (Array (WeakTyu.new_unknown_tyu None))
+           implicit_polarity)
         "check: TArr expected type mismatch"
     else (
       let is_constructor, raw_ty = Type.tyu_to_raw_ty expected_type tydef_env in
@@ -750,7 +763,7 @@ and check
           List.fold_left
             (fun (terms, demands_acc) term ->
                let t, term_demands =
-                 check knowledge term expected_elem_ty tydef_env ty_env
+                 check knowledge term expected_elem_ty tydef_env ty_env None
                in
                t :: terms, merge_contexts demands_acc term_demands)
             ([], empty_context ())
@@ -762,12 +775,24 @@ and check
         type_mismatch
           ?loc:ann.loc
           expected_type
-          (WeakTyu.new_constructor_tyu (Array (WeakTyu.new_unknown_tyu ())))
+          (WeakTyu.new_constructor_tyu
+             (Array (WeakTyu.new_unknown_tyu None))
+             implicit_polarity)
           "check: TArr expected type mismatch"
       end)
-  (* destructors *)
-  (* TODO: implement upshifts for these destructors *)
-  | Ast.Exit | Ast.Matcher _ -> raise AttemptOtherSide
+  (* destructors - all downshifts here *)
+  | Ast.Exit | Ast.Matcher _ ->
+    let synthesized_term, synthesized_tyu, demands =
+      synthesize knowledge expr tydef_env ty_env implicit_polarity
+    in
+    if not (is_subtype_tyu synthesized_tyu expected_type tydef_env)
+    then
+      type_mismatch
+        ?loc:ann.loc
+        expected_type
+        synthesized_tyu
+        "check: destructor expected type mismatch"
+    else annotate synthesized_term synthesized_tyu, demands
 
 and typecheck_command
       (knowledge : context)
@@ -776,40 +801,123 @@ and typecheck_command
       (ty_env : ty_env)
   : typed_command * context
   =
-  let typecheck_command_aux l_term r_term ann =
-    (* TODO: this logic must adapt to abstract types *)
-    (* Based on the paper, constructors are checkable and 
-     * destructors are synthesizable.
-     * Hence, we have a backtracking algorithm to attempt a check of the
-     * left term to check whether it is a destructor, before retrying if not, or
-     * if unable to determine.
-     *)
-    let tl_term, l_ty_use, l_knowledge = synthesize knowledge l_term tydef_env ty_env in
-    match is_constructor_tyu l_ty_use tydef_env with
-    | Some false ->
-      (* continue as planned *)
-      let r_ty_use = Type.negate_tyu l_ty_use in
-      let tr_term, final_knowledge = check l_knowledge r_term r_ty_use tydef_env ty_env in
-      mk_command ann (Ast.Core { l_term = tl_term; r_term = tr_term }), final_knowledge
-    | Some true | None ->
-      (* can't tell *)
-      (* TODO: do we really have to retry on none? *)
-      let tr_term, r_ty_use, r_knowledge = synthesize knowledge r_term tydef_env ty_env in
-      let l_ty_use = Type.negate_tyu r_ty_use in
-      let tl_term, final_knowledge = check r_knowledge l_term l_ty_use tydef_env ty_env in
-      mk_command ann (Ast.Core { l_term = tl_term; r_term = tr_term }), final_knowledge
-  in
   let ann, node = command in
+  let rec typecheck_command_aux synth_term check_term expression_side previous_error =
+    try
+      let synth_mode, check_mode =
+        if expression_side = `Left
+        then Some Ast.Plus, Some Ast.Minus
+        else Some Ast.Minus, Some Ast.Plus
+      in
+      let synth_expr, synth_tyu, synth_demands =
+        synthesize knowledge synth_term tydef_env ty_env synth_mode
+      in
+      let check_expr, check_demands =
+        check knowledge check_term (Type.negate_tyu synth_tyu) tydef_env ty_env check_mode
+      in
+      let out_demands = merge_contexts synth_demands check_demands in
+      match expression_side with
+      | `Left ->
+        let cmd = Ast.Core { l_term = synth_expr; r_term = check_expr } in
+        mk_command ann cmd, out_demands
+      | `Right ->
+        let cmd = Ast.Core { l_term = check_expr; r_term = synth_expr } in
+        mk_command ann cmd, out_demands
+    with
+    | SynthOtherSide ->
+      if previous_error = `First_attempt
+      then typecheck_command_aux check_term synth_term `Right `AttemptOtherSide
+      else begin
+        let left_term, right_term =
+          if expression_side = `Left
+          then synth_term, check_term
+          else check_term, synth_term
+        in
+        match previous_error with
+        | `First_attempt -> assert false (* impossible case *)
+        | `AttemptOtherSide ->
+          let message =
+            Printf.sprintf
+              "typecheck_command: both sides of the command are constructors. Left term: \
+               %s, Right term: %s"
+              (Syntax.Pretty.show_term ~ann_show:(fun _ s -> s) left_term)
+              (Syntax.Pretty.show_term ~ann_show:(fun _ s -> s) right_term)
+          in
+          type_error ?loc:ann.loc message
+        | `Underspecified ->
+          let message =
+            Printf.sprintf
+              "typecheck_command: Command is underspecified. Left term: %s, Right term: \
+               %s"
+              (Syntax.Pretty.show_term ~ann_show:(fun _ s -> s) left_term)
+              (Syntax.Pretty.show_term ~ann_show:(fun _ s -> s) right_term)
+          in
+          type_error ?loc:ann.loc message
+      end
+    | UnderspecifiedTypeError ->
+      if previous_error = `First_attempt
+      then typecheck_command_aux check_term synth_term `Right `AttemptOtherSide
+      else (
+        match previous_error with
+        | `First_attempt -> assert false (* impossible case *)
+        | _ ->
+          let left_term, right_term =
+            if expression_side = `Left
+            then synth_term, check_term
+            else check_term, synth_term
+          in
+          let message =
+            Printf.sprintf
+              "typecheck_command: command is underspecified. Left term: %s, Right term: \
+               %s"
+              (Syntax.Pretty.show_term ~ann_show:(fun _ s -> s) left_term)
+              (Syntax.Pretty.show_term ~ann_show:(fun _ s -> s) right_term)
+          in
+          type_error ?loc:ann.loc message)
+  in
+  (* Based on the paper, constructors are checkable and 
+   * destructors are synthesizable.
+   * Hence, we have a backtracking algorithm to attempt a check of the
+   * left term to check whether it is a destructor, before retrying if not, or
+   * if unable to determine.
+   *)
+  let dispatch_typecheck_command_aux
+        ((_, ex_term) as expression_term : typed_term)
+        ((_, cont_term) as continuation_term : typed_term)
+    =
+    match ex_term, cont_term with
+    (* use the annotation to guide the checking *)
+    | _, Ast.Ann (_, tyu) -> begin
+      match is_constructor_tyu tyu tydef_env with
+      | Some true ->
+        typecheck_command_aux expression_term continuation_term `Left `First_attempt
+      | _ -> typecheck_command_aux continuation_term expression_term `Right `First_attempt
+    end
+    | Ast.Ann (_, tyu), _ -> begin
+      match is_constructor_tyu tyu tydef_env with
+      | Some true ->
+        typecheck_command_aux continuation_term expression_term `Right `First_attempt
+      | _ -> typecheck_command_aux expression_term continuation_term `Left `First_attempt
+    end
+    (* variable, mu -> synthesize continuation side first *)
+    | Ast.Variable _, _ | Ast.Mu _, _ | Ast.Rec _, _ ->
+      typecheck_command_aux continuation_term expression_term `Right `First_attempt
+    (* destructors, matchers -> synthesize expression side first *)
+    | Ast.Exit, _ | Ast.Matcher _, _ ->
+      typecheck_command_aux expression_term continuation_term `Left `First_attempt
+    (* the only other cases are constructors, synthesize continuation side first *)
+    | _ -> typecheck_command_aux continuation_term expression_term `Right `First_attempt
+  in
   match node with
-  | Ast.Core { l_term; r_term } -> typecheck_command_aux l_term r_term ann
+  | Ast.Core { l_term; r_term } -> dispatch_typecheck_command_aux l_term r_term
   (* for Arithmetic commands, it is simpler - the out_term is always the destructor *)
   | Ast.Arith
       (Ast.Bop { op = top; l_term = tl_term; r_term = tr_term; out_term = tout_term }) ->
-    let tout_term, out_ty_use, out_knowledge =
-      synthesize knowledge tout_term tydef_env ty_env
+    let tout_term, out_ty_use, out_demands =
+      synthesize knowledge tout_term tydef_env ty_env None
     in
     let in_ty_use = Type.negate_tyu out_ty_use in
-    let expected_in_ty = WeakTyu.new_constructor_tyu Int in
+    let expected_in_ty = WeakTyu.new_constructor_tyu Int None in
     if not (tyu_equal out_ty_use (Type.negate_tyu expected_in_ty) tydef_env)
     then
       type_mismatch
@@ -818,24 +926,24 @@ and typecheck_command
         out_ty_use
         "typecheck_command: arithmetic binary operation expected int output"
     else (
-      let tl_term, left_knowledge =
-        check out_knowledge tl_term in_ty_use tydef_env ty_env
+      let tl_term, left_demands =
+        check knowledge tl_term in_ty_use tydef_env ty_env None
       in
-      let tr_term, right_knowledge =
-        check left_knowledge tr_term in_ty_use tydef_env ty_env
+      let tr_term, right_demands =
+        check knowledge tr_term in_ty_use tydef_env ty_env None
       in
       ( mk_command
           ann
           (Ast.Arith
              (Ast.Bop
                 { op = top; l_term = tl_term; r_term = tr_term; out_term = tout_term }))
-      , right_knowledge ))
+      , merge_contexts out_demands (merge_contexts left_demands right_demands) ))
   | Ast.Arith (Ast.Unop { op = top; in_term = tin_term; out_term = tout_term }) ->
-    let tout_term, out_ty_use, out_knowledge =
-      synthesize knowledge tout_term tydef_env ty_env
+    let tout_term, out_ty_use, out_demands =
+      synthesize knowledge tout_term tydef_env ty_env None
     in
     let in_ty_use = Type.negate_tyu out_ty_use in
-    let expected_in_ty = WeakTyu.new_constructor_tyu Int in
+    let expected_in_ty = WeakTyu.new_constructor_tyu Int None in
     if not (tyu_equal out_ty_use (Type.negate_tyu expected_in_ty) tydef_env)
     then
       type_mismatch
@@ -844,17 +952,17 @@ and typecheck_command
         out_ty_use
         "typecheck_command: arithmetic unary operation expected int output"
     else (
-      let tin_term, in_knowledge =
-        check out_knowledge tin_term in_ty_use tydef_env ty_env
+      let tin_term, in_demands =
+        check knowledge tin_term in_ty_use tydef_env ty_env None
       in
       ( mk_command
           ann
           (Ast.Arith (Ast.Unop { op = top; in_term = tin_term; out_term = tout_term }))
-      , in_knowledge ))
+      , merge_contexts out_demands in_demands ))
   | Ast.Fork (cmd1, cmd2) ->
-    let cmd1, ctx1 = typecheck_command knowledge cmd1 tydef_env ty_env in
-    let cmd2, ctx2 = typecheck_command ctx1 cmd2 tydef_env ty_env in
-    mk_command ann (Ast.Fork (cmd1, cmd2)), ctx2
+    let cmd1, ctx1_demands = typecheck_command knowledge cmd1 tydef_env ty_env in
+    let cmd2, ctx2_demands = typecheck_command knowledge cmd2 tydef_env ty_env in
+    mk_command ann (Ast.Fork (cmd1, cmd2)), merge_contexts ctx1_demands ctx2_demands
 ;;
 
 let rec tycheck_mod_tli
@@ -866,13 +974,13 @@ let rec tycheck_mod_tli
   =
   match def with
   | Ast.TermDef (tbinder, tterm) ->
-    let tterm, inferred_ty, synth_knowledge =
-      synthesize knowledge tterm tydef_env ty_env
+    let tterm, inferred_ty, _synth_demands =
+      synthesize knowledge tterm tydef_env ty_env None
     in
     let new_knowledge =
       List.fold_left
         (fun acc id -> add_to_context id inferred_ty acc)
-        synth_knowledge
+        knowledge
         (binder_ids_of_binder tbinder)
     in
     let new_ty_env =
@@ -904,20 +1012,18 @@ let rec tycheck_mod_tli
         type_error
           (Printf.sprintf "type %s is malformed: %s" (Syntax.Pretty.show_name name) msg))
   | Ast.Term term ->
-    let tterm, _, synth_knowledge = synthesize knowledge term tydef_env ty_env in
+    let new_weak_tyu = WeakTyu.new_unknown_tyu None in
+    let tterm, _ = check knowledge term new_weak_tyu tydef_env ty_env None in
     (* if the top level term returns an unknown type, it is most likely of form
      * { _ -> ... } where the hole is never used. In this case,
      * we can assign it the data unit type.
      *)
-    let ann, _ = tterm in
-    if WeakTyu.is_unknown (Option.get ann.ty)
+    if WeakTyu.is_unknown new_weak_tyu
     then (
       let unit_tyu = Ast.Polarised (Plus, Ast.Raw (By_value, Data, Product [])) in
-      let tterm, check_knowledge =
-        check synth_knowledge tterm unit_tyu tydef_env ty_env
-      in
-      Ast.Term tterm, ty_env, check_knowledge, tydef_env)
-    else Ast.Term tterm, ty_env, synth_knowledge, tydef_env
+      let tterm, _ = check knowledge tterm unit_tyu tydef_env ty_env None in
+      Ast.Term tterm, ty_env, knowledge, tydef_env)
+    else Ast.Term tterm, ty_env, knowledge, tydef_env
 
 and tycheck_module
       (knowledge : context)
