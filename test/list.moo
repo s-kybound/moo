@@ -1,16 +1,23 @@
-data i64 = int
 
-data peano = Z | S(peano)
 
-let rec pti_aux (n : peano, acc : i64, k : -i64) =
-  match n {
-  | Z -> acc . k
-  | S(m) -> pti_aux . (m, acc + 1, k)
+/*
+let rec head[A <-](xs : list<A>, out : ~A) =
+   let head = head in
+   match xs {
+   | Cons(head, _) -> head . out
+   | Nil -> exit . 1
+   }
+*/
+
+data list<A> = Cons(A, +list<A>) | Nil
+let rec length[A <-](xs : list<A>, out : -data int) =
+  match xs {
+  | Nil -> 0 . out
+  | Cons(_, rest) -> 
+    let recur = { k -> length.(rest, k) } in
+    +(1, recur | out)   
   }
 
-let peano_to_i64 (n : peano, k : -i64) =
-  pti_aux . (n, 0, k)
-
-do{k}
-  let p = S(S(S(S(Z)))) in
-  peano_to_i64 . (p, k)
+do
+  letcc ap = (Cons(1, Nil), exit) in
+  length.ap

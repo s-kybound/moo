@@ -400,7 +400,12 @@ and abstract_in_raw_ty (raw_ty : raw_ty) (target_abstract : string) : bool =
   | Product ty_uses ->
     List.exists (fun tyu -> abstract_in_tyu tyu target_abstract) ty_uses
   | Array tyu -> abstract_in_tyu tyu target_abstract
-  | Variant _ -> assert false
+  | Variant [] -> false
+  | Variant variants ->
+    List.exists
+      (fun { constr_args; _ } ->
+         List.exists (fun tyu -> abstract_in_tyu tyu target_abstract) constr_args)
+      variants
 ;;
 
 (* user-defined types in annotations can't be just raw variants *)
@@ -590,6 +595,20 @@ let rec is_subtype_tyu subtype supertype tydef_env : bool =
             meta2.id;
           false
         end)
+  | Weak { link = { negated; meta } }, other_tyu -> begin
+    match meta.cell with
+    | Unified tyu ->
+      let compared_tyu = if negated then negate_tyu tyu else tyu in
+      is_subtype_tyu compared_tyu other_tyu tydef_env
+    | Inferred _ -> unify_weak_with_tyu negated meta other_tyu tydef_env
+  end
+  | other_tyu, Weak { link = { negated; meta } } -> begin
+    match meta.cell with
+    | Unified tyu ->
+      let compared_tyu = if negated then negate_tyu tyu else tyu in
+      is_subtype_tyu other_tyu compared_tyu tydef_env
+    | Inferred _ -> unify_weak_with_tyu negated meta other_tyu tydef_env
+  end
   | AbstractIntroducer (abstract1, tyu1), AbstractIntroducer (abstract2, tyu2) ->
     if abstract1.left_focusing == abstract2.left_focusing
     then (
@@ -645,10 +664,6 @@ let rec is_subtype_tyu subtype supertype tydef_env : bool =
       let res = abstract_compatible substituted_inner pol_type tydef_env new_opaques in
       Printf.eprintf "Result of checking compatibility: %b\n%!" res;
       res)
-  | Weak { link = { negated; meta } }, other_tyu
-  | other_tyu, Weak { link = { negated; meta } } ->
-    (* if the weak tyu is fully unsolved, we can just unify it with the other tyu *)
-    unify_weak_with_tyu negated meta other_tyu tydef_env
   | Abstract _, _ | _, Abstract _ ->
     false (* abstract types are only subtypes of themselves (or weak vars) *)
   | Polarised (pol1, ty1), Polarised (pol2, ty2) ->
@@ -720,8 +735,20 @@ and abstract_compatible
           let stored_type = if negated then negate_tyu pol_type else pol_type in
           if type_has_direction stored_type lf1 tydef_env
           then (
-            Hashtbl.add solutions name stored_type;
-            (* match stored_type with
+            match stored_type with
+            | Weak { link = { negated = weak_negated; meta } } -> begin
+              match meta.cell with
+              | Unified tyu ->
+                let compared_tyu = if weak_negated then negate_tyu tyu else tyu in
+                Hashtbl.add solutions name compared_tyu;
+                true
+              | _ ->
+                Hashtbl.add solutions name stored_type;
+                true
+            end
+            | _ ->
+              Hashtbl.add solutions name stored_type;
+              (* match stored_type with
             | Weak {link = { negated = weak_negated; meta } } ->
               (* we have determined it is compatible, 
                * force the unification regardless
@@ -734,7 +761,7 @@ and abstract_compatible
                meta.cell <- Unified to_store; *)
                true
             | _ -> *)
-            true)
+              true)
           else false)
       else false
     | _, Abstract _ -> false
@@ -745,7 +772,11 @@ and abstract_compatible
        * they are compatible with what we already have *)
       aux_tyu abstract_body instantiated
     | Polarised _, Weak { link = { negated; meta } } ->
-      aux_unify_weak negated meta abstract_body
+    match meta.cell with
+    | Unified tyu ->
+      let compared_tyu = if negated then negate_tyu tyu else tyu in
+      aux_tyu abstract_body compared_tyu
+    | Inferred _ -> aux_unify_weak negated meta abstract_body
   and aux_unify_weak negated meta tyu =
     let compared_tyu = if negated then negate_tyu tyu else tyu in
     match meta.cell with

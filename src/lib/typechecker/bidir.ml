@@ -760,21 +760,50 @@ and check
           (List.length cons_args)
       in
       type_error ?loc:ann.loc msg
-    | Some (name, abs_tys, _, polarity) ->
-      let new_abstracts =
+    | Some (name, abs_tys, ty, polarity) ->
+      let new_bindings =
         List.map (fun abs -> abs, WeakTyu.new_unknown_tyu None) abs_tys
       in
-      let compared_tyu =
-        Ast.Polarised (polarity, Ast.Named (name, List.map snd new_abstracts))
+      let variant_tys =
+        args_of_namespaced_variant cons_name ty
+        |> List.map (Substitute.tyu_replace new_bindings)
       in
-      if is_subtype_tyu compared_tyu expected_type tydef_env
-      then annotate expr compared_tyu, empty_context ()
-      else
-        type_mismatch
-          ?loc:ann.loc
-          expected_type
-          compared_tyu
-          "check: constructor type mismatch with expected type"
+      if List.length variant_tys <> List.length cons_args
+      then (
+        let msg =
+          Printf.sprintf
+            "check: arity mismatch for constructor %s: expected %d but got %d"
+            (Syntax.Pretty.show_name cons_name)
+            (List.length variant_tys)
+            (List.length cons_args)
+        in
+        type_error ?loc:ann.loc msg)
+      else (
+        let new_cons_args, new_demands =
+          List.fold_left2
+            (fun (acc, discoveries) arg expected_ty ->
+               let new_arg, new_discoveries =
+                 check knowledge arg expected_ty tydef_env ty_env None
+               in
+               new_arg :: acc, merge_contexts discoveries new_discoveries tydef_env)
+            ([], empty_context ())
+            cons_args
+            variant_tys
+        in
+        let ty_with_holes = Ast.Named (name, List.map snd new_bindings) in
+        let compared_tyu = Ast.Polarised (polarity, ty_with_holes) in
+        if is_subtype_tyu compared_tyu expected_type tydef_env
+        then (
+          let expr =
+            ann, Ast.Construction { cons_name; cons_args = List.rev new_cons_args }
+          in
+          annotate expr compared_tyu, new_demands)
+        else
+          type_mismatch
+            ?loc:ann.loc
+            expected_type
+            compared_tyu
+            "check: constructor type mismatch with expected type")
     end
   | Ast.Arr terms ->
     let target_unknown = WeakTyu.new_unknown_tyu None in
@@ -1171,15 +1200,20 @@ and tycheck_module
  * have enough information to be IR-converted *)
 let verify_well_typed (modu : typed_module) : unit =
   let check_underspecified ann =
-    if WeakTyu.is_unknown (Option.get ann.ty)
-    then (
-      let message =
-        Printf.sprintf
-          "inferred type %s is underspecified"
-          (Syntax.Pretty.show_ty_use (Option.get ann.ty))
-      in
-      type_error ?loc:ann.loc message)
-    else ()
+    match ann.ty with
+    | None ->
+      let message = Printf.sprintf "inferred type for this term is missing" in
+      type_error ?loc:ann.loc message
+    | Some ty ->
+      if WeakTyu.is_unknown ty
+      then (
+        let message =
+          Printf.sprintf
+            "inferred type %s is underspecified"
+            (Syntax.Pretty.show_ty_use ty)
+        in
+        type_error ?loc:ann.loc message)
+      else ()
   in
   let ann_compare (a1, _) (a2, _) =
     Syntax.Loc_utils.compare_opt_span_size_desc a1.loc a2.loc
