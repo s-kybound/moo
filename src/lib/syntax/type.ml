@@ -727,11 +727,11 @@ and abstract_compatible
                * force the unification regardless
                * (type erasure)
                *)
-               let to_store = if (negated <> weak_negated)
+               (* let to_store = if (negated <> weak_negated)
                  then negate_tyu abstract_body
                  else abstract_body
                 in
-               meta.cell <- Unified to_store;
+               meta.cell <- Unified to_store; *)
                true
             | _ -> *)
             true)
@@ -752,12 +752,29 @@ and abstract_compatible
     | Unified meta_tyu -> aux_tyu compared_tyu meta_tyu
     | Inferred constraints ->
     match compared_tyu with
-    | Abstract { left_focusing = Some left_focusing; negated; _ } ->
+    | Abstract { left_focusing = Some left_focusing; negated = abs_negated; name } ->
       (* unify if we don't know anything yet *)
       let unifiable =
         let raw_compatible =
           match constraints.raw_lower_bound with
-          | Some _ -> false
+          | Some _ -> begin
+            if List.mem_assoc name new_opaques
+            then (
+              match Hashtbl.find_opt solutions name with
+              | Some solution ->
+                let compared_solution =
+                  if abs_negated then negate_tyu solution else solution
+                in
+                aux_unify_weak negated meta compared_solution
+              | None ->
+                (* we just found a solution *)
+                let solution =
+                  if abs_negated then negate_tyu compared_tyu else compared_tyu
+                in
+                Hashtbl.add solutions name solution;
+                true)
+            else false
+          end
           | None -> true
         in
         let left_focusing_compatible =
@@ -1216,10 +1233,15 @@ let tyu_of_instantiated_raw_variant
       (tydef_env : tydef_env)
   : ty_use
   =
-  let rec add_binding name bound_ty bindings =
+  Printf.eprintf
+    "Instantiating constructor %s of type %s with type arguments %s\n%!"
+    constr_name
+    (Pretty.show_ty ty)
+    (String.concat ", " (List.map Pretty.show_ty_use type_args));
+  let rec add_binding name bound_tyu bindings =
     match List.assoc_opt name bindings with
-    | None -> Ok ((name, bound_ty) :: bindings)
-    | Some existing when tyu_equal existing bound_ty tydef_env -> Ok bindings
+    | None -> Ok ((name, bound_tyu) :: bindings)
+    | Some existing when tyu_equal existing bound_tyu tydef_env -> Ok bindings
     | Some existing ->
       let message =
         Printf.sprintf
@@ -1227,10 +1249,14 @@ let tyu_of_instantiated_raw_variant
           name
           constr_name
           (Pretty.show_ty_use existing)
-          (Pretty.show_ty_use bound_ty)
+          (Pretty.show_ty_use bound_tyu)
       in
       Error message
   and match_tyu template actual bindings =
+    Printf.printf
+      "Matching template ty_use %s with actual ty_use %s\n%!"
+      (Pretty.show_ty_use template)
+      (Pretty.show_ty_use actual);
     match template, actual with
     | Abstract { negated; name; left_focusing = None }, _ ->
       let bound_ty = if negated then negate_tyu actual else actual in
@@ -1239,12 +1265,55 @@ let tyu_of_instantiated_raw_variant
     | Abstract { left_focusing = Some _; _ }, _ -> Ok bindings
     | Polarised (pol1, ty1), Polarised (pol2, ty2) when pol1 = pol2 ->
       match_ty ty1 ty2 bindings
-    | AbstractIntroducer (_, inner), _ -> match_tyu inner actual bindings
-    | _, AbstractIntroducer (_, inner) -> match_tyu template inner bindings
-    | Weak _, _ | _, Weak _ ->
-      if tyu_equal template actual tydef_env
-      then Ok bindings
-      else Error "Weak type mismatch while instantiating variant"
+    | AbstractIntroducer (name, inner), _ ->
+      (* if the name exists, switch the name to a gensym version, 
+        check, and then switch back after *)
+      if List.mem name.name abstracts
+      then (
+        let replaced_abstract =
+          Abstract { name = genvar name.name; negated = false; left_focusing = None }
+        in
+        let new_inner = Substitute.tyu_replace [ name.name, replaced_abstract ] inner in
+        match_tyu new_inner actual bindings)
+      else match_tyu inner actual bindings
+    | Weak _, _ -> assert false (* no weak tyus in the template*)
+    | _, Weak { link = { meta; negated } } ->
+      Printf.printf
+        "Matching template ty_use %s with actual weak ty_use %s\n%!"
+        (Pretty.show_ty_use template)
+        (Pretty.show_ty_use actual);
+      (match meta.cell with
+       | Unified actual_tyu ->
+         let compared_actual = if negated then negate_tyu actual_tyu else actual_tyu in
+         match_tyu template compared_actual bindings
+       | Inferred _ ->
+         (* we have to be optimistic here and assume the weak variable can unify with the template, 
+          * but we also have to record this unification in the bindings so that if we later find out the weak variable is actually something else, we can fail *
+          *)
+         let unknown_bindings =
+           List.map (fun s -> s, WeakTyu.new_unknown_tyu None) abstracts
+         in
+         let substituted_template = Substitute.tyu_replace unknown_bindings template in
+         if tyu_equal substituted_template actual tydef_env
+         then
+           (* from these unknown bindings, add to the bindings one by one *)
+           List.fold_left
+             (fun acc (s, unknown) ->
+                match acc with
+                | Error _ as e -> e
+                | Ok bindings ->
+                  if not (WeakTyu.is_unknown unknown)
+                  then add_binding s unknown bindings
+                  else Ok bindings)
+             (Ok bindings)
+             unknown_bindings
+         else
+           Error
+             (Printf.sprintf
+                "Type mismatch while instantiating constructor %s: expected %s but got %s"
+                constr_name
+                (Pretty.show_ty_use template)
+                (Pretty.show_ty_use actual)))
     | _ ->
       let message =
         Printf.sprintf
@@ -1255,14 +1324,17 @@ let tyu_of_instantiated_raw_variant
       in
       Error message
   and match_ty template actual bindings =
+    Printf.printf
+      "Matching template ty %s with actual ty %s\n%!"
+      (Pretty.show_ty template)
+      (Pretty.show_ty actual);
     match template, actual with
     | Named (name1, args1), Named (name2, args2)
       when name1 = name2 && List.length args1 = List.length args2 ->
       match_tyu_lists args1 args2 bindings
     | Raw (mode1, shape1, raw1), Raw (mode2, shape2, raw2)
       when mode1 = mode2 && shape1 = shape2 -> match_raw_ty raw1 raw2 bindings
-    | Raw (mode, shape, raw), Named (name, args)
-    | Named (name, args), Raw (mode, shape, raw) ->
+    | Raw (mode1, shape1, raw1), Named (name, args) ->
       if is_variant_ty (Named (name, args)) tydef_env
       then (
         let message =
@@ -1275,8 +1347,32 @@ let tyu_of_instantiated_raw_variant
         Error message)
       else (
         let mode2, shape2, raw2 = ty_to_raw_ty actual tydef_env in
-        if mode = mode2 && shape = shape2
-        then match_raw_ty raw raw2 bindings
+        if mode1 = mode2 && shape1 = shape2
+        then match_raw_ty raw1 raw2 bindings
+        else (
+          let message =
+            Printf.sprintf
+              "Type mismatch while instantiating constructor %s: expected %s but got %s"
+              constr_name
+              (Pretty.show_ty template)
+              (Pretty.show_ty actual)
+          in
+          Error message))
+    | Named (name, args), Raw (mode2, shape2, raw2) ->
+      if is_variant_ty (Named (name, args)) tydef_env
+      then (
+        let message =
+          Printf.sprintf
+            "Type mismatch while instantiating constructor %s: expected variant type but \
+             got %s"
+            constr_name
+            (Pretty.show_ty actual)
+        in
+        Error message)
+      else (
+        let mode1, shape1, raw1 = ty_to_raw_ty template tydef_env in
+        if mode1 = mode2 && shape1 = shape2
+        then match_raw_ty raw1 raw2 bindings
         else (
           let message =
             Printf.sprintf
@@ -1372,13 +1468,8 @@ let tyu_of_instantiated_raw_variant
              match List.assoc_opt abs_name bindings with
              | Some tyu -> tyu
              | None ->
-               let message =
-                 Printf.sprintf
-                   "Could not infer abstract type %s while instantiating constructor %s"
-                   abs_name
-                   constr_name
-               in
-               raise (Error.TypeError { loc = None; message }))
+               (* give up and emit weak tyu *)
+               WeakTyu.new_unknown_tyu None)
           abstracts
       in
       let polarity =
