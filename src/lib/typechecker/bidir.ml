@@ -602,7 +602,9 @@ and check
          (Pretty.show_ty_use known_tyu)
          (Pretty.show_ty_use expected_type);
        if is_subtype_tyu known_tyu expected_type tydef_env
-       then annotate expr expected_type, empty_context ()
+       then
+         ( annotate expr expected_type
+         , add_to_context unique_id expected_type (empty_context ()) tydef_env )
        else
          type_mismatch
            ?loc:ann.loc
